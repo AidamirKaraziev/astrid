@@ -15,7 +15,8 @@ date: 2026-05-16
 
 | Тема | Заметка |
 |------|---------|
-| Общая архитектура | [[архитектура проекта Astra на старте scaffold]] |
+| Архитектура MVP | [[архитектура MVP monolith async 2026-05-16]] |
+| Scaffold (устар.) | [[архитектура проекта Astra на старте scaffold]] |
 | Стек | [[стек Python 3.12 uv и FastAPI]] |
 | Деплой | [[деплой пока не настроен]] |
 
@@ -25,6 +26,9 @@ date: 2026-05-16
 
 - [[uv выбран как менеджер зависимостей вместо pip]]
 - [[knowledge vault astra-vault внутри репозитория]]
+- [[идентификация через telegram_id без fastapi-users в MVP]]
+- [[monolith FastAPI aiogram без RabbitMQ в MVP]]
+- [[scheduler рассылки в том же процессе что API]]
 
 ### Паттерны (`knowledge/patterns/`)
 
@@ -32,7 +36,7 @@ date: 2026-05-16
 
 ### Интеграции (`knowledge/integrations/`)
 
-_Пока пусто — добавляйте по одной заметке на каждый внешний API._
+- [[MCP servers рекомендации на потом]]
 
 ### Отладка (`knowledge/debugging/`)
 
@@ -40,11 +44,12 @@ _Пока пусто._
 
 ### Бизнес (`knowledge/business/`)
 
-_Пока пусто — продукт, цены, аудитория._
+- [[продукт Astra telegram предсказания RU аудитория]]
 
 ## Сессии
 
 - [[2026-05-16 инициализация astra-vault и структуры проекта]]
+- [[2026-05-16 discovery и MVP scaffold async telegram бота]]
 
 ## Inbox
 
