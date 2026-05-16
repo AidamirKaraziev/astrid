@@ -1,0 +1,45 @@
+from functools import lru_cache
+
+from pydantic import Field
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+class Settings(BaseSettings):
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        extra="ignore",
+    )
+
+    app_env: str = "development"
+    debug: bool = False
+    log_level: str = "INFO"
+
+    database_url: str = Field(
+        default="postgresql+asyncpg://astra:astra@localhost:5432/astra",
+    )
+    redis_url: str = "redis://localhost:6379/0"
+
+    telegram_bot_token: str = ""
+    telegram_bot_username: str = "AstraBot"
+    telegram_mode: str = "polling"
+    telegram_webhook_url: str | None = None
+    telegram_webhook_secret: str | None = None
+
+    points_daily_visit: int = 7
+    referral_bonus_referrer: int = 50
+    referral_bonus_invitee: int = 10
+
+    notification_hour: int = 9
+    notification_minute: int = 0
+
+    sentry_dsn: str | None = None
+
+    @property
+    def is_development(self) -> bool:
+        return self.app_env == "development"
+
+
+@lru_cache
+def get_settings() -> Settings:
+    return Settings()
