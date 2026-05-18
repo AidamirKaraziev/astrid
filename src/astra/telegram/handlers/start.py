@@ -82,11 +82,13 @@ async def cmd_continue(message: Message, state: FSMContext) -> None:
     if current != OnboardingStates.welcome.state:
         return
     data = await state.get_data()
-    default_name = data.get("default_name", "друг")
-    await state.set_state(OnboardingStates.name)
+    display_name = data.get("default_name", "друг")
+    await state.update_data(display_name=display_name)
+    await state.set_state(OnboardingStates.birth_date)
     await message.answer(
-        f"Как тебя называть?\n"
-        f"Сейчас: <b>{default_name}</b>\n\n"
-        "Отправь имя или нажми Enter — оставим как есть (отправь то же имя).",
+        f"Сохранила тебя как <b>{display_name}</b>. "
+        "Изменить имя можно в разделе «👤 Профиль».\n\n"
+        "📅 Укажи дату рождения в формате <b>ДД.ММ.ГГГГ</b>\n"
+        "Например: <code>15.03.1990</code>",
         parse_mode="HTML",
     )

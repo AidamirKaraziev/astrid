@@ -20,19 +20,6 @@ from astra.users import crud as users_crud
 router = Router(name="onboarding")
 
 
-@router.message(OnboardingStates.name)
-async def onboarding_name(message: Message, state: FSMContext) -> None:
-    data = await state.get_data()
-    name = (message.text or "").strip() or data.get("default_name", "друг")
-    await state.update_data(display_name=name)
-    await state.set_state(OnboardingStates.birth_date)
-    await message.answer(
-        "📅 Укажи дату рождения в формате <b>ДД.ММ.ГГГГ</b>\n"
-        "Например: <code>15.03.1990</code>",
-        parse_mode="HTML",
-    )
-
-
 @router.message(OnboardingStates.birth_date)
 async def onboarding_birth_date(message: Message, state: FSMContext) -> None:
     parsed = parse_birth_date(message.text or "")
