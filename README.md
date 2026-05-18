@@ -24,6 +24,15 @@ uv sync --all-extras
 uv run alembic upgrade head
 ```
 
+### 3.1. Справочник городов и деревень РФ (GeoNames, бесплатно)
+
+```bash
+# см. data/geonames/README.md
+curl -LO https://download.geonames.org/export/dump/RU.zip -o data/geonames/RU.zip
+cd data/geonames && unzip -o RU.zip && curl -LO https://download.geonames.org/export/dump/admin1CodesASCII.txt && cd ../..
+uv run python scripts/import_geonames_ru.py
+```
+
 ### 4. Запуск API + бота (polling)
 
 ```bash

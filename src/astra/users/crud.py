@@ -52,6 +52,9 @@ async def create_profile(
     user_id: UUID,
     display_name: str,
     birth_date: date,
+    birth_place_id: UUID,
+    notification_place_id: UUID,
+    birth_place: str,
     city: str,
     timezone: str,
 ) -> Profile:
@@ -59,6 +62,9 @@ async def create_profile(
         user_id=user_id,
         display_name=display_name,
         birth_date=birth_date,
+        birth_place_id=birth_place_id,
+        notification_place_id=notification_place_id,
+        birth_place=birth_place,
         city=city,
         timezone=timezone,
     )

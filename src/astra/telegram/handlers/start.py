@@ -41,15 +41,21 @@ async def cmd_start(
             await apply_referral_on_start(session, user, ref_code)
 
     await register_daily_activity(session, user)
+    await state.clear()
 
-    if user.onboarding_completed and user.profile:
-        await state.clear()
+    restart = (command.args or "").strip().lower() in {"restart", "again", "reset", "заново"}
+    if user.onboarding_completed and user.profile and not restart:
         await message.answer(
             f"С возвращением, {user.profile.display_name}! ✨\n"
-            "Твоё меню внизу — выбирай действие.",
+            "Твоё меню внизу — выбирай действие.\n\n"
+            "Чтобы пройти регистрацию заново: <code>/start restart</code>",
+            parse_mode="HTML",
             reply_markup=main_menu_keyboard(),
         )
         return
+
+    if restart:
+        user.onboarding_completed = False
 
     await state.set_state(OnboardingStates.welcome)
     await state.update_data(

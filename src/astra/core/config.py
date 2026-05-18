@@ -19,12 +19,16 @@ class Settings(BaseSettings):
         default="postgresql+asyncpg://astra:astra@localhost:5432/astra",
     )
     redis_url: str = "redis://localhost:6379/0"
+    # FSM aiogram: redis | memory (memory — если Redis не запущен)
+    fsm_storage: str = "redis"
 
     telegram_bot_token: str = ""
     telegram_bot_username: str = "AstraBot"
     telegram_mode: str = "polling"
     telegram_webhook_url: str | None = None
     telegram_webhook_secret: str | None = None
+    # Публичный HTTPS URL API (для Web App геолокации на Desktop). Пример: https://xxx.ngrok-free.app
+    webapp_base_url: str = ""
 
     points_daily_visit: int = 7
     referral_bonus_referrer: int = 50

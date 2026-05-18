@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Геолокация — Astra</title>
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <style>
+    :root {
+      --bg: var(--tg-theme-bg-color, #1a1428);
+      --text: var(--tg-theme-text-color, #f5f0ff);
+      --hint: var(--tg-theme-hint-color, #a89bb8);
+      --btn: var(--tg-theme-button-color, #9b6dff);
+      --btn-text: var(--tg-theme-button-text-color, #fff);
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 24px 20px;
+      text-align: center;
+    }
+    .icon { font-size: 48px; margin-bottom: 12px; }
+    h1 { font-size: 20px; font-weight: 600; margin: 0 0 8px; }
+    p { color: var(--hint); font-size: 15px; line-height: 1.45; margin: 0 0 20px; max-width: 320px; }
+    button {
+      width: 100%;
+      max-width: 320px;
+      padding: 14px 20px;
+      border: none;
+      border-radius: 12px;
+      font-size: 16px;
+      font-weight: 600;
+      cursor: pointer;
+      background: var(--btn);
+      color: var(--btn-text);
+    }
+    button:disabled { opacity: 0.5; cursor: not-allowed; }
+    .error { color: #ff8a8a; }
+  </style>
+</head>
+<body>
+  <div class="icon">📍</div>
+  <h1>Определить местоположение</h1>
+  <p id="status">Запрашиваю доступ к геолокации браузера…</p>
+  <button id="send" type="button" hidden>Отправить в Astra</button>
+
+  <script>
+    const tg = window.Telegram.WebApp;
+    tg.ready();
+    tg.expand();
+
+    const statusEl = document.getElementById("status");
+    const sendBtn = document.getElementById("send");
+    let coords = null;
+
+    function setStatus(text, isError) {
+      statusEl.textContent = text;
+      statusEl.className = isError ? "error" : "";
+    }
+
+    function sendToBot() {
+      if (!coords) return;
+      tg.sendData(JSON.stringify({ lat: coords.latitude, lon: coords.longitude }));
+      tg.close();
+    }
+
+    sendBtn.addEventListener("click", sendToBot);
+
+    if (!navigator.geolocation) {
+      setStatus("Браузер не поддерживает геолокацию. Введите город вручную в чате.", true);
+    } else {
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          coords = pos.coords;
+          setStatus("Местоположение получено. Нажми кнопку, чтобы отправить.");
+          sendBtn.hidden = false;
+          tg.MainButton.setText("Отправить в Astra");
+          tg.MainButton.show();
+          tg.MainButton.onClick(sendToBot);
+        },
+        (err) => {
+          const messages = {
+            1: "Доступ к геолокации запрещён. Разреши его в настройках браузера или системы.",
+            2: "Не удалось определить местоположение.",
+            3: "Превышено время ожидания.",
+          };
+          setStatus(messages[err.code] || "Ошибка геолокации.", true);
+        },
+        { enableHighAccuracy: true, timeout: 20000, maximumAge: 60000 }
+      );
+    }
+  </script>
+</body>
+</html>

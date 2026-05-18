@@ -12,6 +12,7 @@ from astra.predictions.routers import router as predictions_router
 from astra.points.routers import router as points_router
 from astra.referrals.routers import router as referrals_router
 from astra.telegram.bot import create_bot, create_dispatcher, send_text_to_user
+from astra.telegram.webapp_router import router as telegram_webapp_router
 from astra.telegram.webhook import router as telegram_webhook_router
 from astra.users.routers import router as users_router
 
@@ -32,7 +33,7 @@ async def lifespan(app: FastAPI):
     init_engine(settings)
 
     bot = create_bot(settings)
-    dp = create_dispatcher(settings)
+    dp = await create_dispatcher(settings)
     app.state.bot = bot
     app.state.dp = dp
 
@@ -99,6 +100,7 @@ def create_app(*, with_lifespan: bool = True) -> FastAPI:
     app.include_router(points_router, prefix="/v1")
     app.include_router(referrals_router, prefix="/v1")
     app.include_router(telegram_webhook_router, prefix="/v1")
+    app.include_router(telegram_webapp_router)
     return app
 
 

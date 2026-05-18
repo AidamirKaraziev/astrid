@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from astra.core.config import Settings, get_settings
-from astra.db.session import async_session_factory, init_engine
+from astra.db.session import get_session_factory, init_engine
 from astra.predictions.models import Prediction
 from astra.services.prediction_service import get_or_create_today_prediction, mark_prediction_sent
 from astra.users.models import User
@@ -91,8 +91,7 @@ async def notification_worker(
     init_engine(cfg)
     while True:
         try:
-            assert async_session_factory is not None
-            async with async_session_factory() as session:
+            async with get_session_factory()() as session:
                 count = await process_scheduled_notifications(
                     session,
                     bot_send_text,

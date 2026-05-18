@@ -35,6 +35,13 @@ def get_engine() -> AsyncEngine:
     return _engine
 
 
+def get_session_factory() -> async_sessionmaker[AsyncSession]:
+    if async_session_factory is None:
+        init_engine()
+    assert async_session_factory is not None
+    return async_session_factory
+
+
 async def get_session() -> AsyncGenerator[AsyncSession, None]:
     if async_session_factory is None:
         init_engine()

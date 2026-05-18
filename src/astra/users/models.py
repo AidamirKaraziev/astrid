@@ -55,7 +55,25 @@ class Profile(Base, TimestampMixin):
     birth_date: Mapped[date] = mapped_column(Date)
     birth_time: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     birth_place: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    birth_place_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("places.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    notification_place_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("places.id", ondelete="SET NULL"),
+        nullable=True,
+    )
     city: Mapped[str] = mapped_column(String(255))
     timezone: Mapped[str] = mapped_column(String(64), default="Europe/Moscow")
 
     user: Mapped["User"] = relationship(back_populates="profile")
+    birth_place_ref: Mapped["Place | None"] = relationship(  # noqa: F821
+        "Place",
+        foreign_keys=[birth_place_id],
+    )
+    notification_place_ref: Mapped["Place | None"] = relationship(  # noqa: F821
+        "Place",
+        foreign_keys=[notification_place_id],
+    )

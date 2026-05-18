@@ -11,3 +11,6 @@ htmlcov/
 *.egg-info/
 dist/
 build/
+data/geonames/RU.txt
+data/geonames/RU.zip
+data/geonames/admin1CodesASCII.txt

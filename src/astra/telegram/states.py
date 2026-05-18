@@ -5,7 +5,8 @@ class OnboardingStates(StatesGroup):
     welcome = State()
     name = State()
     birth_date = State()
-    city = State()
+    birth_place_query = State()
+    notification_place_query = State()
 
 
 class ProfileStates(StatesGroup):
