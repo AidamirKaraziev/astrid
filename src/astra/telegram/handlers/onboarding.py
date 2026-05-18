@@ -9,7 +9,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from astra.places.getters import get_place_read
 from astra.referrals import crud as referrals_crud
 from astra.referrals.getters import get_referral_stats
-from astra.services.prediction_service import get_or_create_today_prediction
+from astra.services.prediction_service import (
+    format_prediction_for_user,
+    get_or_create_today_prediction,
+)
 from astra.services.referral_service import complete_referral_rewards
 from astra.telegram.handlers.places import start_birth_place_step
 from astra.telegram.keyboards import main_menu_keyboard, share_keyboard
@@ -95,7 +98,8 @@ async def finish_onboarding(
     )
 
     await message.answer(
-        "🎉 Готово! Каждый день в 09:00 пришлю предсказание.\n\n" + prediction.text,
+        "🎉 Готово! Каждый день в 09:00 пришлю предсказание.\n\n"
+        + format_prediction_for_user(prediction, user, profile),
         parse_mode="HTML",
         reply_markup=ReplyKeyboardRemove(),
     )

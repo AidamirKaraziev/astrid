@@ -27,13 +27,11 @@ async def create_prediction(
     user_id: UUID,
     prediction_date: date,
     text: str,
-    accuracy_percent: int,
 ) -> Prediction:
     prediction = Prediction(
         user_id=user_id,
         prediction_date=prediction_date,
         text=text,
-        accuracy_percent=accuracy_percent,
     )
     session.add(prediction)
     await session.flush()

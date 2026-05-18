@@ -40,18 +40,22 @@ def _zodiac_sign(birth_date: date) -> str:
     return "Козерог"
 
 
-def build_prediction_text(
+def generate_prediction_body() -> str:
+    return random.choice(_STUB_BODIES)
+
+
+def format_prediction_message(
     profile: Profile,
+    body: str,
     *,
     points: int,
     streak: int,
-) -> tuple[str, int]:
+) -> str:
     accuracy, hint = calculate_profile_accuracy(profile)
     sign = _zodiac_sign(profile.birth_date)
-    body = random.choice(_STUB_BODIES)
     inaccuracy = 100 - accuracy
 
-    text = (
+    return (
         f"✨ <b>{profile.display_name}</b>, твоё предсказание на сегодня\n\n"
         f"☀️ Знак: <b>{sign}</b>\n\n"
         f"{body}\n\n"
@@ -59,7 +63,19 @@ def build_prediction_text(
         f"<i>Неточность: {inaccuracy}%. {hint}</i>\n\n"
         f"🔥 Серия: <b>{streak}</b> дн. | ⭐ Баллы: <b>{points}</b>"
     )
-    return text, accuracy
+
+
+def format_prediction_for_user(
+    prediction: Prediction,
+    user: User,
+    profile: Profile,
+) -> str:
+    return format_prediction_message(
+        profile,
+        prediction.text,
+        points=user.points,
+        streak=user.streak_current,
+    )
 
 
 async def get_or_create_today_prediction(
@@ -73,17 +89,12 @@ async def get_or_create_today_prediction(
     if existing:
         return existing
 
-    text, accuracy = build_prediction_text(
-        profile,
-        points=user.points,
-        streak=user.streak_current,
-    )
+    body = generate_prediction_body()
     return await predictions_crud.create_prediction(
         session,
         user_id=user.id,
         prediction_date=target,
-        text=text,
-        accuracy_percent=accuracy,
+        text=body,
     )
 
 

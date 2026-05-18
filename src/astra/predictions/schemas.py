@@ -10,5 +10,5 @@ class PredictionRead(BaseModel):
     id: UUID
     prediction_date: date
     text: str
-    accuracy_percent: int
+    message: str
     sent_at: datetime | None

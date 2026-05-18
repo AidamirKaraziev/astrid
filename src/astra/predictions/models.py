@@ -1,7 +1,7 @@
 import uuid
 from datetime import date, datetime
 
-from sqlalchemy import Date, DateTime, ForeignKey, Integer, Text, UniqueConstraint
+from sqlalchemy import Date, DateTime, ForeignKey, Text, UniqueConstraint
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -26,5 +26,4 @@ class Prediction(Base, TimestampMixin):
     )
     prediction_date: Mapped[date] = mapped_column(Date, index=True)
     text: Mapped[str] = mapped_column(Text)
-    accuracy_percent: Mapped[int] = mapped_column(Integer)
     sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

@@ -8,7 +8,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from astra.referrals.getters import get_referral_stats
 from astra.services.points_service import register_daily_activity
-from astra.services.prediction_service import get_or_create_today_prediction
+from astra.services.prediction_service import (
+    format_prediction_for_user,
+    get_or_create_today_prediction,
+)
 from astra.telegram.keyboards import main_menu_keyboard, profile_menu_keyboard, share_keyboard
 from astra.telegram.states import ProfileStates
 from astra.telegram.utils import parse_birth_time
@@ -40,7 +43,10 @@ async def today_prediction(message: Message, session: AsyncSession) -> None:
         return
     await register_daily_activity(session, user)
     prediction = await get_or_create_today_prediction(session, user, user.profile)
-    await message.answer(prediction.text, parse_mode="HTML")
+    await message.answer(
+        format_prediction_for_user(prediction, user, user.profile),
+        parse_mode="HTML",
+    )
 
 
 @router.message(F.text == "⭐ Баллы")

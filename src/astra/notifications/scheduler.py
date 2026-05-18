@@ -10,7 +10,11 @@ from sqlalchemy.orm import selectinload
 from astra.core.config import Settings, get_settings
 from astra.db.session import get_session_factory, init_engine
 from astra.predictions.models import Prediction
-from astra.services.prediction_service import get_or_create_today_prediction, mark_prediction_sent
+from astra.services.prediction_service import (
+    format_prediction_for_user,
+    get_or_create_today_prediction,
+    mark_prediction_sent,
+)
 from astra.users.models import User
 
 logger = logging.getLogger(__name__)
@@ -73,7 +77,8 @@ async def process_scheduled_notifications(
             today=today_local,
         )
         try:
-            await bot_send_text(user.telegram_id, prediction.text)
+            message = format_prediction_for_user(prediction, user, user.profile)
+            await bot_send_text(user.telegram_id, message)
             await mark_prediction_sent(session, prediction)
             sent_count += 1
         except Exception:
