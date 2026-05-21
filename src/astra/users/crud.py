@@ -5,6 +5,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from astra.places import crud as places_crud
 from astra.users.models import Profile, User
 
 
@@ -70,7 +71,23 @@ async def create_profile(
     )
     session.add(profile)
     await session.flush()
+    from astra.services.astro_service import refresh_natal_chart_for_profile
+
+    await refresh_natal_chart_for_profile(session, profile)
     return profile
+
+
+async def _resolve_birth_place_id(
+    session: AsyncSession,
+    profile: Profile,
+    birth_place: str,
+) -> None:
+    places = await places_crud.search_places(session, birth_place, limit=1)
+    if not places:
+        return
+    best = places[0]
+    profile.birth_place_id = best.id
+    profile.birth_place = best.display_name
 
 
 async def update_profile(
@@ -78,8 +95,14 @@ async def update_profile(
     profile: Profile,
     **fields: object,
 ) -> Profile:
+    birth_place_text = fields.get("birth_place")
     for key, value in fields.items():
         if value is not None and hasattr(profile, key):
             setattr(profile, key, value)
+    if isinstance(birth_place_text, str) and birth_place_text.strip():
+        await _resolve_birth_place_id(session, profile, birth_place_text.strip())
     await session.flush()
+    from astra.services.astro_service import refresh_natal_chart_for_profile
+
+    await refresh_natal_chart_for_profile(session, profile)
     return profile

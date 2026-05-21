@@ -30,6 +30,12 @@ class User(Base, TimestampMixin):
         uselist=False,
         cascade="all, delete-orphan",
     )
+    natal_chart: Mapped["NatalChart | None"] = relationship(  # noqa: F821
+        "NatalChart",
+        back_populates="user",
+        uselist=False,
+        cascade="all, delete-orphan",
+    )
     referral_code: Mapped["ReferralCode | None"] = relationship(  # noqa: F821
         "ReferralCode",
         back_populates="user",

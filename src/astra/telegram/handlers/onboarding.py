@@ -89,6 +89,11 @@ async def finish_onboarding(
     await referrals_crud.get_or_create_referral_code(session, user.id)
 
     prediction = await get_or_create_today_prediction(session, user, profile)
+    if prediction is None:
+        await message.answer("Готовлю первое предсказание ✨ Попробуй «🔮 Предсказание на сегодня» через минуту.")
+        await state.clear()
+        await message.answer("Твоё меню:", reply_markup=main_menu_keyboard())
+        return
     await state.clear()
 
     stats = await get_referral_stats(session, user.id)

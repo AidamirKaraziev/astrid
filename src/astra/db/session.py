@@ -15,6 +15,8 @@ async_session_factory: async_sessionmaker[AsyncSession] | None = None
 
 def init_engine(settings: Settings | None = None) -> AsyncEngine:
     global _engine, async_session_factory
+    import astra.db.models_registry  # noqa: F401 — регистрация всех ORM-моделей
+
     cfg = settings or get_settings()
     _engine = create_async_engine(
         cfg.database_url,

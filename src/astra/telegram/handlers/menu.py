@@ -42,7 +42,17 @@ async def today_prediction(message: Message, session: AsyncSession) -> None:
         await message.answer("Сначала пройди регистрацию: /start")
         return
     await register_daily_activity(session, user)
-    prediction = await get_or_create_today_prediction(session, user, user.profile)
+    prediction = await get_or_create_today_prediction(
+        session,
+        user,
+        user.profile,
+        allow_async=True,
+    )
+    if prediction is None:
+        await message.answer(
+            "Готовлю предсказание ✨ Обычно это занимает до минуты. Нажми ещё раз чуть позже.",
+        )
+        return
     await message.answer(
         format_prediction_for_user(prediction, user, user.profile),
         parse_mode="HTML",

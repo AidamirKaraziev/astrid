@@ -1,25 +1,16 @@
-import random
 from datetime import date, datetime, timezone
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from astra.predictions import crud as predictions_crud
 from astra.predictions.models import Prediction
+from astra.services.astro_service import generate_daily_prediction
 from astra.users.getters import calculate_profile_accuracy
 from astra.users.models import Profile, User
 
-_STUB_BODIES = [
-    "Сегодня звёзды советуют довериться интуиции — важный знак уже рядом.",
-    "День благоприятен для мягких перемен. Не бойся сделать маленький шаг вперёд.",
-    "Энергия дня поддерживает заботу о себе. Позволь себе отдых без чувства вины.",
-    "В отношениях прислушайся к тишине — в ней больше ответов, чем кажется.",
-    "Финансовый поток требует терпения: не спеши с решениями до вечера.",
-    "Творческая искра особенно ярка — запиши мысль, которая придёт неожиданно.",
-]
 
-
-def _zodiac_sign(birth_date: date) -> str:
-    d = (birth_date.month, birth_date.day)
+def _zodiac_sign_from_profile(profile: Profile) -> str:
+    d = (profile.birth_date.month, profile.birth_date.day)
     signs = [
         ((3, 21), (4, 19), "Овен"),
         ((4, 20), (5, 20), "Телец"),
@@ -40,10 +31,6 @@ def _zodiac_sign(birth_date: date) -> str:
     return "Козерог"
 
 
-def generate_prediction_body() -> str:
-    return random.choice(_STUB_BODIES)
-
-
 def format_prediction_message(
     profile: Profile,
     body: str,
@@ -52,7 +39,7 @@ def format_prediction_message(
     streak: int,
 ) -> str:
     accuracy, hint = calculate_profile_accuracy(profile)
-    sign = _zodiac_sign(profile.birth_date)
+    sign = _zodiac_sign_from_profile(profile)
     inaccuracy = 100 - accuracy
 
     return (
@@ -83,19 +70,23 @@ async def get_or_create_today_prediction(
     user: User,
     profile: Profile,
     today: date | None = None,
-) -> Prediction:
+    *,
+    allow_async: bool = False,
+) -> Prediction | None:
+    from astra.core.config import get_settings
+    from astra.messaging.publisher import publish_prediction_generate
+
     target = today or date.today()
     existing = await predictions_crud.get_prediction_for_date(session, user.id, target)
     if existing:
         return existing
 
-    body = generate_prediction_body()
-    return await predictions_crud.create_prediction(
-        session,
-        user_id=user.id,
-        prediction_date=target,
-        text=body,
-    )
+    settings = get_settings()
+    if allow_async and settings.rabbitmq_enabled:
+        await publish_prediction_generate(user.id, target)
+        return None
+
+    return await generate_daily_prediction(session, user, profile, target=target)
 
 
 async def mark_prediction_sent(session: AsyncSession, prediction: Prediction) -> None:

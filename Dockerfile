@@ -1,4 +1,5 @@
-FROM python:3.12-slim
+# Сборка без apt: kerykeion опционален (extra astro). Полный натал — см. Dockerfile.astro
+FROM python:3.12-slim-bookworm
 
 WORKDIR /app
 
@@ -9,7 +10,8 @@ COPY src ./src
 COPY alembic ./alembic
 COPY alembic.ini ./
 
-RUN uv sync --frozen --no-dev
+ARG UV_EXTRAS=
+RUN uv sync --frozen --no-dev ${UV_EXTRAS}
 
 ENV PATH="/app/.venv/bin:$PATH"
 ENV PYTHONPATH=/app/src

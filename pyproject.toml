@@ -5,6 +5,7 @@ description = "Astra — персональные предсказания в Te
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
+    "aio-pika>=9.6.2",
     "aiogram>=3.17.0",
     "alembic>=1.14.0",
     "asyncpg>=0.30.0",
@@ -27,6 +28,7 @@ dev = [
 
 [project.scripts]
 astra-api = "astra.main:run"
+astra-worker = "astra.workers.main:run"
 
 [build-system]
 requires = ["hatchling"]

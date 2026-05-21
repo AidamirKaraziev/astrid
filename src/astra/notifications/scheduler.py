@@ -1,6 +1,6 @@
 import asyncio
 import logging
-from datetime import date, datetime
+from datetime import datetime
 from zoneinfo import ZoneInfo
 
 from sqlalchemy import select
@@ -9,12 +9,8 @@ from sqlalchemy.orm import selectinload
 
 from astra.core.config import Settings, get_settings
 from astra.db.session import get_session_factory, init_engine
+from astra.messaging.publisher import publish_prediction_generate
 from astra.predictions.models import Prediction
-from astra.services.prediction_service import (
-    format_prediction_for_user,
-    get_or_create_today_prediction,
-    mark_prediction_sent,
-)
 from astra.users.models import User
 
 logger = logging.getLogger(__name__)
@@ -36,10 +32,10 @@ async def process_scheduled_notifications(
     bot_send_text,
     settings: Settings | None = None,
 ) -> int:
-    """Send daily predictions at configured local time. Returns count sent."""
+    """Enqueue daily prediction send tasks at configured local time."""
     cfg = settings or get_settings()
     now_utc = datetime.now(ZoneInfo("UTC"))
-    sent_count = 0
+    enqueued = 0
 
     result = await session.execute(
         select(User)
@@ -70,21 +66,48 @@ async def process_scheduled_notifications(
         if existing.scalar_one_or_none():
             continue
 
-        prediction = await get_or_create_today_prediction(
-            session,
-            user,
-            user.profile,
-            today=today_local,
-        )
-        try:
-            message = format_prediction_for_user(prediction, user, user.profile)
-            await bot_send_text(user.telegram_id, message)
-            await mark_prediction_sent(session, prediction)
-            sent_count += 1
-        except Exception:
-            logger.exception("Failed to send notification to telegram_id=%s", user.telegram_id)
+        if cfg.rabbitmq_enabled:
+            pred_row = await session.execute(
+                select(Prediction).where(
+                    Prediction.user_id == user.id,
+                    Prediction.prediction_date == today_local,
+                ),
+            )
+            prediction = pred_row.scalar_one_or_none()
+            if prediction is None:
+                await publish_prediction_generate(user.id, today_local, cfg)
+            else:
+                from astra.messaging.publisher import publish_prediction_send
 
-    return sent_count
+                await publish_prediction_send(user.id, today_local, cfg)
+            enqueued += 1
+        else:
+            from astra.services.prediction_service import (
+                format_prediction_for_user,
+                get_or_create_today_prediction,
+                mark_prediction_sent,
+            )
+
+            try:
+                prediction = await get_or_create_today_prediction(
+                    session,
+                    user,
+                    user.profile,
+                    today=today_local,
+                )
+                if prediction is None:
+                    continue
+                message = format_prediction_for_user(prediction, user, user.profile)
+                await bot_send_text(user.telegram_id, message)
+                await mark_prediction_sent(session, prediction)
+                enqueued += 1
+            except Exception:
+                logger.exception(
+                    "Failed to send notification to telegram_id=%s",
+                    user.telegram_id,
+                )
+
+    return enqueued
 
 
 async def notification_worker(
@@ -104,7 +127,7 @@ async def notification_worker(
                 )
                 await session.commit()
                 if count:
-                    logger.info("Sent %s scheduled predictions", count)
+                    logger.info("Enqueued or sent %s scheduled predictions", count)
         except Exception:
             logger.exception("Notification worker iteration failed")
         await asyncio.sleep(interval_seconds)
