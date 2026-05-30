@@ -1,0 +1,34 @@
+# Git и IDE
+.git
+.gitignore
+.idea
+.cursor
+
+# Python
+.venv
+__pycache__
+*.py[cod]
+.pytest_cache
+.coverage
+htmlcov
+.mypy_cache
+.ruff_cache
+*.egg-info
+dist
+build
+
+# Секреты и локальные env
+.env
+.env.*
+
+# Knowledge vault и спеки (не нужны в runtime-образе)
+astra-vault
+spec
+
+# GeoNames — большие дампы, импорт отдельно на хосте или в one-off контейнере
+data/geonames/RU.txt
+data/geonames/RU.zip
+data/geonames/admin1CodesASCII.txt
+
+# Прочее
+RU.zip

@@ -1,4 +1,40 @@
+# =============================================================================
+# Astra — полный стек в Docker
+#
+# Одна команда (тесты → сборка → запуск):
+#   make up
+#   ./scripts/docker-up.sh
+#
+# Только инфраструктура (dev на хосте):
+#   docker compose up -d postgres redis
+#
+# Только тесты в контейнере:
+#   docker compose --profile test run --rm test
+# =============================================================================
+
+name: astra
+
+x-app-build: &app-build
+  context: .
+  dockerfile: Dockerfile
+
+# Внутренние URL сервисов Docker-сети (перекрывают localhost из .env)
+x-app-env: &app-env
+  APP_ENV: production
+  DEBUG: "false"
+  DATABASE_URL: postgresql+asyncpg://astra:astra@postgres:5432/astra
+  REDIS_URL: redis://redis:6379/0
+  FSM_STORAGE: redis
+  RABBITMQ_URL: amqp://astra:astra@rabbitmq:5672/
+  RABBITMQ_ENABLED: "true"
+  OLLAMA_BASE_URL: http://ollama:11434
+  OLLAMA_ENABLED: "true"
+
 services:
+  # ---------------------------------------------------------------------------
+  # Инфраструктура
+  # ---------------------------------------------------------------------------
+
   postgres:
     image: postgres:16-alpine
     environment:
@@ -52,6 +88,7 @@ services:
       retries: 5
       start_period: 30s
 
+  # Одноразовая загрузка модели LLM (может занять несколько минут)
   ollama-init:
     image: ollama/ollama:latest
     depends_on:
@@ -62,15 +99,41 @@ services:
     entrypoint: ["/bin/sh", "-c", "ollama pull qwen2.5:7b || true"]
     restart: "no"
 
+  # ---------------------------------------------------------------------------
+  # Тесты перед сборкой приложения (profile: test)
+  # ---------------------------------------------------------------------------
+
+  test:
+    profiles: [test]
+    build:
+      <<: *app-build
+      target: dev
+    environment:
+      <<: *app-env
+      TELEGRAM_BOT_TOKEN: "0000000000:TEST_TOKEN_FOR_CI"
+      TELEGRAM_BOT_USERNAME: TestAstraBot
+      TELEGRAM_MODE: polling
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: >
+      sh -c "alembic upgrade head &&
+             pytest -v --cov=astra --cov-report=term-missing"
+
+  # ---------------------------------------------------------------------------
+  # Приложение
+  # ---------------------------------------------------------------------------
+
   api:
     build:
-      context: .
-      dockerfile: Dockerfile
+      <<: *app-build
+      target: runtime
     env_file:
       - .env
     environment:
-      RABBITMQ_URL: amqp://astra:astra@rabbitmq:5672/
-      OLLAMA_BASE_URL: http://ollama:11434
+      <<: *app-env
     ports:
       - "8000:8000"
     depends_on:
@@ -83,16 +146,27 @@ services:
     command: >
       sh -c "alembic upgrade head &&
              uvicorn astra.main:app --host 0.0.0.0 --port 8000 --app-dir src"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health')",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
 
   worker:
     build:
-      context: .
-      dockerfile: Dockerfile
+      <<: *app-build
+      target: runtime
     env_file:
       - .env
     environment:
-      RABBITMQ_URL: amqp://astra:astra@rabbitmq:5672/
-      OLLAMA_BASE_URL: http://ollama:11434
+      <<: *app-env
     depends_on:
       postgres:
         condition: service_healthy
@@ -102,6 +176,7 @@ services:
         condition: service_started
     command: >
       sh -c "alembic upgrade head && astra-worker"
+    restart: unless-stopped
 
 volumes:
   postgres_data:

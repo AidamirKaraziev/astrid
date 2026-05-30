@@ -78,6 +78,40 @@ uv run pytest -v
 
 ## Docker (полный стек)
 
+Перед сборкой приложения автоматически прогоняются тесты в контейнере.
+
 ```bash
-docker compose up --build
+cp .env.example .env   # TELEGRAM_BOT_TOKEN обязателен
+make up                # тесты → сборка → все сервисы
 ```
+
+Альтернатива без Make:
+
+```bash
+./scripts/docker-up.sh
+```
+
+Проверка после запуска:
+
+```bash
+make check
+# или
+curl http://localhost:8000/health
+docker compose ps
+docker compose logs -f api
+```
+
+Только тесты в Docker:
+
+```bash
+make test
+```
+
+Остановка:
+
+```bash
+make down
+```
+
+Сервисы: **api** (8000), **worker**, **postgres**, **redis**, **rabbitmq** (15672 — UI), **ollama** (11434).
+В `.env` можно оставить `localhost` — в Compose для контейнеров подставляются внутренние URL (`postgres`, `redis`, …).
