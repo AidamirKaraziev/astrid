@@ -10,9 +10,11 @@ from aiogram.types import CallbackQuery, Message
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from astra.places import crud as places_crud
+from astra.places.geonames_import import ensure_places_catalog
 from astra.places.geolocation import find_nearest_places
 from astra.places.getters import format_place_confirm, get_place_read
 from astra.places.schemas import PlaceRead
+from astra.db.session import get_session_factory
 from astra.telegram.keyboards_places import (
     BTN_SEND_LOCATION,
     BTN_TYPE_PLACE_NAME,
@@ -41,6 +43,16 @@ SEARCH_HINT = (
 
 GEOLOCATION_FAILED_TEXT = "Не смог получить твою геопозицию, введи название в ручную"
 
+PLACES_CATALOG_UNAVAILABLE_TEXT = (
+    "Справочник городов временно недоступен. Попробуй через минуту."
+)
+
+
+async def _ensure_places_ready(session: AsyncSession) -> bool:
+    if await places_crud.count_places(session) > 0:
+        return True
+    return await ensure_places_catalog(get_session_factory())
+
 
 def _context_key_for_state(state: str | None) -> str:
     if state == OnboardingStates.birth_place_query.state:
@@ -49,7 +61,7 @@ def _context_key_for_state(state: str | None) -> str:
 
 
 async def _places_catalog_empty(session: AsyncSession) -> bool:
-    return await places_crud.count_places(session) == 0
+    return not await _ensure_places_ready(session)
 
 
 async def reply_geolocation_failed(message: Message) -> None:
@@ -121,9 +133,8 @@ async def handle_place_coordinates(
 ) -> None:
     if await _places_catalog_empty(session):
         await message.answer(
-            "Справочник мест ещё не загружен. Администратор должен выполнить:\n"
-            "<code>uv run python scripts/import_geonames_ru.py</code>",
-            parse_mode="HTML",
+            PLACES_CATALOG_UNAVAILABLE_TEXT,
+            reply_markup=place_step_reply_keyboard(),
         )
         return
 
@@ -203,9 +214,8 @@ async def handle_place_query(
 
     if await _places_catalog_empty(session):
         await message.answer(
-            "Справочник мест ещё не загружен. Администратор должен выполнить:\n"
-            "<code>uv run python scripts/import_geonames_ru.py</code>",
-            parse_mode="HTML",
+            PLACES_CATALOG_UNAVAILABLE_TEXT,
+            reply_markup=place_step_reply_keyboard(),
         )
         return
 
