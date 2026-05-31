@@ -51,6 +51,9 @@ class Settings(BaseSettings):
 
     sentry_dsn: str | None = None
 
+    # Автозагрузка справочника GeoNames при старте, если таблица places пуста
+    geonames_auto_import: bool = True
+
     @property
     def is_development(self) -> bool:
         return self.app_env == "development"

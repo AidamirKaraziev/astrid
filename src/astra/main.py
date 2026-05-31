@@ -6,7 +6,8 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from astra.core.config import get_settings
-from astra.db.session import init_engine
+from astra.db.session import get_session_factory, init_engine
+from astra.places.geonames_import import ensure_places_catalog
 from astra.notifications.scheduler import notification_worker
 from astra.predictions.routers import router as predictions_router
 from astra.points.routers import router as points_router
@@ -32,6 +33,16 @@ async def lifespan(app: FastAPI):
     settings = get_settings()
     _configure_logging(settings.log_level)
     init_engine(settings)
+
+    if settings.geonames_auto_import:
+        try:
+            ready = await ensure_places_catalog(get_session_factory())
+            if ready:
+                logger.info("Places catalog is ready")
+            else:
+                logger.warning("Places catalog is empty after auto-import attempt")
+        except Exception:
+            logger.exception("Places catalog auto-import failed on startup")
 
     if not settings.telegram_bot_token:
         logger.error(
