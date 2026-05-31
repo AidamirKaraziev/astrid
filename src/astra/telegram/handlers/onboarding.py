@@ -8,14 +8,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from astra.places.getters import get_place_read
 from astra.referrals import crud as referrals_crud
-from astra.referrals.getters import get_referral_stats
 from astra.services.prediction_service import (
     format_prediction_for_user,
     get_or_create_today_prediction,
 )
 from astra.services.referral_service import complete_referral_rewards
 from astra.telegram.handlers.places import start_birth_place_step
-from astra.telegram.keyboards import main_menu_keyboard, share_keyboard
+from astra.telegram.keyboards import main_menu_keyboard
 from astra.telegram.states import OnboardingStates
 from astra.telegram.utils import parse_birth_date
 from astra.users import crud as users_crud
@@ -88,37 +87,23 @@ async def finish_onboarding(
     await complete_referral_rewards(session, user)
     await referrals_crud.get_or_create_referral_code(session, user.id)
 
-    prediction = await get_or_create_today_prediction(session, user, profile)
-    if prediction is None:
-        await message.answer("Готовлю первое предсказание ✨ Попробуй «🔮 Предсказание на сегодня» через минуту.")
-        await state.clear()
-        await message.answer("Твоё меню:", reply_markup=main_menu_keyboard())
-        return
-    await state.clear()
-
-    stats = await get_referral_stats(session, user.id)
-    share_url = (
-        f"https://t.me/share/url?url={stats.referral_link}"
-        f"&text={_url_encode('Моё предсказание от Astra ✨')}"
-    )
-
     await message.answer(
-        "🎉 Готово! Каждый день в 09:00 пришлю предсказание.\n\n"
-        + format_prediction_for_user(prediction, user, profile),
-        parse_mode="HTML",
+        "Поздравляю! Регистрация завершена ♥️\n\n"
+        "Мы отправили тебе предсказание на день — подожди немного 🫂",
         reply_markup=ReplyKeyboardRemove(),
     )
-    await message.answer(
-        "Твоё меню:",
-        reply_markup=main_menu_keyboard(),
-    )
-    await message.answer(
-        "Хочешь поделиться с подругой?",
-        reply_markup=share_keyboard(share_url),
-    )
 
+    prediction = await get_or_create_today_prediction(session, user, profile)
+    if prediction is not None:
+        await message.answer(
+            format_prediction_for_user(prediction, user, profile),
+            parse_mode="HTML",
+        )
+    else:
+        await message.answer(
+            "Готовлю предсказание ✨ Пришлю через минуту — "
+            "или нажми «🔮 Предсказание на сегодня».",
+        )
 
-def _url_encode(text: str) -> str:
-    from urllib.parse import quote
-
-    return quote(text)
+    await state.clear()
+    await message.answer("Твоё меню:", reply_markup=main_menu_keyboard())
