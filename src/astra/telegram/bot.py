@@ -28,10 +28,13 @@ class UpdateLoggingMiddleware(BaseMiddleware):
 
 
 def create_bot(settings: Settings) -> Bot:
-    session: AiohttpSession | None = None
-    if settings.telegram_proxy_url:
-        session = AiohttpSession(proxy=settings.telegram_proxy_url)
-        logger.info("Telegram Bot API via proxy (host hidden in logs)")
+    proxy = settings.telegram_proxy_url_effective
+    if proxy:
+        session = AiohttpSession(proxy=proxy)
+        logger.info("Telegram Bot API via proxy (USE_VPN=true)")
+    else:
+        session = AiohttpSession()
+        logger.info("Telegram Bot API direct (USE_VPN=false or TELEGRAM_PROXY_URL empty)")
     return Bot(
         token=settings.telegram_bot_token,
         default=DefaultBotProperties(parse_mode=ParseMode.HTML),

@@ -17,8 +17,8 @@ async def send_telegram_html(
         raise RuntimeError("TELEGRAM_BOT_TOKEN is not set")
     url = f"https://api.telegram.org/bot{cfg.telegram_bot_token}/sendMessage"
     client_kwargs: dict = {"timeout": 30.0}
-    if cfg.telegram_proxy_url:
-        client_kwargs["proxy"] = cfg.telegram_proxy_url
+    if proxy := cfg.telegram_proxy_url_effective:
+        client_kwargs["proxy"] = proxy
     async with httpx.AsyncClient(**client_kwargs) as client:
         response = await client.post(
             url,

@@ -14,6 +14,8 @@ class Settings(BaseSettings):
     app_env: str = "development"
     debug: bool = False
     log_level: str = "INFO"
+    # true — Bot API через telegram_proxy_url; false — прямое подключение, proxy игнорируется
+    use_vpn: bool = False
 
     database_url: str = Field(
         default="postgresql+asyncpg://astra:astra@localhost:5432/astra",
@@ -57,6 +59,14 @@ class Settings(BaseSettings):
     @property
     def is_development(self) -> bool:
         return self.app_env == "development"
+
+    @property
+    def telegram_proxy_url_effective(self) -> str | None:
+        """URL proxy для Bot API, если use_vpn=true и URL задан; иначе None."""
+        if not self.use_vpn:
+            return None
+        url = self.telegram_proxy_url.strip()
+        return url or None
 
 
 @lru_cache
