@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from astra.referrals import crud as referrals_crud
 from astra.services.points_service import register_daily_activity
 from astra.services.referral_service import apply_referral_on_start
-from aiogram.types import KeyboardButton, ReplyKeyboardMarkup
+from aiogram.types import KeyboardButton, ReplyKeyboardMarkup, ReplyKeyboardRemove
 
 from astra.telegram.keyboards import main_menu_keyboard
 from astra.telegram.states import OnboardingStates
@@ -63,7 +63,7 @@ async def cmd_start(
         user_id=str(user.id),
     )
     begin_kb = ReplyKeyboardMarkup(
-        keyboard=[[KeyboardButton(text="▶️ Начать")]],
+        keyboard=[[KeyboardButton(text="Привет, Астрид 🫶🏻")]],  # TODO проверить на андроиде цвет
         resize_keyboard=True,
     )
     await message.answer(
@@ -75,7 +75,7 @@ async def cmd_start(
     )
 
 
-@router.message(F.text == "▶️ Начать")
+@router.message(F.text == "Привет, Астрид 🫶🏻")
 @router.message(Command("continue"))
 async def cmd_continue(message: Message, state: FSMContext) -> None:
     current = await state.get_state()
@@ -91,4 +91,5 @@ async def cmd_continue(message: Message, state: FSMContext) -> None:
         "📅 Укажи дату рождения в формате <b>ДД.ММ.ГГГГ</b>\n"
         "Например: <code>15.03.1990</code>",
         parse_mode="HTML",
+        reply_markup=ReplyKeyboardRemove(),
     )
