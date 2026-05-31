@@ -14,7 +14,6 @@ from astra.points.routers import router as points_router
 from astra.referrals.routers import router as referrals_router
 from astra.telegram.bot import create_bot, create_dispatcher
 from astra.telegram.polling import run_polling_supervisor
-from astra.telegram.webapp_router import router as telegram_webapp_router
 from astra.telegram.webhook import router as telegram_webhook_router
 from astra.users.routers import router as users_router
 
@@ -121,7 +120,6 @@ def create_app(*, with_lifespan: bool = True) -> FastAPI:
     app.include_router(points_router, prefix="/v1")
     app.include_router(referrals_router, prefix="/v1")
     app.include_router(telegram_webhook_router, prefix="/v1")
-    app.include_router(telegram_webapp_router)
     return app
 
 

@@ -6,25 +6,14 @@ from uuid import UUID
 from aiogram import F, Router
 from aiogram.filters import StateFilter
 from aiogram.fsm.context import FSMContext
-from aiogram.types import CallbackQuery, Message
+from aiogram.types import CallbackQuery, Message, ReplyKeyboardRemove
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from astra.places import crud as places_crud
 from astra.places.geonames_import import ensure_places_catalog
-from astra.places.geolocation import find_nearest_places
 from astra.places.getters import format_place_confirm, get_place_read
-from astra.places.schemas import PlaceRead
 from astra.db.session import get_session_factory
-from astra.telegram.keyboards_places import (
-    BTN_SEND_LOCATION,
-    BTN_TYPE_PLACE_NAME,
-    LOCATION_BUTTON_TEXTS,
-    PLACE_KEYBOARD_BUTTON_TEXTS,
-    place_confirm_keyboard,
-    place_step_reply_keyboard,
-    places_pick_keyboard,
-)
-from astra.telegram.webapp import parse_webapp_location_payload
+from astra.telegram.keyboards_places import place_confirm_keyboard, places_pick_keyboard
 from astra.telegram.states import OnboardingStates
 
 logger = logging.getLogger(__name__)
@@ -40,8 +29,6 @@ SEARCH_HINT = (
     "Начни вводить название — <b>город, посёлок или деревня</b> в России.\n"
     "Например: <code>Каширское</code>, <code>Вырица</code>, <code>Казань</code>"
 )
-
-GEOLOCATION_FAILED_TEXT = "Не смог получить твою геопозицию, введи название в ручную"
 
 PLACES_CATALOG_UNAVAILABLE_TEXT = (
     "Справочник городов временно недоступен. Попробуй через минуту."
@@ -64,27 +51,18 @@ async def _places_catalog_empty(session: AsyncSession) -> bool:
     return not await _ensure_places_ready(session)
 
 
-async def reply_geolocation_failed(message: Message) -> None:
+async def send_place_step_prompt(message: Message, *, title: str) -> None:
     await message.answer(
-        GEOLOCATION_FAILED_TEXT,
-        reply_markup=place_step_reply_keyboard(),
-    )
-
-
-async def send_place_step_prompt(message: Message, state: FSMContext, *, title: str) -> None:
-    await message.answer(
-        f"{title}\n\n"
-        f"• <b>«{BTN_SEND_LOCATION}»</b> — на телефоне\n"
-        "• Или введи название в поле ввода",
+        f"{title}\n\n{SEARCH_HINT}",
         parse_mode="HTML",
-        reply_markup=place_step_reply_keyboard(),
+        reply_markup=ReplyKeyboardRemove(),
     )
 
 
 async def start_birth_place_step(message: Message, state: FSMContext) -> None:
     await state.set_state(OnboardingStates.birth_place_query)
     await state.update_data(place_context="birth")
-    await send_place_step_prompt(message, state, title="📍 Где ты родилась?")
+    await send_place_step_prompt(message, title="📍 Где ты родилась?")
 
 
 async def start_notification_place_step(message: Message, state: FSMContext) -> None:
@@ -92,109 +70,8 @@ async def start_notification_place_step(message: Message, state: FSMContext) -> 
     await state.update_data(place_context="notification")
     await send_place_step_prompt(
         message,
-        state,
         title="🌍 Где ты сейчас живёшь? (для бесплатных предсказаний в 09:00 по твоему времени)",
     )
-
-
-async def handle_place_location(
-    message: Message,
-    state: FSMContext,
-    session: AsyncSession,
-    *,
-    context_key: str,
-) -> None:
-    if message.location is None:
-        await reply_geolocation_failed(message)
-        return
-
-    try:
-        await handle_place_coordinates(
-            message,
-            state,
-            session,
-            latitude=message.location.latitude,
-            longitude=message.location.longitude,
-            context_key=context_key,
-        )
-    except Exception:
-        logger.exception("handle_place_location failed")
-        await reply_geolocation_failed(message)
-
-
-async def handle_place_coordinates(
-    message: Message,
-    state: FSMContext,
-    session: AsyncSession,
-    *,
-    latitude: float,
-    longitude: float,
-    context_key: str,
-) -> None:
-    if await _places_catalog_empty(session):
-        await message.answer(
-            PLACES_CATALOG_UNAVAILABLE_TEXT,
-            reply_markup=place_step_reply_keyboard(),
-        )
-        return
-
-    logger.info(
-        "Geolocation lat=%s lon=%s user=%s context=%s",
-        latitude,
-        longitude,
-        message.from_user.id if message.from_user else None,
-        context_key,
-    )
-
-    nearest = await find_nearest_places(session, latitude, longitude)
-    if not nearest:
-        await reply_geolocation_failed(message)
-        return
-
-    place, distance_km = nearest[0]
-    place_read = PlaceRead.model_validate(place)
-
-    await state.update_data(place_context=context_key)
-    if context_key == "birth":
-        await state.set_state(OnboardingStates.birth_place_query)
-    else:
-        await state.set_state(OnboardingStates.notification_place_query)
-
-    dist_str = f"{distance_km:.1f} км" if distance_km >= 1 else f"{int(distance_km * 1000)} м"
-    await message.answer(
-        f"По геолокации ближайший населённый пункт (~{dist_str}):\n\n"
-        + format_place_confirm(place_read)
-        + "\n\n<i>Если это не то — введи название вручную.</i>",
-        parse_mode="HTML",
-        reply_markup=place_confirm_keyboard(place.id),
-    )
-
-
-async def handle_place_webapp_data(
-    message: Message,
-    state: FSMContext,
-    session: AsyncSession,
-) -> None:
-    if message.web_app_data is None:
-        return
-    coords = parse_webapp_location_payload(message.web_app_data.data)
-    if coords is None:
-        await reply_geolocation_failed(message)
-        return
-    lat, lon = coords
-    context_key = _context_key_for_state(await state.get_state())
-    try:
-        await handle_place_coordinates(
-            message,
-            state,
-            session,
-            latitude=lat,
-            longitude=lon,
-            context_key=context_key,
-        )
-    except Exception:
-        logger.exception("handle_place_webapp_data failed")
-        await reply_geolocation_failed(message)
 
 
 async def handle_place_query(
@@ -208,14 +85,14 @@ async def handle_place_query(
     if len(query) < 2:
         await message.answer(
             "Введи минимум 2 символа названия города.",
-            reply_markup=place_step_reply_keyboard(),
+            reply_markup=ReplyKeyboardRemove(),
         )
         return
 
     if await _places_catalog_empty(session):
         await message.answer(
             PLACES_CATALOG_UNAVAILABLE_TEXT,
-            reply_markup=place_step_reply_keyboard(),
+            reply_markup=ReplyKeyboardRemove(),
         )
         return
 
@@ -225,7 +102,7 @@ async def handle_place_query(
             "Ничего не нашла. Уточни название или добавь регион.\n"
             "Пример: <code>Иваново, Тверская область</code>",
             parse_mode="HTML",
-            reply_markup=place_step_reply_keyboard(),
+            reply_markup=ReplyKeyboardRemove(),
         )
         return
 
@@ -240,51 +117,7 @@ async def handle_place_query(
     )
 
 
-@router.message(StateFilter(*PLACE_STATES), F.web_app_data)
-async def place_webapp_location(
-    message: Message,
-    state: FSMContext,
-    session: AsyncSession,
-) -> None:
-    await handle_place_webapp_data(message, state, session)
-
-
-@router.message(StateFilter(*PLACE_STATES), F.location)
-async def place_location_message(
-    message: Message,
-    state: FSMContext,
-    session: AsyncSession,
-) -> None:
-    context_key = _context_key_for_state(await state.get_state())
-    await handle_place_location(message, state, session, context_key=context_key)
-
-
-@router.message(StateFilter(*PLACE_STATES), F.text == BTN_TYPE_PLACE_NAME)
-async def place_manual_hint(message: Message, state: FSMContext) -> None:
-    current = await state.get_state()
-    title = (
-        "📍 Где ты родилась?"
-        if current == OnboardingStates.birth_place_query.state
-        else "🌍 Где ты сейчас живёшь?"
-    )
-    await message.answer(
-        f"{title}\n\n{SEARCH_HINT}",
-        parse_mode="HTML",
-        reply_markup=place_step_reply_keyboard(),
-    )
-
-
-@router.message(StateFilter(*PLACE_STATES), F.text.in_(LOCATION_BUTTON_TEXTS))
-async def place_location_button_text(message: Message) -> None:
-    """Desktop: request_location приходит как текст, координат нет."""
-    await reply_geolocation_failed(message)
-
-
-@router.message(
-    StateFilter(*PLACE_STATES),
-    F.text,
-    ~F.text.in_(PLACE_KEYBOARD_BUTTON_TEXTS),
-)
+@router.message(StateFilter(*PLACE_STATES), F.text)
 async def place_text_search(
     message: Message,
     state: FSMContext,
@@ -304,9 +137,9 @@ async def place_step_fallback(message: Message, state: FSMContext) -> None:
         message.text,
     )
     await message.answer(
-        "Отправь <b>геолокацию</b> кнопкой ниже или <b>введи название города</b> вручную.",
+        "Введи <b>название города</b> текстом в поле ввода.",
         parse_mode="HTML",
-        reply_markup=place_step_reply_keyboard(),
+        reply_markup=ReplyKeyboardRemove(),
     )
 
 
