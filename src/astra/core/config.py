@@ -27,6 +27,9 @@ class Settings(BaseSettings):
     telegram_mode: str = "polling"
     telegram_webhook_url: str | None = None
     telegram_webhook_secret: str | None = None
+    # SOCKS5 или HTTP(S) proxy только для Bot API (не MTProto tg://proxy)
+    # Пример: socks5://user:pass@host:1080
+    telegram_proxy_url: str = ""
     # Публичный HTTPS URL API (для Web App геолокации на Desktop). Пример: https://xxx.ngrok-free.app
     webapp_base_url: str = ""
 

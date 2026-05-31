@@ -3,8 +3,9 @@ from typing import Any
 import logging
 
 from aiogram import BaseMiddleware, Bot, Dispatcher
-from aiogram.types import TelegramObject, Update
 from aiogram.client.default import DefaultBotProperties
+from aiogram.client.session.aiohttp import AiohttpSession
+from aiogram.types import TelegramObject, Update
 from aiogram.enums import ParseMode
 from aiogram.fsm.storage.base import BaseStorage
 from aiogram.fsm.storage.memory import MemoryStorage
@@ -27,9 +28,14 @@ class UpdateLoggingMiddleware(BaseMiddleware):
 
 
 def create_bot(settings: Settings) -> Bot:
+    session: AiohttpSession | None = None
+    if settings.telegram_proxy_url:
+        session = AiohttpSession(proxy=settings.telegram_proxy_url)
+        logger.info("Telegram Bot API via proxy (host hidden in logs)")
     return Bot(
         token=settings.telegram_bot_token,
         default=DefaultBotProperties(parse_mode=ParseMode.HTML),
+        session=session,
     )
 
 
