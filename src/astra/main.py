@@ -11,7 +11,8 @@ from astra.notifications.scheduler import notification_worker
 from astra.predictions.routers import router as predictions_router
 from astra.points.routers import router as points_router
 from astra.referrals.routers import router as referrals_router
-from astra.telegram.bot import create_bot, create_dispatcher, send_text_to_user
+from astra.telegram.bot import create_bot, create_dispatcher
+from astra.telegram.polling import run_polling_supervisor
 from astra.telegram.webapp_router import router as telegram_webapp_router
 from astra.telegram.webhook import router as telegram_webhook_router
 from astra.users.routers import router as users_router
@@ -32,13 +33,20 @@ async def lifespan(app: FastAPI):
     _configure_logging(settings.log_level)
     init_engine(settings)
 
+    if not settings.telegram_bot_token:
+        logger.error(
+            "TELEGRAM_BOT_TOKEN пуст — бот не получит сообщения. "
+            "Проверьте .env на сервере.",
+        )
+
     bot = create_bot(settings)
+    notification_bot = create_bot(settings)
     dp = await create_dispatcher(settings)
     app.state.bot = bot
     app.state.dp = dp
 
     async def bot_send_text(telegram_id: int, text: str) -> None:
-        await bot.send_message(telegram_id, text)
+        await notification_bot.send_message(telegram_id, text)
 
     worker_task = asyncio.create_task(
         notification_worker(bot_send_text, settings=settings),
@@ -48,11 +56,12 @@ async def lifespan(app: FastAPI):
     polling_task: asyncio.Task | None = None
     if settings.telegram_mode == "polling":
         polling_task = asyncio.create_task(
-            dp.start_polling(bot, handle_signals=False),
+            run_polling_supervisor(dp, bot),
             name="telegram_polling",
         )
-        logger.info("Telegram bot started in polling mode")
+        logger.info("Telegram polling supervisor started")
     elif settings.telegram_webhook_url:
+        await bot.delete_webhook(drop_pending_updates=False)
         await bot.set_webhook(
             url=settings.telegram_webhook_url,
             secret_token=settings.telegram_webhook_secret,
@@ -73,6 +82,7 @@ async def lifespan(app: FastAPI):
         except asyncio.CancelledError:
             pass
     await bot.session.close()
+    await notification_bot.session.close()
 
 
 def create_app(*, with_lifespan: bool = True) -> FastAPI:

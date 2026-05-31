@@ -1,6 +1,9 @@
+from typing import Any
+
 import logging
 
-from aiogram import Bot, Dispatcher
+from aiogram import BaseMiddleware, Bot, Dispatcher
+from aiogram.types import TelegramObject, Update
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
 from aiogram.fsm.storage.base import BaseStorage
@@ -14,6 +17,13 @@ from astra.telegram.handlers import menu, onboarding, places, start
 from astra.telegram.middlewares import DbSessionMiddleware
 
 logger = logging.getLogger(__name__)
+
+
+class UpdateLoggingMiddleware(BaseMiddleware):
+    async def __call__(self, handler, event: TelegramObject, data: dict[str, Any]) -> Any:
+        if isinstance(event, Update):
+            logger.info("Telegram update id=%s type=%s", event.update_id, event.event_type)
+        return await handler(event, data)
 
 
 def create_bot(settings: Settings) -> Bot:
@@ -47,6 +57,7 @@ async def create_dispatcher(settings: Settings) -> Dispatcher:
     storage = await build_fsm_storage(settings)
     dp = Dispatcher(storage=storage)
 
+    dp.update.outer_middleware(UpdateLoggingMiddleware())
     dp.update.middleware(DbSessionMiddleware(get_session_factory()))
 
     @dp.errors()
