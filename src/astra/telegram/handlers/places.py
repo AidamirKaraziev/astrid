@@ -1,4 +1,4 @@
-"""Выбор населённого пункта: поиск → список → подтверждение."""
+"""Выбор населённого пункта: поиск → список → следующий шаг."""
 
 import logging
 from uuid import UUID
@@ -11,9 +11,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from astra.places import crud as places_crud
 from astra.places.geonames_import import ensure_places_catalog
-from astra.places.getters import format_place_confirm, get_place_read
+from astra.places.getters import get_place_read
 from astra.db.session import get_session_factory
-from astra.telegram.keyboards_places import place_confirm_keyboard, places_pick_keyboard
+from astra.telegram.keyboards_places import places_pick_keyboard
 from astra.telegram.states import OnboardingStates
 
 logger = logging.getLogger(__name__)
@@ -156,33 +156,17 @@ async def cb_place_retry(callback: CallbackQuery, state: FSMContext) -> None:
     await callback.answer()
 
 
-@router.callback_query(F.data.startswith("place:pick:"))
-async def cb_place_pick(callback: CallbackQuery, session: AsyncSession) -> None:
-    place_id = UUID(callback.data.split(":")[-1])
-    place = await get_place_read(session, place_id)
-    if place is None or callback.message is None:
-        await callback.answer("Место не найдено", show_alert=True)
-        return
-    await callback.message.answer(
-        "Это правильное место?\n\n" + format_place_confirm(place),
-        parse_mode="HTML",
-        reply_markup=place_confirm_keyboard(place_id),
-    )
-    await callback.answer()
-
-
-@router.callback_query(F.data.startswith("place:confirm:"))
-async def cb_place_confirm(
-    callback: CallbackQuery,
+async def _apply_place_selection(
+    message: Message,
     state: FSMContext,
     session: AsyncSession,
+    place_id: UUID,
 ) -> None:
     from astra.telegram.handlers.onboarding import finish_onboarding
 
-    place_id = UUID(callback.data.split(":")[-1])
     place = await get_place_read(session, place_id)
     if place is None:
-        await callback.answer("Место не найдено", show_alert=True)
+        await message.answer("Место не найдено. Попробуй ввести название ещё раз.")
         return
 
     current_state = await state.get_state()
@@ -192,9 +176,7 @@ async def cb_place_confirm(
             birth_place_id=str(place.id),
             birth_place_display=place.display_name,
         )
-        if callback.message:
-            await start_notification_place_step(callback.message, state)
-        await callback.answer()
+        await start_notification_place_step(message, state)
         return
 
     if current_state == OnboardingStates.notification_place_query.state:
@@ -203,9 +185,21 @@ async def cb_place_confirm(
             notification_place_display=place.display_name,
             notification_timezone=place.timezone,
         )
-        if callback.message:
-            await finish_onboarding(callback.message, state, session)
-        await callback.answer()
+        await finish_onboarding(message, state, session)
         return
 
+    await message.answer("Что-то пошло не так. Нажми /start")
+
+
+@router.callback_query(F.data.startswith("place:pick:"))
+async def cb_place_pick(
+    callback: CallbackQuery,
+    state: FSMContext,
+    session: AsyncSession,
+) -> None:
+    if callback.message is None:
+        await callback.answer()
+        return
+    place_id = UUID(callback.data.split(":")[-1])
+    await _apply_place_selection(callback.message, state, session, place_id)
     await callback.answer()
