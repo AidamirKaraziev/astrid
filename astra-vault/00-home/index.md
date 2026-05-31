@@ -1,6 +1,6 @@
 ---
 tags: [home, index]
-date: 2026-05-18
+date: 2026-05-31
 ---
 
 # Astra — карта знаний
@@ -18,7 +18,7 @@ date: 2026-05-18
 | Архитектура MVP | [[архитектура MVP monolith async 2026-05-16]] |
 | Scaffold (устар.) | [[архитектура проекта Astra на старте scaffold]] |
 | Стек | [[стек Python 3.12 uv и FastAPI]] |
-| Деплой | [[деплой пока не настроен]] |
+| Деплой | [[деплой пока не настроен]] · [[деплой Docker Compose на домашнем сервере с mihomo для Telegram]] |
 
 ## Knowledge
 
@@ -32,6 +32,9 @@ date: 2026-05-18
 - [[на Desktop request_location приходит как текст а не location]]
 - [[Telegram Bot API не передаёт тип клиента в Message]]
 - [[имя в онбординге по умолчанию из Telegram правка в Профиле]]
+- [[деплой Docker Compose на домашнем сервере с mihomo для Telegram]]
+- [[TELEGRAM_PROXY_URL для Bot API через локальный SOCKS5 mihomo]]
+- [[mihomo читает VLESS подписку через proxies.yaml type file]]
 
 ### Паттерны (`knowledge/patterns/`)
 
@@ -45,6 +48,7 @@ date: 2026-05-18
 ### Отладка (`knowledge/debugging/`)
 
 - [[конфликт хендлеров текста кнопки геолокации с поиском города]]
+- [[mihomo показывает COMPATIBLE когда config type http вместо file]]
 
 ### Бизнес (`knowledge/business/`)
 
@@ -56,6 +60,7 @@ date: 2026-05-18
 - [[2026-05-16 discovery и MVP scaffold async telegram бота]]
 - [[2026-05-18 геолокация в онбординге и единое сообщение об ошибке]]
 - [[2026-05-18 имя в онбординге берётся из Telegram без отдельного шага]]
+- [[2026-05-31 Docker mihomo и Telegram на домашнем сервере]]
 
 ## Inbox
 
