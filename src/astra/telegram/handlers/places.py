@@ -15,7 +15,7 @@ from astra.places.getters import get_place_read
 from astra.db.session import get_session_factory
 from astra.services.greeting_service import run_greeting_phase
 from astra.services.onboarding_service import parse_registration_fsm, run_registration_phase
-from astra.telegram.keyboards import main_menu_keyboard
+from astra.telegram.keyboards import profile_menu_keyboard
 from astra.telegram.states import OnboardingStates, ProfileStates
 from astra.users import crud as users_crud
 from astra.telegram.keyboards_places import places_pick_keyboard
@@ -189,10 +189,10 @@ async def _save_profile_notification_place(
     state: FSMContext,
     session: AsyncSession,
     place_id: UUID,
+    *,
+    actor_telegram_id: int,
 ) -> None:
-    if message.from_user is None:
-        return
-    user = await users_crud.get_user_by_telegram_id(session, message.from_user.id)
+    user = await users_crud.get_user_by_telegram_id(session, actor_telegram_id)
     if user is None or user.profile is None:
         await message.answer("Сначала: /start")
         return
@@ -213,7 +213,7 @@ async def _save_profile_notification_place(
     await message.answer(
         f"Город для уведомлений сохранён: <b>{place.display_name}</b> ({place.timezone}) ✨",
         parse_mode="HTML",
-        reply_markup=main_menu_keyboard(),
+        reply_markup=profile_menu_keyboard(),
     )
 
 
@@ -222,6 +222,8 @@ async def _apply_place_selection(
     state: FSMContext,
     session: AsyncSession,
     place_id: UUID,
+    *,
+    actor_telegram_id: int,
 ) -> None:
     place = await get_place_read(session, place_id)
     if place is None:
@@ -239,7 +241,13 @@ async def _apply_place_selection(
         return
 
     if current_state == ProfileStates.edit_notification_place_query.state:
-        await _save_profile_notification_place(message, state, session, place_id)
+        await _save_profile_notification_place(
+            message,
+            state,
+            session,
+            place_id,
+            actor_telegram_id=actor_telegram_id,
+        )
         return
 
     await message.answer("Что-то пошло не так. Нажми /start")
@@ -251,9 +259,15 @@ async def cb_place_pick(
     state: FSMContext,
     session: AsyncSession,
 ) -> None:
-    if callback.message is None:
+    if callback.message is None or callback.from_user is None:
         await callback.answer()
         return
     place_id = UUID(callback.data.split(":")[-1])
-    await _apply_place_selection(callback.message, state, session, place_id)
+    await _apply_place_selection(
+        callback.message,
+        state,
+        session,
+        place_id,
+        actor_telegram_id=callback.from_user.id,
+    )
     await callback.answer()

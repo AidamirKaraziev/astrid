@@ -22,10 +22,19 @@ from astra.users.getters import profile_to_read
 router = Router(name="menu")
 
 
-async def _get_user(session: AsyncSession, message: Message):
-    if message.from_user is None:
+async def _get_user(session: AsyncSession, telegram_id: int):
+    return await users_crud.get_user_by_telegram_id(session, telegram_id)
+
+
+def _telegram_id_from_message(message: Message) -> int | None:
+    return message.from_user.id if message.from_user else None
+
+
+async def _get_user_from_message(session: AsyncSession, message: Message):
+    tg_id = _telegram_id_from_message(message)
+    if tg_id is None:
         return None
-    return await users_crud.get_user_by_telegram_id(session, message.from_user.id)
+    return await _get_user(session, tg_id)
 
 
 @router.callback_query(F.data == "menu:home")
@@ -38,7 +47,10 @@ async def cb_menu_home(callback: CallbackQuery, state: FSMContext) -> None:
 
 @router.message(F.text == "🔮 Предсказание на сегодня")
 async def today_prediction(message: Message, session: AsyncSession) -> None:
-    user = await _get_user(session, message)
+    tg_id = _telegram_id_from_message(message)
+    if tg_id is None:
+        return
+    user = await _get_user(session, tg_id)
     if user is None or not user.onboarding_completed or user.profile is None:
         await message.answer("Сначала пройди регистрацию: /start")
         return
@@ -62,7 +74,7 @@ async def today_prediction(message: Message, session: AsyncSession) -> None:
 
 @router.message(F.text == "⭐ Баллы")
 async def show_points(message: Message, session: AsyncSession) -> None:
-    user = await _get_user(session, message)
+    user = await _get_user_from_message(session, message)
     if user is None:
         await message.answer("Сначала: /start")
         return
@@ -77,7 +89,7 @@ async def show_points(message: Message, session: AsyncSession) -> None:
 
 @router.message(F.text == "🎁 Пригласить друга")
 async def invite_friend(message: Message, session: AsyncSession) -> None:
-    user = await _get_user(session, message)
+    user = await _get_user_from_message(session, message)
     if user is None:
         await message.answer("Сначала: /start")
         return
@@ -99,7 +111,7 @@ async def invite_friend(message: Message, session: AsyncSession) -> None:
 
 @router.message(F.text == "👤 Профиль")
 async def show_profile(message: Message, session: AsyncSession) -> None:
-    user = await _get_user(session, message)
+    user = await _get_user_from_message(session, message)
     if user is None or user.profile is None:
         await message.answer("Сначала: /start")
         return
@@ -134,7 +146,7 @@ async def cb_edit_name(callback: CallbackQuery, state: FSMContext) -> None:
 
 @router.message(ProfileStates.edit_name)
 async def save_name(message: Message, state: FSMContext, session: AsyncSession) -> None:
-    user = await _get_user(session, message)
+    user = await _get_user_from_message(session, message)
     if user is None or user.profile is None:
         return
     name = (message.text or "").strip()
@@ -160,7 +172,7 @@ async def cb_edit_birth_date(callback: CallbackQuery, state: FSMContext) -> None
 
 @router.message(ProfileStates.edit_birth_date)
 async def save_birth_date(message: Message, state: FSMContext, session: AsyncSession) -> None:
-    user = await _get_user(session, message)
+    user = await _get_user_from_message(session, message)
     if user is None or user.profile is None:
         return
     parsed = parse_birth_date(message.text or "")
@@ -179,7 +191,8 @@ async def save_birth_date(message: Message, state: FSMContext, session: AsyncSes
     await users_crud.update_profile(session, user.profile, **update_fields)
     await state.clear()
     await message.answer(
-        f"Дата сохранена: {parsed.strftime('%d.%m.%Y')} ✨",
+        f"Дата сохранена: {parsed.strftime('%d.%m.%Y')} ✨\n"
+        "Предсказание на сегодня обновится при следующем запросе.",
         reply_markup=main_menu_keyboard(),
     )
 
@@ -194,7 +207,7 @@ async def cb_edit_time(callback: CallbackQuery, state: FSMContext) -> None:
 
 @router.message(ProfileStates.edit_birth_time)
 async def save_birth_time(message: Message, state: FSMContext, session: AsyncSession) -> None:
-    user = await _get_user(session, message)
+    user = await _get_user_from_message(session, message)
     if user is None or user.profile is None:
         return
     parsed = parse_birth_time(message.text or "")
@@ -206,7 +219,8 @@ async def save_birth_time(message: Message, state: FSMContext, session: AsyncSes
     await state.clear()
     p = profile_to_read(user.profile)
     await message.answer(
-        f"Время сохранено ✨\nТочность теперь: <b>{p.accuracy_percent}%</b>",
+        f"Время сохранено ✨\nТочность теперь: <b>{p.accuracy_percent}%</b>\n"
+        "Предсказание на сегодня обновится при следующем запросе.",
         parse_mode="HTML",
         reply_markup=main_menu_keyboard(),
     )
@@ -218,10 +232,10 @@ async def cb_edit_notification_city(
     state: FSMContext,
     session: AsyncSession,
 ) -> None:
-    if callback.message is None:
+    if callback.message is None or callback.from_user is None:
         await callback.answer()
         return
-    user = await _get_user(session, callback.message)
+    user = await _get_user(session, callback.from_user.id)
     if user is None or user.profile is None:
         await callback.answer("Сначала: /start", show_alert=True)
         return
@@ -239,7 +253,7 @@ async def cb_edit_place(callback: CallbackQuery, state: FSMContext) -> None:
 
 @router.message(ProfileStates.edit_birth_place)
 async def save_birth_place(message: Message, state: FSMContext, session: AsyncSession) -> None:
-    user = await _get_user(session, message)
+    user = await _get_user_from_message(session, message)
     if user is None or user.profile is None:
         return
     place = (message.text or "").strip()
@@ -250,7 +264,8 @@ async def save_birth_place(message: Message, state: FSMContext, session: AsyncSe
     await state.clear()
     p = profile_to_read(user.profile)
     await message.answer(
-        f"Место сохранено ✨\nТочность теперь: <b>{p.accuracy_percent}%</b>",
+        f"Место сохранено ✨\nТочность теперь: <b>{p.accuracy_percent}%</b>\n"
+        "Предсказание на сегодня обновится при следующем запросе.",
         parse_mode="HTML",
         reply_markup=main_menu_keyboard(),
     )

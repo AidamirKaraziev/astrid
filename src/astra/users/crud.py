@@ -1,6 +1,7 @@
 import logging
-from datetime import date
+from datetime import date, datetime
 from uuid import UUID
+from zoneinfo import ZoneInfo
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -10,6 +11,8 @@ from astra.places import crud as places_crud
 from astra.users.models import Profile, User
 
 logger = logging.getLogger(__name__)
+
+_ASTRO_PROFILE_FIELDS = ("birth_date", "birth_time", "birth_place", "birth_place_id")
 
 
 async def get_user_by_telegram_id(
@@ -91,17 +94,44 @@ async def _resolve_birth_place_id(
     profile.birth_place = best.display_name
 
 
+async def _invalidate_today_predictions_if_astro_changed(
+    session: AsyncSession,
+    profile: Profile,
+    before: dict[str, object],
+) -> None:
+    changed = any(getattr(profile, key) != before[key] for key in _ASTRO_PROFILE_FIELDS)
+    if not changed:
+        return
+    from astra.predictions import crud as predictions_crud
+
+    today = datetime.now(ZoneInfo(profile.timezone)).date()
+    deleted = await predictions_crud.delete_predictions_for_date(
+        session,
+        profile.user_id,
+        today,
+    )
+    if deleted:
+        logger.info(
+            "Removed %s prediction(s) for user %s on %s after profile astro change",
+            deleted,
+            profile.user_id,
+            today,
+        )
+
+
 async def update_profile(
     session: AsyncSession,
     profile: Profile,
     **fields: object,
 ) -> Profile:
+    before = {key: getattr(profile, key) for key in _ASTRO_PROFILE_FIELDS}
     birth_place_text = fields.get("birth_place")
     for key, value in fields.items():
         if value is not None and hasattr(profile, key):
             setattr(profile, key, value)
     if isinstance(birth_place_text, str) and birth_place_text.strip():
         await _resolve_birth_place_id(session, profile, birth_place_text.strip())
+    await _invalidate_today_predictions_if_astro_changed(session, profile, before)
     await session.flush()
     await _try_refresh_natal_chart(session, profile)
     return profile

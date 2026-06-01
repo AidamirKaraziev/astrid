@@ -1,7 +1,7 @@
 from datetime import date
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from astra.predictions.models import Prediction
@@ -38,6 +38,20 @@ async def create_prediction(
     session.add(prediction)
     await session.flush()
     return prediction
+
+
+async def delete_predictions_for_date(
+    session: AsyncSession,
+    user_id: UUID,
+    prediction_date: date,
+) -> int:
+    result = await session.execute(
+        delete(Prediction).where(
+            Prediction.user_id == user_id,
+            Prediction.prediction_date == prediction_date,
+        ),
+    )
+    return result.rowcount or 0
 
 
 async def update_prediction(
