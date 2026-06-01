@@ -39,11 +39,15 @@ date: 2026-05-31
 - [[деплой Docker Compose на домашнем сервере с mihomo для Telegram]]
 - [[TELEGRAM_PROXY_URL для Bot API через локальный SOCKS5 mihomo]]
 - [[mihomo читает VLESS подписку через proxies.yaml type file]]
+- [[онбординг без города уведомлений город настраивается в профиле]]
+- [[дедупликация ежедневного предсказания через Redis pending ключ]]
+- [[Sentry environment local dev prod и service api worker]]
 
 ### Паттерны (`knowledge/patterns/`)
 
 - [[имена заметок это утверждения а не категории]]
 - [[единое сообщение когда геопозицию не удалось получить или обработать]]
+- [[карточка профиля A2 сокращение названий GeoNames]]
 
 ### Интеграции (`knowledge/integrations/`)
 
@@ -53,6 +57,7 @@ date: 2026-05-31
 
 - [[конфликт хендлеров текста кнопки геолокации с поиском города]]
 - [[mihomo показывает COMPATIBLE когда config type http вместо file]]
+- [[RabbitMQ send раньше commit generate и отсутствие socksio]]
 
 ### Бизнес (`knowledge/business/`)
 
@@ -65,6 +70,7 @@ date: 2026-05-31
 - [[2026-05-18 геолокация в онбординге и единое сообщение об ошибке]]
 - [[2026-05-18 имя в онбординге берётся из Telegram без отдельного шага]]
 - [[2026-05-31 Docker mihomo и Telegram на домашнем сервере]]
+- [[2026-06-01 онбординг профиль Sentry и RabbitMQ]]
 
 ## Inbox
 
