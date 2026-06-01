@@ -19,6 +19,7 @@ from astra.telegram.keyboards import main_menu_keyboard, profile_menu_keyboard, 
 from astra.telegram.states import ProfileStates
 from astra.telegram.utils import parse_birth_date, parse_birth_time
 from astra.users import crud as users_crud
+from astra.telegram.profile_text import format_profile_card
 from astra.users.getters import profile_to_read
 
 router = Router(name="menu")
@@ -78,21 +79,6 @@ async def today_prediction(message: Message, session: AsyncSession) -> None:
     )
 
 
-@router.message(F.text == "⭐ Баллы")
-async def show_points(message: Message, session: AsyncSession) -> None:
-    user = await _get_user_from_message(session, message)
-    if user is None:
-        await message.answer("Сначала: /start")
-        return
-    await register_daily_activity(session, user)
-    await message.answer(
-        f"⭐ Баллы: <b>{user.points}</b>\n"
-        f"🔥 Серия: <b>{user.streak_current}</b> дн. (рекорд: {user.streak_best})\n\n"
-        "<i>Баллами можно будет оплачивать платные разборы — скоро.</i>",
-        parse_mode="HTML",
-    )
-
-
 @router.message(F.text == "🎁 Пригласить друга")
 async def invite_friend(message: Message, session: AsyncSession) -> None:
     user = await _get_user_from_message(session, message)
@@ -121,22 +107,8 @@ async def show_profile(message: Message, session: AsyncSession) -> None:
     if user is None or user.profile is None:
         await message.answer("Сначала: /start")
         return
-    p = profile_to_read(user.profile)
-    time_str = p.birth_time.strftime("%H:%M") if p.birth_time else "не указано"
-    place_str = p.birth_place or "не указано"
-    profile = user.profile
-    city_hint = ""
-    if profile is not None and profile.notification_place_id is None:
-        city_hint = "\n<i>Укажи город для уведомлений в профиле — рассылка в 09:00 по твоему времени.</i>\n"
     await message.answer(
-        f"👤 <b>{p.display_name}</b>\n"
-        f"📅 Дата: {p.birth_date.strftime('%d.%m.%Y')}\n"
-        f"🕐 Время: {time_str}\n"
-        f"📍 Место: {place_str}\n"
-        f"🌍 Город для уведомлений: {p.city} ({p.timezone})"
-        f"{city_hint}\n"
-        f"📊 Точность: <b>{p.accuracy_percent}%</b>\n"
-        f"<i>{p.accuracy_hint}</i>",
+        format_profile_card(user, user.profile),
         parse_mode="HTML",
         reply_markup=profile_menu_keyboard(),
     )

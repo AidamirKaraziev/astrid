@@ -5,8 +5,7 @@ def main_menu_keyboard() -> ReplyKeyboardMarkup:
     return ReplyKeyboardMarkup(
         keyboard=[
             [KeyboardButton(text="🔮 Предсказание на сегодня")],
-            [KeyboardButton(text="👤 Профиль"), KeyboardButton(text="⭐ Баллы")],
-            [KeyboardButton(text="🎁 Пригласить друга")],
+            [KeyboardButton(text="👤 Профиль"), KeyboardButton(text="🎁 Пригласить друга")],
         ],
         resize_keyboard=True,
     )
