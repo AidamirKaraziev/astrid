@@ -49,10 +49,26 @@ class Settings(BaseSettings):
     ollama_enabled: bool = True
     ollama_timeout_seconds: float = 120.0
 
+    # Sentry — ошибки и (опционально) трейсы; стенд: local | dev | prod
     sentry_dsn: str | None = None
+    sentry_enabled: bool = True
+    sentry_environment: str = "local"
+    sentry_send_default_pii: bool = False
+    sentry_traces_sample_rate: float = 0.0
+    sentry_profiles_sample_rate: float = 0.0
+    sentry_release: str | None = None
 
     # Автозагрузка справочника GeoNames при старте, если таблица places пуста
     geonames_auto_import: bool = True
+
+    @property
+    def app_version(self) -> str:
+        from importlib.metadata import version
+
+        try:
+            return version("astra")
+        except Exception:
+            return "0.0.0"
 
     @property
     def is_development(self) -> bool:

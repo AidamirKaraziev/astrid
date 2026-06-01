@@ -22,6 +22,7 @@ x-app-build: &app-build
 x-app-env: &app-env
   APP_ENV: production
   DEBUG: "false"
+  # SENTRY_DSN и SENTRY_ENVIRONMENT — из .env (env_file); для prod обычно SENTRY_ENVIRONMENT=prod
   TELEGRAM_MODE: polling
   DATABASE_URL: postgresql+asyncpg://astra:astra@postgres:5432/astra
   REDIS_URL: redis://redis:6379/0

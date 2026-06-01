@@ -2,6 +2,7 @@ import asyncio
 import logging
 
 from astra.core.config import get_settings
+from astra.core.sentry import init_sentry
 from astra.workers.consumer import run_consumer
 
 
@@ -14,6 +15,7 @@ def _configure_logging(level: str) -> None:
 
 def run() -> None:
     settings = get_settings()
+    init_sentry(settings)
     _configure_logging(settings.log_level)
     asyncio.run(run_consumer(settings))
 

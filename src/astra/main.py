@@ -6,6 +6,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from astra.core.config import get_settings
+from astra.core.sentry import init_sentry
 from astra.db.session import get_session_factory, init_engine
 from astra.places.geonames_import import ensure_places_catalog
 from astra.notifications.scheduler import notification_worker
@@ -97,6 +98,7 @@ async def lifespan(app: FastAPI):
 
 def create_app(*, with_lifespan: bool = True) -> FastAPI:
     settings = get_settings()
+    init_sentry(settings)
     app = FastAPI(
         title="Astra API",
         version="0.1.0",

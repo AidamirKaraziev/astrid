@@ -5,7 +5,7 @@ import logging
 from aiogram import BaseMiddleware, Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
 from aiogram.client.session.aiohttp import AiohttpSession
-from aiogram.types import TelegramObject, Update
+from aiogram.types import ErrorEvent, TelegramObject, Update
 from aiogram.enums import ParseMode
 from aiogram.fsm.storage.base import BaseStorage
 from aiogram.fsm.storage.memory import MemoryStorage
@@ -70,8 +70,11 @@ async def create_dispatcher(settings: Settings) -> Dispatcher:
     dp.update.middleware(DbSessionMiddleware(get_session_factory()))
 
     @dp.errors()
-    async def on_error(event: object) -> None:
-        logger.exception("Telegram handler error: %r", event)
+    async def on_error(event: ErrorEvent) -> None:
+        from astra.core.sentry import capture_exception
+
+        logger.exception("Telegram handler error", exc_info=event.exception)
+        capture_exception(event.exception)
 
     dp.include_router(start.router)
     dp.include_router(places.router)
