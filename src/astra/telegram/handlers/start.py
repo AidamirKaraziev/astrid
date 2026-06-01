@@ -5,6 +5,7 @@ from aiogram.types import Message
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from astra.referrals import crud as referrals_crud
+from astra.services.onboarding_service import sync_user_from_telegram
 from astra.services.points_service import register_daily_activity
 from astra.services.referral_service import apply_referral_on_start
 from aiogram.types import KeyboardButton, ReplyKeyboardMarkup, ReplyKeyboardRemove
@@ -39,6 +40,13 @@ async def cmd_start(
         ref_code = extract_referral_code(command.args)
         if ref_code:
             await apply_referral_on_start(session, user, ref_code)
+    else:
+        await sync_user_from_telegram(
+            session,
+            user,
+            username=tg.username,
+            language_code=tg.language_code,
+        )
 
     await register_daily_activity(session, user)
     await state.clear()
@@ -77,11 +85,19 @@ async def cmd_start(
 
 @router.message(F.text == "Привет, Астрид 🫶🏻")
 @router.message(Command("continue"))
-async def cmd_continue(message: Message, state: FSMContext) -> None:
+async def cmd_continue(
+    message: Message,
+    state: FSMContext,
+    session: AsyncSession,
+) -> None:
     current = await state.get_state()
     if current != OnboardingStates.welcome.state:
         return
     data = await state.get_data()
+    if not data.get("user_id") and message.from_user is not None:
+        user = await users_crud.get_user_by_telegram_id(session, message.from_user.id)
+        if user is not None:
+            await state.update_data(user_id=str(user.id))
     display_name = data.get("default_name", "друг")
     await state.update_data(display_name=display_name)
     await state.set_state(OnboardingStates.birth_date)

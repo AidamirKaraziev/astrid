@@ -1,3 +1,4 @@
+import logging
 from datetime import date
 from uuid import UUID
 
@@ -7,6 +8,8 @@ from sqlalchemy.orm import selectinload
 
 from astra.places import crud as places_crud
 from astra.users.models import Profile, User
+
+logger = logging.getLogger(__name__)
 
 
 async def get_user_by_telegram_id(
@@ -71,9 +74,7 @@ async def create_profile(
     )
     session.add(profile)
     await session.flush()
-    from astra.services.astro_service import refresh_natal_chart_for_profile
-
-    await refresh_natal_chart_for_profile(session, profile)
+    await _try_refresh_natal_chart(session, profile)
     return profile
 
 
@@ -102,7 +103,14 @@ async def update_profile(
     if isinstance(birth_place_text, str) and birth_place_text.strip():
         await _resolve_birth_place_id(session, profile, birth_place_text.strip())
     await session.flush()
+    await _try_refresh_natal_chart(session, profile)
+    return profile
+
+
+async def _try_refresh_natal_chart(session: AsyncSession, profile: Profile) -> None:
     from astra.services.astro_service import refresh_natal_chart_for_profile
 
-    await refresh_natal_chart_for_profile(session, profile)
-    return profile
+    try:
+        await refresh_natal_chart_for_profile(session, profile)
+    except Exception:
+        logger.exception("natal chart refresh failed for profile %s", profile.id)

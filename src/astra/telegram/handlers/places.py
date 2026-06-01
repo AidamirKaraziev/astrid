@@ -13,6 +13,9 @@ from astra.places import crud as places_crud
 from astra.places.geonames_import import ensure_places_catalog
 from astra.places.getters import get_place_read
 from astra.db.session import get_session_factory
+from astra.services.greeting_service import run_greeting_phase
+from astra.services.onboarding_service import parse_registration_fsm, run_registration_phase
+from astra.users import crud as users_crud
 from astra.telegram.keyboards_places import places_pick_keyboard
 from astra.telegram.states import OnboardingStates
 
@@ -162,8 +165,6 @@ async def _apply_place_selection(
     session: AsyncSession,
     place_id: UUID,
 ) -> None:
-    from astra.telegram.handlers.onboarding import finish_onboarding
-
     place = await get_place_read(session, place_id)
     if place is None:
         await message.answer("Место не найдено. Попробуй ввести название ещё раз.")
@@ -185,7 +186,21 @@ async def _apply_place_selection(
             notification_place_display=place.display_name,
             notification_timezone=place.timezone,
         )
-        await finish_onboarding(message, state, session)
+        fsm_data = await state.get_data()
+        reg = parse_registration_fsm(fsm_data)
+        if reg is None:
+            await message.answer("Что-то пошло не так. Нажми /start")
+            return
+
+        user = await users_crud.get_user_by_id(session, reg.user_id)
+        if user is None:
+            await message.answer("Что-то пошло не так. Нажми /start")
+            return
+
+        await run_registration_phase(session, user, reg)
+        await session.commit()
+
+        await run_greeting_phase(message, state, user)
         return
 
     await message.answer("Что-то пошло не так. Нажми /start")
