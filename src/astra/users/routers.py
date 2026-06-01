@@ -34,11 +34,19 @@ async def patch_profile(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Profile not found")
 
     update_data = payload.model_dump(exclude_unset=True)
+    birth_date = update_data.get("birth_date", user.profile.birth_date)
     if "birth_time" in update_data and update_data["birth_time"] is not None:
         bt = update_data.pop("birth_time")
         from datetime import datetime
 
-        update_data["birth_time"] = datetime.combine(user.profile.birth_date, bt)
+        update_data["birth_time"] = datetime.combine(birth_date, bt)
+    if "birth_date" in update_data and user.profile.birth_time is not None:
+        new_date = update_data["birth_date"]
+        update_data["birth_time"] = user.profile.birth_time.replace(
+            year=new_date.year,
+            month=new_date.month,
+            day=new_date.day,
+        )
 
     await crud.update_profile(session, user.profile, **update_data)
     await session.refresh(user, attribute_names=["profile"])

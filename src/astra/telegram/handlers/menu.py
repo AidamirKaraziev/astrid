@@ -14,7 +14,7 @@ from astra.services.prediction_service import (
 )
 from astra.telegram.keyboards import main_menu_keyboard, profile_menu_keyboard, share_keyboard
 from astra.telegram.states import ProfileStates
-from astra.telegram.utils import parse_birth_time
+from astra.telegram.utils import parse_birth_date, parse_birth_time
 from astra.users import crud as users_crud
 from astra.users.getters import profile_to_read
 
@@ -138,6 +138,44 @@ async def save_name(message: Message, state: FSMContext, session: AsyncSession) 
     await users_crud.update_profile(session, user.profile, display_name=name)
     await state.clear()
     await message.answer(f"Имя обновлено: {name} ✨", reply_markup=main_menu_keyboard())
+
+
+@router.callback_query(F.data == "profile:date")
+async def cb_edit_birth_date(callback: CallbackQuery, state: FSMContext) -> None:
+    await state.set_state(ProfileStates.edit_birth_date)
+    if callback.message:
+        await callback.message.answer(
+            "Введи дату рождения в формате <b>ДД.ММ.ГГГГ</b>\n"
+            "Например: <code>15.03.1990</code>",
+            parse_mode="HTML",
+        )
+    await callback.answer()
+
+
+@router.message(ProfileStates.edit_birth_date)
+async def save_birth_date(message: Message, state: FSMContext, session: AsyncSession) -> None:
+    user = await _get_user(session, message)
+    if user is None or user.profile is None:
+        return
+    parsed = parse_birth_date(message.text or "")
+    if parsed is None:
+        await message.answer("Не разобрал дату. Формат: ДД.ММ.ГГГГ (например 15.03.1990)")
+        return
+
+    update_fields: dict[str, object] = {"birth_date": parsed}
+    if user.profile.birth_time is not None:
+        update_fields["birth_time"] = user.profile.birth_time.replace(
+            year=parsed.year,
+            month=parsed.month,
+            day=parsed.day,
+        )
+
+    await users_crud.update_profile(session, user.profile, **update_fields)
+    await state.clear()
+    await message.answer(
+        f"Дата сохранена: {parsed.strftime('%d.%m.%Y')} ✨",
+        reply_markup=main_menu_keyboard(),
+    )
 
 
 @router.callback_query(F.data == "profile:time")

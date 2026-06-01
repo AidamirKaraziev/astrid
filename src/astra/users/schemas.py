@@ -36,5 +36,6 @@ class UserMeRead(BaseModel):
 
 class ProfileUpdate(BaseModel):
     display_name: str | None = None
+    birth_date: date | None = None
     birth_time: time | None = None
     birth_place: str | None = Field(None, max_length=255)

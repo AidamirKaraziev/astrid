@@ -10,5 +10,6 @@ class OnboardingStates(StatesGroup):
 
 class ProfileStates(StatesGroup):
     edit_name = State()
+    edit_birth_date = State()
     edit_birth_time = State()
     edit_birth_place = State()
