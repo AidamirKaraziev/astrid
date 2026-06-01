@@ -20,6 +20,25 @@ logger = logging.getLogger(__name__)
 _INITIALIZED = False
 
 
+def _build_integrations(service: str) -> list[object]:
+    integrations: list[object] = [
+        AsyncioIntegration(),
+        HttpxIntegration(),
+        LoggingIntegration(
+            level=logging.INFO,
+            event_level=logging.ERROR,
+        ),
+    ]
+    if service == "api":
+        integrations.extend(
+            [
+                FastApiIntegration(transaction_style="endpoint"),
+                StarletteIntegration(transaction_style="endpoint"),
+            ],
+        )
+    return integrations
+
+
 def init_sentry(settings: Settings) -> None:
     """Подключить Sentry, если задан DSN и включён флаг."""
     global _INITIALIZED
@@ -32,28 +51,26 @@ def init_sentry(settings: Settings) -> None:
         logger.debug("Sentry skipped: SENTRY_DSN is empty")
         return
 
+    service = settings.sentry_service.strip().lower() or "api"
     release = settings.sentry_release or f"astra@{settings.app_version}"
 
     sentry_sdk.init(
         dsn=settings.sentry_dsn,
         environment=settings.sentry_environment,
         release=release,
+        server_name=f"astra-{service}",
         send_default_pii=settings.sentry_send_default_pii,
         traces_sample_rate=settings.sentry_traces_sample_rate,
         profiles_sample_rate=settings.sentry_profiles_sample_rate,
-        integrations=[
-            FastApiIntegration(transaction_style="endpoint"),
-            StarletteIntegration(transaction_style="endpoint"),
-            AsyncioIntegration(),
-            HttpxIntegration(),
-            LoggingIntegration(
-                level=logging.INFO,
-                event_level=logging.ERROR,
-            ),
-        ],
+        integrations=_build_integrations(service),
     )
+    sentry_sdk.set_tag("service", service)
     _INITIALIZED = True
-    logger.info("Sentry enabled (environment=%s)", settings.sentry_environment)
+    logger.info(
+        "Sentry enabled (environment=%s, service=%s)",
+        settings.sentry_environment,
+        service,
+    )
 
 
 def capture_exception(exc: BaseException) -> None:

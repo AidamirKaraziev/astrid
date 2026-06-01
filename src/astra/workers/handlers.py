@@ -1,10 +1,11 @@
+import asyncio
 import logging
 from datetime import date
 from zoneinfo import ZoneInfo
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from astra.messaging.publisher import publish_prediction_generate, publish_prediction_send
+from astra.messaging.publisher import publish_prediction_send
 from astra.messaging.schemas import TaskMessage, TaskType
 from astra.predictions import crud as predictions_crud
 from astra.services.astro_service import (
@@ -16,6 +17,14 @@ from astra.users import crud as users_crud
 from astra.workers.telegram_send import send_telegram_html
 
 logger = logging.getLogger(__name__)
+
+# Send-задача может прийти на доли секунды раньше commit generate — короткий retry вместо requeue.
+_SEND_LOOKUP_RETRIES = 5
+_SEND_LOOKUP_DELAY_SEC = 0.1
+
+
+class PredictionNotReadyError(RuntimeError):
+    """Строка предсказания ещё не видна в БД (после retry — requeue в RabbitMQ)."""
 
 
 async def handle_natal_chart_generate(session: AsyncSession, task: TaskMessage) -> None:
@@ -41,6 +50,8 @@ async def handle_prediction_generate(session: AsyncSession, task: TaskMessage) -
         target = datetime.now(tz).date()
 
     await generate_daily_prediction(session, user, user.profile, target=target)
+    # Commit до publish send — иначе send-воркер не видит строку и падает с «not ready yet».
+    await session.commit()
     await publish_prediction_send(user.id, target)
     logger.info("Prediction generated for user %s date %s", task.user_id, target)
 
@@ -54,14 +65,26 @@ async def handle_prediction_send(session: AsyncSession, task: TaskMessage) -> No
     if user is None or user.profile is None:
         return
 
-    prediction = await predictions_crud.get_prediction_for_date(
-        session,
-        user.id,
-        task.prediction_date,
-    )
+    prediction = None
+    for attempt in range(_SEND_LOOKUP_RETRIES):
+        prediction = await predictions_crud.get_prediction_for_date(
+            session,
+            user.id,
+            task.prediction_date,
+        )
+        if prediction is not None:
+            break
+        if attempt + 1 < _SEND_LOOKUP_RETRIES:
+            await asyncio.sleep(_SEND_LOOKUP_DELAY_SEC)
+
     if prediction is None:
-        await publish_prediction_generate(user.id, task.prediction_date)
-        raise RuntimeError("Prediction not ready yet")
+        logger.warning(
+            "Prediction still missing for user %s date %s after %s retries, requeue send",
+            user.id,
+            task.prediction_date,
+            _SEND_LOOKUP_RETRIES,
+        )
+        raise PredictionNotReadyError("Prediction not ready yet")
 
     if prediction.sent_at is not None:
         return
