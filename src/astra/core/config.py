@@ -57,6 +57,8 @@ class Settings(BaseSettings):
     sentry_traces_sample_rate: float = 0.0
     sentry_profiles_sample_rate: float = 0.0
     sentry_release: str | None = None
+    # Компонент в одном репо: api (FastAPI + polling) | worker (RabbitMQ consumer)
+    sentry_service: str = "api"
 
     # Автозагрузка справочника GeoNames при старте, если таблица places пуста
     geonames_auto_import: bool = True

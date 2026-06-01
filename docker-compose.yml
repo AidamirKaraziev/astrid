@@ -136,6 +136,7 @@ services:
       - .env
     environment:
       <<: *app-env
+      SENTRY_SERVICE: api
     ports:
       - "8000:8000"
     depends_on:
@@ -169,6 +170,7 @@ services:
       - .env
     environment:
       <<: *app-env
+      SENTRY_SERVICE: worker
     depends_on:
       postgres:
         condition: service_healthy
