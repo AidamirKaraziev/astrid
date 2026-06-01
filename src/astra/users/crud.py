@@ -57,8 +57,8 @@ async def create_profile(
     display_name: str,
     birth_date: date,
     birth_place_id: UUID,
-    notification_place_id: UUID,
     birth_place: str,
+    notification_place_id: UUID | None = None,
     city: str,
     timezone: str,
 ) -> Profile:

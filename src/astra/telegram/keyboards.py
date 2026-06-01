@@ -40,6 +40,12 @@ def profile_menu_keyboard() -> InlineKeyboardMarkup:
             [InlineKeyboardButton(text="📅 Дата рождения", callback_data="profile:date")],
             [InlineKeyboardButton(text="🕐 Время рождения", callback_data="profile:time")],
             [InlineKeyboardButton(text="📍 Место рождения", callback_data="profile:place")],
+            [
+                InlineKeyboardButton(
+                    text="🌍 Город для уведомлений",
+                    callback_data="profile:notification_city",
+                ),
+            ],
             [InlineKeyboardButton(text="◀️ Назад", callback_data="menu:home")],
         ],
     )

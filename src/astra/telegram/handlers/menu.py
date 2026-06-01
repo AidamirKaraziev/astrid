@@ -12,6 +12,7 @@ from astra.services.prediction_service import (
     format_prediction_for_user,
     get_or_create_today_prediction,
 )
+from astra.telegram.handlers.places import start_profile_notification_place_step
 from astra.telegram.keyboards import main_menu_keyboard, profile_menu_keyboard, share_keyboard
 from astra.telegram.states import ProfileStates
 from astra.telegram.utils import parse_birth_date, parse_birth_time
@@ -105,12 +106,17 @@ async def show_profile(message: Message, session: AsyncSession) -> None:
     p = profile_to_read(user.profile)
     time_str = p.birth_time.strftime("%H:%M") if p.birth_time else "не указано"
     place_str = p.birth_place or "не указано"
+    profile = user.profile
+    city_hint = ""
+    if profile is not None and profile.notification_place_id is None:
+        city_hint = "\n<i>Укажи город для уведомлений в профиле — рассылка в 09:00 по твоему времени.</i>\n"
     await message.answer(
         f"👤 <b>{p.display_name}</b>\n"
         f"📅 Дата: {p.birth_date.strftime('%d.%m.%Y')}\n"
         f"🕐 Время: {time_str}\n"
         f"📍 Место: {place_str}\n"
-        f"🌍 Город: {p.city} ({p.timezone})\n\n"
+        f"🌍 Город для уведомлений: {p.city} ({p.timezone})"
+        f"{city_hint}\n"
         f"📊 Точность: <b>{p.accuracy_percent}%</b>\n"
         f"<i>{p.accuracy_hint}</i>",
         parse_mode="HTML",
@@ -204,6 +210,23 @@ async def save_birth_time(message: Message, state: FSMContext, session: AsyncSes
         parse_mode="HTML",
         reply_markup=main_menu_keyboard(),
     )
+
+
+@router.callback_query(F.data == "profile:notification_city")
+async def cb_edit_notification_city(
+    callback: CallbackQuery,
+    state: FSMContext,
+    session: AsyncSession,
+) -> None:
+    if callback.message is None:
+        await callback.answer()
+        return
+    user = await _get_user(session, callback.message)
+    if user is None or user.profile is None:
+        await callback.answer("Сначала: /start", show_alert=True)
+        return
+    await start_profile_notification_place_step(callback.message, state)
+    await callback.answer()
 
 
 @router.callback_query(F.data == "profile:place")

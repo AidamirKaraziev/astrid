@@ -17,43 +17,36 @@ from astra.users.models import Profile, User
 
 logger = logging.getLogger(__name__)
 
+DEFAULT_CITY_LABEL = "не указан"
+DEFAULT_TIMEZONE = "Europe/Moscow"
+
 
 class OnboardingRegistrationData(BaseModel):
-    """Данные FSM, необходимые для завершения регистрации."""
+    """Данные FSM для завершения регистрации (без города для уведомлений)."""
 
     user_id: UUID
     display_name: str = Field(min_length=1, max_length=255)
     birth_date: date
     birth_place_id: UUID
-    notification_place_id: UUID
     birth_place_display: str = ""
+    notification_place_id: UUID | None = None
     notification_place_display: str = ""
-    notification_timezone: str = "Europe/Moscow"
+    notification_timezone: str = DEFAULT_TIMEZONE
 
     @classmethod
     def from_fsm(cls, data: dict[str, object]) -> OnboardingRegistrationData:
         raw_user_id = data.get("user_id")
         raw_birth_date = data.get("birth_date")
         raw_birth_place_id = data.get("birth_place_id")
-        raw_notification_place_id = data.get("notification_place_id")
         raw_display_name = data.get("display_name")
 
-        if not all(
-            (
-                raw_user_id,
-                raw_birth_date,
-                raw_birth_place_id,
-                raw_notification_place_id,
-                raw_display_name,
-            ),
-        ):
+        if not all((raw_user_id, raw_birth_date, raw_birth_place_id, raw_display_name)):
             missing = [
                 key
                 for key, val in (
                     ("user_id", raw_user_id),
                     ("birth_date", raw_birth_date),
                     ("birth_place_id", raw_birth_place_id),
-                    ("notification_place_id", raw_notification_place_id),
                     ("display_name", raw_display_name),
                 )
                 if not val
@@ -65,15 +58,20 @@ class OnboardingRegistrationData(BaseModel):
         if not display_name:
             raise ValueError("display_name пустой")
 
+        raw_notification_place_id = data.get("notification_place_id")
+        notification_place_id = (
+            UUID(str(raw_notification_place_id)) if raw_notification_place_id else None
+        )
+
         return cls(
             user_id=UUID(str(raw_user_id)),
             display_name=display_name,
             birth_date=birth_date,
             birth_place_id=UUID(str(raw_birth_place_id)),
-            notification_place_id=UUID(str(raw_notification_place_id)),
             birth_place_display=str(data.get("birth_place_display") or ""),
+            notification_place_id=notification_place_id,
             notification_place_display=str(data.get("notification_place_display") or ""),
-            notification_timezone=str(data.get("notification_timezone") or "Europe/Moscow"),
+            notification_timezone=str(data.get("notification_timezone") or DEFAULT_TIMEZONE),
         )
 
 
@@ -111,13 +109,18 @@ async def _resolved_city_and_timezone(
     session: AsyncSession,
     reg: OnboardingRegistrationData,
 ) -> tuple[str, str]:
-    timezone = reg.notification_timezone
-    city = reg.notification_place_display
-    notif_place = await get_place_read(session, reg.notification_place_id)
-    if notif_place is not None:
-        timezone = notif_place.timezone
-        city = notif_place.display_name
-    return city, timezone
+    if reg.notification_place_id is not None:
+        notif_place = await get_place_read(session, reg.notification_place_id)
+        if notif_place is not None:
+            return notif_place.display_name, notif_place.timezone
+
+    birth_place = await get_place_read(session, reg.birth_place_id)
+    if birth_place is not None:
+        city = reg.birth_place_display or birth_place.display_name
+        return city, birth_place.timezone
+
+    city = reg.birth_place_display or DEFAULT_CITY_LABEL
+    return city, reg.notification_timezone or DEFAULT_TIMEZONE
 
 
 async def save_profile_from_onboarding(
@@ -125,7 +128,7 @@ async def save_profile_from_onboarding(
     user: User,
     reg: OnboardingRegistrationData,
 ) -> Profile:
-    """Записать профиль в БД после выбора города проживания (onboarding ещё не завершён)."""
+    """Записать профиль в БД после выбора места рождения."""
     city, timezone = await _resolved_city_and_timezone(session, reg)
     profile_fields = _profile_fields_from_registration(reg, timezone=timezone, city=city)
 

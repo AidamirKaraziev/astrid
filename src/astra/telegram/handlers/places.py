@@ -1,4 +1,4 @@
-"""Выбор населённого пункта: поиск → список → следующий шаг."""
+"""Выбор населённого пункта: поиск → список → онбординг или профиль."""
 
 import logging
 from uuid import UUID
@@ -15,9 +15,10 @@ from astra.places.getters import get_place_read
 from astra.db.session import get_session_factory
 from astra.services.greeting_service import run_greeting_phase
 from astra.services.onboarding_service import parse_registration_fsm, run_registration_phase
+from astra.telegram.keyboards import main_menu_keyboard
+from astra.telegram.states import OnboardingStates, ProfileStates
 from astra.users import crud as users_crud
 from astra.telegram.keyboards_places import places_pick_keyboard
-from astra.telegram.states import OnboardingStates
 
 logger = logging.getLogger(__name__)
 
@@ -25,7 +26,7 @@ router = Router(name="places")
 
 PLACE_STATES = (
     OnboardingStates.birth_place_query,
-    OnboardingStates.notification_place_query,
+    ProfileStates.edit_notification_place_query,
 )
 
 SEARCH_HINT = (
@@ -35,6 +36,11 @@ SEARCH_HINT = (
 
 PLACES_CATALOG_UNAVAILABLE_TEXT = (
     "Справочник городов временно недоступен. Попробуй через минуту."
+)
+
+NOTIFICATION_PLACE_TITLE = (
+    "🌍 Где ты сейчас живёшь?\n"
+    "<i>Для бесплатных предсказаний в 09:00 по твоему времени</i>"
 )
 
 
@@ -68,13 +74,10 @@ async def start_birth_place_step(message: Message, state: FSMContext) -> None:
     await send_place_step_prompt(message, title="📍 Где ты родилась?")
 
 
-async def start_notification_place_step(message: Message, state: FSMContext) -> None:
-    await state.set_state(OnboardingStates.notification_place_query)
+async def start_profile_notification_place_step(message: Message, state: FSMContext) -> None:
+    await state.set_state(ProfileStates.edit_notification_place_query)
     await state.update_data(place_context="notification")
-    await send_place_step_prompt(
-        message,
-        title="🌍 Где ты сейчас живёшь? (для бесплатных предсказаний в 09:00 по твоему времени)",
-    )
+    await send_place_step_prompt(message, title=NOTIFICATION_PLACE_TITLE)
 
 
 async def handle_place_query(
@@ -110,10 +113,11 @@ async def handle_place_query(
         return
 
     await state.update_data(place_context=context_key)
+    current = await state.get_state()
     if context_key == "birth":
         await state.set_state(OnboardingStates.birth_place_query)
-    else:
-        await state.set_state(OnboardingStates.notification_place_query)
+    elif current != ProfileStates.edit_notification_place_query.state:
+        await state.set_state(ProfileStates.edit_notification_place_query)
     await message.answer(
         "Выбери населённый пункт из списка:",
         reply_markup=places_pick_keyboard(places),
@@ -154,9 +158,63 @@ async def cb_place_retry(callback: CallbackQuery, state: FSMContext) -> None:
     current = await state.get_state()
     if current == OnboardingStates.birth_place_query.state:
         await start_birth_place_step(callback.message, state)
-    elif current == OnboardingStates.notification_place_query.state:
-        await start_notification_place_step(callback.message, state)
+    elif current == ProfileStates.edit_notification_place_query.state:
+        await start_profile_notification_place_step(callback.message, state)
     await callback.answer()
+
+
+async def _complete_onboarding_after_birth_place(
+    message: Message,
+    state: FSMContext,
+    session: AsyncSession,
+) -> None:
+    fsm_data = await state.get_data()
+    reg = parse_registration_fsm(fsm_data)
+    if reg is None:
+        await message.answer("Что-то пошло не так. Нажми /start")
+        return
+
+    user = await users_crud.get_user_by_id(session, reg.user_id)
+    if user is None:
+        await message.answer("Что-то пошло не так. Нажми /start")
+        return
+
+    await run_registration_phase(session, user, reg)
+    await session.commit()
+    await run_greeting_phase(message, state, user)
+
+
+async def _save_profile_notification_place(
+    message: Message,
+    state: FSMContext,
+    session: AsyncSession,
+    place_id: UUID,
+) -> None:
+    if message.from_user is None:
+        return
+    user = await users_crud.get_user_by_telegram_id(session, message.from_user.id)
+    if user is None or user.profile is None:
+        await message.answer("Сначала: /start")
+        return
+
+    place = await get_place_read(session, place_id)
+    if place is None:
+        await message.answer("Место не найдено. Попробуй ввести название ещё раз.")
+        return
+
+    await users_crud.update_profile(
+        session,
+        user.profile,
+        notification_place_id=place.id,
+        city=place.display_name,
+        timezone=place.timezone,
+    )
+    await state.clear()
+    await message.answer(
+        f"Город для уведомлений сохранён: <b>{place.display_name}</b> ({place.timezone}) ✨",
+        parse_mode="HTML",
+        reply_markup=main_menu_keyboard(),
+    )
 
 
 async def _apply_place_selection(
@@ -177,30 +235,11 @@ async def _apply_place_selection(
             birth_place_id=str(place.id),
             birth_place_display=place.display_name,
         )
-        await start_notification_place_step(message, state)
+        await _complete_onboarding_after_birth_place(message, state, session)
         return
 
-    if current_state == OnboardingStates.notification_place_query.state:
-        await state.update_data(
-            notification_place_id=str(place.id),
-            notification_place_display=place.display_name,
-            notification_timezone=place.timezone,
-        )
-        fsm_data = await state.get_data()
-        reg = parse_registration_fsm(fsm_data)
-        if reg is None:
-            await message.answer("Что-то пошло не так. Нажми /start")
-            return
-
-        user = await users_crud.get_user_by_id(session, reg.user_id)
-        if user is None:
-            await message.answer("Что-то пошло не так. Нажми /start")
-            return
-
-        await run_registration_phase(session, user, reg)
-        await session.commit()
-
-        await run_greeting_phase(message, state, user)
+    if current_state == ProfileStates.edit_notification_place_query.state:
+        await _save_profile_notification_place(message, state, session, place_id)
         return
 
     await message.answer("Что-то пошло не так. Нажми /start")
