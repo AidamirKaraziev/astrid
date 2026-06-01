@@ -10,6 +10,10 @@ from uuid import UUID
 from astra.core.config import get_settings
 from astra.db.session import get_session_factory
 from astra.messaging.publisher import publish_prediction_generate
+from astra.services.prediction_pending import (
+    clear_prediction_pending,
+    try_mark_prediction_pending,
+)
 from astra.predictions import crud as predictions_crud
 from astra.predictions.models import Prediction
 from astra.services.astro_service import generate_daily_prediction
@@ -58,6 +62,7 @@ async def deliver_prediction_for_date(user_id: UUID, prediction_date: date) -> N
         if prediction is not None and prediction.sent_at is None:
             await mark_prediction_sent(session, prediction)
             await session.commit()
+            await clear_prediction_pending(user_id, prediction_date)
 
 
 async def enqueue_first_prediction_after_registration(user_id: UUID) -> None:
@@ -66,7 +71,14 @@ async def enqueue_first_prediction_after_registration(user_id: UUID) -> None:
     settings = get_settings()
 
     if settings.rabbitmq_enabled:
-        await publish_prediction_generate(user_id, target)
+        if not await try_mark_prediction_pending(user_id, target):
+            logger.info("first prediction already pending for user %s", user_id)
+            return
+        try:
+            await publish_prediction_generate(user_id, target)
+        except Exception:
+            await clear_prediction_pending(user_id, target)
+            raise
         logger.info("queued first prediction via RabbitMQ for user %s", user_id)
         return
 

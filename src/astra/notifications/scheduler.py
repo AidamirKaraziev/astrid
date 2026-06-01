@@ -10,6 +10,10 @@ from sqlalchemy.orm import selectinload
 from astra.core.config import Settings, get_settings
 from astra.db.session import get_session_factory, init_engine
 from astra.messaging.publisher import publish_prediction_generate
+from astra.services.prediction_pending import (
+    clear_prediction_pending,
+    try_mark_prediction_pending,
+)
 from astra.predictions.models import Prediction
 from astra.users.models import User
 
@@ -75,12 +79,23 @@ async def process_scheduled_notifications(
             )
             prediction = pred_row.scalar_one_or_none()
             if prediction is None:
-                await publish_prediction_generate(user.id, today_local, cfg)
-            else:
+                if await try_mark_prediction_pending(user.id, today_local):
+                    try:
+                        await publish_prediction_generate(user.id, today_local, cfg)
+                        enqueued += 1
+                    except Exception:
+                        await clear_prediction_pending(user.id, today_local)
+                        raise
+            elif prediction.sent_at is None:
                 from astra.messaging.publisher import publish_prediction_send
 
-                await publish_prediction_send(user.id, today_local, cfg)
-            enqueued += 1
+                if await try_mark_prediction_pending(user.id, today_local):
+                    try:
+                        await publish_prediction_send(user.id, today_local, cfg)
+                        enqueued += 1
+                    except Exception:
+                        await clear_prediction_pending(user.id, today_local)
+                        raise
         else:
             from astra.services.prediction_service import (
                 format_prediction_for_user,

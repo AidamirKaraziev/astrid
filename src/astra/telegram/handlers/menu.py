@@ -9,8 +9,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from astra.referrals.getters import get_referral_stats
 from astra.services.points_service import register_daily_activity
 from astra.services.prediction_service import (
+    PREDICTION_IN_PROGRESS_TEXT,
+    PredictionRequestStatus,
     format_prediction_for_user,
-    get_or_create_today_prediction,
+    request_today_prediction,
 )
 from astra.telegram.handlers.places import start_profile_notification_place_step
 from astra.telegram.keyboards import main_menu_keyboard, profile_menu_keyboard, share_keyboard
@@ -55,19 +57,23 @@ async def today_prediction(message: Message, session: AsyncSession) -> None:
         await message.answer("Сначала пройди регистрацию: /start")
         return
     await register_daily_activity(session, user)
-    prediction = await get_or_create_today_prediction(
+    outcome = await request_today_prediction(
         session,
         user,
         user.profile,
         allow_async=True,
     )
-    if prediction is None:
-        await message.answer(
-            "Готовлю предсказание ✨ Обычно это занимает до минуты. Нажми ещё раз чуть позже.",
-        )
+    if outcome.status in {
+        PredictionRequestStatus.QUEUED,
+        PredictionRequestStatus.IN_PROGRESS,
+    }:
+        await message.answer(PREDICTION_IN_PROGRESS_TEXT)
+        return
+    if outcome.prediction is None:
+        await message.answer(PREDICTION_IN_PROGRESS_TEXT)
         return
     await message.answer(
-        format_prediction_for_user(prediction, user, user.profile),
+        format_prediction_for_user(outcome.prediction, user, user.profile),
         parse_mode="HTML",
     )
 

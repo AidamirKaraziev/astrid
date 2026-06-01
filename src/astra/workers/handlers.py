@@ -6,6 +6,7 @@ from zoneinfo import ZoneInfo
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from astra.messaging.publisher import publish_prediction_send
+from astra.services.prediction_pending import clear_prediction_pending
 from astra.messaging.schemas import TaskMessage, TaskType
 from astra.predictions import crud as predictions_crud
 from astra.services.astro_service import (
@@ -49,11 +50,15 @@ async def handle_prediction_generate(session: AsyncSession, task: TaskMessage) -
 
         target = datetime.now(tz).date()
 
-    await generate_daily_prediction(session, user, user.profile, target=target)
-    # Commit до publish send — иначе send-воркер не видит строку и падает с «not ready yet».
-    await session.commit()
-    await publish_prediction_send(user.id, target)
-    logger.info("Prediction generated for user %s date %s", task.user_id, target)
+    try:
+        await generate_daily_prediction(session, user, user.profile, target=target)
+        # Commit до publish send — иначе send-воркер не видит строку и падает с «not ready yet».
+        await session.commit()
+        await publish_prediction_send(user.id, target)
+        logger.info("Prediction generated for user %s date %s", task.user_id, target)
+    except Exception:
+        await clear_prediction_pending(user.id, target)
+        raise
 
 
 async def handle_prediction_send(session: AsyncSession, task: TaskMessage) -> None:
@@ -87,11 +92,13 @@ async def handle_prediction_send(session: AsyncSession, task: TaskMessage) -> No
         raise PredictionNotReadyError("Prediction not ready yet")
 
     if prediction.sent_at is not None:
+        await clear_prediction_pending(user.id, task.prediction_date)
         return
 
     message = format_prediction_for_user(prediction, user, user.profile)
     await send_telegram_html(user.telegram_id, message)
     await mark_prediction_sent(session, prediction)
+    await clear_prediction_pending(user.id, task.prediction_date)
     logger.info("Prediction sent to telegram_id=%s", user.telegram_id)
 
 
