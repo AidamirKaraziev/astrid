@@ -94,10 +94,10 @@ async def generate_prediction_body(
     settings: Settings | None = None,
 ) -> tuple[str, dict]:
     cfg = settings or get_settings()
-    ctx, _ = await build_context_for_date(session, user, profile, target)
+    ctx, chart = await build_context_for_date(session, user, profile, target)
     body: str | None = None
     if cfg.ollama_enabled:
-        body = await llm_generate_body(ctx, cfg)
+        body = await llm_generate_body(ctx, profile, chart, cfg)
     if not body:
         body = body_from_context(ctx)
     return body, ctx.model_dump_json_safe()
