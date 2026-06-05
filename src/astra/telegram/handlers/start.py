@@ -12,6 +12,7 @@ from aiogram.types import KeyboardButton, ReplyKeyboardMarkup, ReplyKeyboardRemo
 
 from astra.telegram.keyboards import main_menu_keyboard
 from astra.telegram.states import OnboardingStates
+from astra.text.ru_inflect import inflect_name
 from astra.telegram.utils import default_display_name, extract_referral_code
 from astra.users import crud as users_crud
 
@@ -53,8 +54,9 @@ async def cmd_start(
 
     restart = (command.args or "").strip().lower() in {"restart", "again", "reset", "заново"}
     if user.onboarding_completed and user.profile and not restart:
+        greeting_name = inflect_name(user.profile.display_name, "nomn")
         await message.answer(
-            f"С возвращением, {user.profile.display_name}! ✨\n"
+            f"С возвращением, {greeting_name}! ✨\n"
             "Твоё меню внизу — выбирай действие.\n\n"
             "Чтобы пройти регистрацию заново: <code>/start restart</code>",
             parse_mode="HTML",

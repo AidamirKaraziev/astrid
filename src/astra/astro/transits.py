@@ -35,10 +35,10 @@ def build_daily_context(
     chart: NatalChartData,
     target: date,
 ) -> AstroContext:
-    if not kerykeion_available():
-        from astra.astro.simple import build_daily_context as simple_context
 
-        return simple_context(profile, chart, target)
+    """
+    Стараемся сделать максимально качественные предсказания , каждый раз.
+    """
 
     from kerykeion import SynastryAspects
 
@@ -80,7 +80,7 @@ def build_daily_context(
                 aspect="фон дня",
                 natal_planet=f"Солнце ({chart.sun_sign})",
                 orb_deg=0.0,
-                theme="общий солнечный ритм знака",
+                theme="настроение солнечного знака",
             ),
         ]
 

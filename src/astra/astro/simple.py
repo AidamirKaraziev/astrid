@@ -65,7 +65,7 @@ def build_daily_context(
                 aspect="фон дня",
                 natal_planet=f"Солнце ({chart.sun_sign})",
                 orb_deg=0.0,
-                theme="общий солнечный ритм знака",
+                theme="настроение солнечного знака",
             ),
         ],
         moon_phase=None,

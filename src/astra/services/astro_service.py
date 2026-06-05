@@ -99,7 +99,7 @@ async def generate_prediction_body(
     if cfg.ollama_enabled:
         body = await llm_generate_body(ctx, profile, chart, cfg)
     if not body:
-        body = body_from_context(ctx)
+        body = body_from_context(ctx, name=profile.display_name)
     return body, ctx.model_dump_json_safe()
 
 

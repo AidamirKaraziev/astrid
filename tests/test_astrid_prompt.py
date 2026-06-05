@@ -15,6 +15,7 @@ from astra.llm.prompts.astrid import (
 
 def _profile(**kwargs: object) -> SimpleNamespace:
     defaults = {
+        "display_name": "Аида",
         "birth_date": date(1992, 2, 11),
         "birth_time": datetime(1992, 2, 11, 14, 30, tzinfo=ZoneInfo("Europe/Moscow")),
         "birth_place": "Москва",
@@ -65,12 +66,17 @@ def test_system_prompt_astrologer_role() -> None:
     assert "иероглиф" in prompt.lower()
     assert "«ты»" in prompt or "на «ты»" in prompt
     assert "никогда «вы»" in prompt or "не на «вы»" in prompt.lower()
+    assert "ритм" in prompt.lower()
+    assert "имя" in prompt.lower() or "склонен" in prompt.lower()
 
 
 def test_user_message_includes_birth_data() -> None:
     profile = _profile()
     chart = _chart()
     message = build_user_message(_ctx(), profile, chart)
+    assert "Аида" in message
+    assert "Аиде" in message
+    assert "склонения имени" in message.lower()
     assert "1992-02-11" in message
     assert "14:30" in message
     assert "Москва" in message
@@ -119,3 +125,14 @@ def test_sanitize_strips_hieroglyphs() -> None:
     assert "和谐" not in result
     assert "гармония" in result
     assert "покой" in result
+
+
+def test_sanitize_rewrites_ritm_cliche() -> None:
+    raw = (
+        "✨ Прогноз дня\n\n"
+        "Сегодня солнечный ритм подскажет тебе ритм дня.\n\n"
+        "💡 Совет дня:\nОтдохни."
+    )
+    result = sanitize_prediction_output(raw)
+    assert "ритм" not in result.lower()
+    assert "солнечный знак" in result.lower()

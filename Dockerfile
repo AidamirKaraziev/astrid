@@ -26,14 +26,25 @@ FROM base AS dev
 
 COPY tests ./tests
 
-RUN uv sync --frozen --all-extras
+# pyswisseph (зависимость kerykeion) собирается из sdist — нужен gcc
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends gcc g++ \
+    && uv sync --frozen --all-extras \
+    && apt-get purge -y gcc g++ \
+    && apt-get autoremove -y \
+    && rm -rf /var/lib/apt/lists/*
 
 
 # --- Production ---
 FROM base AS runtime
 
 ARG UV_EXTRAS=
-RUN uv sync --frozen --no-dev ${UV_EXTRAS}
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends gcc g++ \
+    && uv sync --frozen --no-dev ${UV_EXTRAS} \
+    && apt-get purge -y gcc g++ \
+    && apt-get autoremove -y \
+    && rm -rf /var/lib/apt/lists/*
 
 EXPOSE 8000
 

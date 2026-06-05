@@ -17,7 +17,7 @@ from astra.llm.prompts.astrid import (
 
 logger = logging.getLogger(__name__)
 
-_ASTRID_TEMPERATURE = 0.72
+_ASTRID_TEMPERATURE = 0.78
 _ASTRID_NUM_PREDICT = 450
 
 
