@@ -32,12 +32,16 @@ x-app-env: &app-env
   OLLAMA_BASE_URL: http://ollama:11434
   OLLAMA_ENABLED: "true"
 
+x-restart: &restart
+  restart: unless-stopped
+
 services:
   # ---------------------------------------------------------------------------
   # Инфраструктура
   # ---------------------------------------------------------------------------
 
   postgres:
+    <<: *restart
     image: postgres:16-alpine
     environment:
       POSTGRES_USER: astra
@@ -54,6 +58,7 @@ services:
       retries: 5
 
   redis:
+    <<: *restart
     image: redis:7-alpine
     ports:
       - "6379:6379"
@@ -64,6 +69,7 @@ services:
       retries: 5
 
   rabbitmq:
+    <<: *restart
     image: rabbitmq:3-management-alpine
     environment:
       RABBITMQ_DEFAULT_USER: astra
@@ -78,6 +84,7 @@ services:
       retries: 5
 
   ollama:
+    <<: *restart
     image: ollama/ollama:latest
     ports:
       - "11434:11434"
@@ -129,6 +136,7 @@ services:
   # ---------------------------------------------------------------------------
 
   api:
+    <<: *restart
     build:
       <<: *app-build
       target: runtime
@@ -163,6 +171,7 @@ services:
       start_period: 180s
 
   worker:
+    <<: *restart
     build:
       <<: *app-build
       target: runtime
@@ -180,7 +189,6 @@ services:
         condition: service_started
     command: >
       sh -c "alembic upgrade head && astra-worker"
-    restart: unless-stopped
 
 volumes:
   postgres_data:
