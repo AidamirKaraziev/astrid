@@ -103,9 +103,11 @@ services:
     depends_on:
       ollama:
         condition: service_healthy
+    env_file:
+      - .env
     environment:
       OLLAMA_HOST: http://ollama:11434
-    entrypoint: ["/bin/sh", "-c", "ollama pull qwen2.5:7b || true"]
+    entrypoint: ["/bin/sh", "-c", "ollama pull \"$$OLLAMA_MODEL\" || true"]
     restart: "no"
 
   # ---------------------------------------------------------------------------
