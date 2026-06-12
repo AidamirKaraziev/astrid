@@ -17,8 +17,9 @@ from astra.llm.prompts.astrid import (
 
 logger = logging.getLogger(__name__)
 
-_ASTRID_TEMPERATURE = 0.78
-_ASTRID_NUM_PREDICT = 450
+_ASTRID_TEMPERATURE = 0.72
+_ASTRID_NUM_PREDICT = 380
+_ASTRID_NUM_CTX = 4096
 
 
 async def generate_prediction_body(
@@ -31,6 +32,8 @@ async def generate_prediction_body(
     cfg = settings or get_settings()
     payload = {
         "model": cfg.ollama_model,
+        "think": False,
+        "keep_alive": "30m",
         "messages": [
             {"role": "system", "content": build_system_prompt()},
             {"role": "user", "content": build_user_message(ctx, profile, chart)},
@@ -39,6 +42,7 @@ async def generate_prediction_body(
         "options": {
             "temperature": _ASTRID_TEMPERATURE,
             "num_predict": _ASTRID_NUM_PREDICT,
+            "num_ctx": _ASTRID_NUM_CTX,
         },
     }
     url = f"{cfg.ollama_base_url.rstrip('/')}/api/chat"
@@ -56,5 +60,9 @@ async def generate_prediction_body(
     if not raw:
         return None
 
-    cleaned = sanitize_prediction_output(raw)
+    cleaned = sanitize_prediction_output(
+        raw,
+        prediction_date=ctx.date,
+        sun_sign=chart.sun_sign,
+    )
     return cleaned or None

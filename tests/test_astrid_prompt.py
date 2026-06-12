@@ -9,6 +9,7 @@ from astra.llm.prompts.astrid import (
     MIN_SENTENCES,
     build_system_prompt,
     build_user_message,
+    day_number_for_date,
     sanitize_prediction_output,
 )
 
@@ -60,32 +61,31 @@ def test_system_prompt_astrologer_role() -> None:
     assert "астролог" in prompt.lower()
     assert str(MIN_SENTENCES) in prompt
     assert str(MAX_SENTENCES) in prompt
+    assert MIN_SENTENCES == MAX_SENTENCES == 4
     assert "✨ Прогноз дня" in prompt
     assert "💡 Совет дня" in prompt
-    assert "Общая энергия" in prompt  # в блоке запрета рубрик
-    assert "иероглиф" in prompt.lower()
+    assert "именительном" in prompt.lower()
+    assert "склонен" not in prompt.lower()
+    assert "внутренние процессы" in prompt
     assert "«ты»" in prompt or "на «ты»" in prompt
-    assert "никогда «вы»" in prompt or "не на «вы»" in prompt.lower()
-    assert "ритм" in prompt.lower()
-    assert "имя" in prompt.lower() or "склонен" in prompt.lower()
 
 
-def test_user_message_includes_birth_data() -> None:
+def test_user_message_includes_birth_data_without_declensions() -> None:
     profile = _profile()
     chart = _chart()
     message = build_user_message(_ctx(), profile, chart)
     assert "Аида" in message
-    assert "Аиде" in message
-    assert "склонения имени" in message.lower()
+    assert "Аиде" not in message
+    assert "склонения" not in message.lower()
     assert "1992-02-11" in message
     assert "14:30" in message
     assert "Москва" in message
     assert "Водолей" in message
     assert "Рак" in message
     assert "Весы" in message
-    assert "transits" in message
-    assert str(MIN_SENTENCES) in message
-    assert str(MAX_SENTENCES) in message
+    assert '"transit"' in message
+    assert '"orb"' in message
+    assert '"theme"' in message
 
 
 def test_sanitize_adds_header_when_missing() -> None:
@@ -95,7 +95,7 @@ def test_sanitize_adds_header_when_missing() -> None:
 
 
 def test_sanitize_preserves_footer_sections() -> None:
-    body = "Сегодня для тебя может ощущаться прилив ясности. " * 20
+    body = "Сегодня для тебя может ощущаться прилив ясности. " * 4
     raw = (
         f"✨ Прогноз дня\n\n{body}\n\n"
         "💡 Совет дня:\nОдин фокус.\n\n🔢 Число дня:\n7\n\n🎨 Цвет дня:\nсиний"
@@ -123,16 +123,41 @@ def test_sanitize_strips_hieroglyphs() -> None:
     raw = "✨ Прогноз дня\n\nСегодня гармония 和谐 и покой.\n\n💡 Совет дня:\nДышите."
     result = sanitize_prediction_output(raw)
     assert "和谐" not in result
-    assert "гармония" in result
     assert "покой" in result
 
 
-def test_sanitize_rewrites_ritm_cliche() -> None:
+def test_sanitize_rewrites_internal_processes_cliche() -> None:
     raw = (
         "✨ Прогноз дня\n\n"
-        "Сегодня солнечный ритм подскажет тебе ритм дня.\n\n"
+        "Сегодня внутренние процессы требуют внимания.\n\n"
         "💡 Совет дня:\nОтдохни."
     )
     result = sanitize_prediction_output(raw)
-    assert "ритм" not in result.lower()
-    assert "солнечный знак" in result.lower()
+    assert "внутренние процессы" not in result.lower()
+    assert "фокус дня" in result.lower()
+
+
+def test_sanitize_replaces_biased_day_number_twelve() -> None:
+    raw = (
+        "✨ Прогноз дня\n\n"
+        "Сегодня день спокойный.\n\n"
+        "💡 Совет дня:\nОтдохни.\n\n"
+        "🔢 Число дня:\n12\n\n"
+        "🎨 Цвет дня:\nсиний"
+    )
+    expected = day_number_for_date(date(2026, 6, 1), "Водолей")
+    result = sanitize_prediction_output(
+        raw,
+        prediction_date=date(2026, 6, 1),
+        sun_sign="Водолей",
+    )
+    assert f"🔢 Число дня:\n{expected}" in result
+    assert "🔢 Число дня:\n12" not in result
+
+
+def test_day_number_for_date_is_deterministic() -> None:
+    assert 1 <= day_number_for_date(date(2026, 6, 12), "Лев") <= 99
+    assert day_number_for_date(date(2026, 6, 12), "Лев") == day_number_for_date(
+        date(2026, 6, 12),
+        "Лев",
+    )

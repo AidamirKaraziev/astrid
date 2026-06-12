@@ -45,9 +45,9 @@ class Settings(BaseSettings):
     rabbitmq_prefetch: int = 8
 
     ollama_base_url: str = "http://localhost:11434"
-    ollama_model: str = "qwen2.5:7b"
+    ollama_model: str = "gemma4:e2b"
     ollama_enabled: bool = True
-    ollama_timeout_seconds: float = 120.0
+    ollama_timeout_seconds: float = 300.0
 
     # Sentry — ошибки и (опционально) трейсы; стенд: local | dev | prod
     sentry_dsn: str | None = None

@@ -26,8 +26,19 @@ _THEME_BY_PAIR: dict[tuple[str, str], str] = {
 }
 
 
+_DEFAULT_THEMES = (
+    "фокус и намерения дня",
+    "настроение и самочувствие",
+    "дела и личные приоритеты",
+    "общение и близкие отношения",
+)
+
+
 def _theme(transit: str, natal: str) -> str:
-    return _THEME_BY_PAIR.get((transit, natal), "внутренние процессы и фокус дня")
+    if (transit, natal) in _THEME_BY_PAIR:
+        return _THEME_BY_PAIR[(transit, natal)]
+    idx = (hash(transit) ^ hash(natal)) % len(_DEFAULT_THEMES)
+    return _DEFAULT_THEMES[idx]
 
 
 def build_daily_context(

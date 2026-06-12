@@ -34,7 +34,8 @@ def test_body_from_transit_aspect() -> None:
     )
     body = body_from_context(ctx, name="Аида")
     assert "нежность" in body
-    assert "Аиде" in body
+    assert "Аида" in body
+    assert "Аиде" not in body
     assert "✨ Прогноз дня" in body
     assert "💡 Совет дня" in body
     assert "🔢 Число дня" in body

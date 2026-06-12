@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from astra.astro.schemas import AstroContext
-from astra.text.ru_inflect import inflect_name
+from astra.llm.prompts.astrid import day_number_for_date
 
 _COLORS_BY_SUN: dict[str, str] = {
     "Овен": "алый",
@@ -22,48 +22,51 @@ _COLORS_BY_SUN: dict[str, str] = {
 
 
 def body_from_context(ctx: AstroContext, *, name: str | None = None) -> str:
-    """Структурированный прогноз в формате Astrid без LLM."""
+    """Структурированный прогноз в формате Astrid v2 без LLM."""
     sun = (ctx.natal.get("sun") or "").strip()
     moon = (ctx.natal.get("moon") or "").strip()
     display_name = (name or "").strip()
-    name_dative = inflect_name(display_name, "datv") if display_name else None
+
+    if sun and moon:
+        sentence_1 = (
+            f"Твоё Солнце в {sun} задаёт направление дня, "
+            f"а Луна в {moon} подсказывает, как ты это проживёшь эмоционально."
+        )
+    elif sun:
+        sentence_1 = f"Твоё Солнце в {sun} подсказывает, куда направить внимание сегодня."
+    else:
+        sentence_1 = "Сегодня лучше держать один фокус и не распыляться."
 
     if ctx.transits:
         main = ctx.transits[0]
-        theme = (main.theme or "внутренний фокус").strip()
-        if name_dative:
-            transit_bit = (
-                f"{name_dative}, сегодня на первый план выходит «{theme}» — "
-                "это может проявиться уже с утра."
-            )
-        else:
-            transit_bit = (
-                f"Сегодня на первый план выходит «{theme}» — "
-                "это может проявиться уже с утра."
-            )
+        theme = (main.theme or "фокус дня").strip()
+        planet = main.transit_planet
+        aspect = main.aspect
+        sentence_2 = (
+            f"Сильнее всего сейчас {planet} в аспекте «{aspect}» к твоей карте — "
+            f"тема дня: {theme}."
+        )
     else:
-        transit_bit = "День спокойный: лучше не распыляться и держать один фокус."
+        sentence_2 = "День спокойный: есть пространство разобраться с приоритетами без спешки."
 
-    if sun:
-        sun_bit = f"Твоё Солнце в {sun} подсказывает, куда направить внимание"
-    else:
-        sun_bit = "Карта подсказывает, куда направить внимание"
-    moon_bit = f", а Луна в {moon} добавляет эмоциональную глубину" if moon else ""
-
-    body = (
-        f"{sun_bit}{moon_bit}. {transit_bit} "
+    sentence_3 = (
         "В отношениях пригодится честный, но спокойный разговор — без давления. "
-        "На работе и с деньгами двигайся шаг за шагом: один приоритет и доведи его до конца. "
-        "Короткая прогулка или пауза без экрана помогут вернуть ясность."
+        "На работе и с деньгами двигайся шаг за шагом: один приоритет и доведи его до конца."
+    )
+    sentence_4 = (
+        "Береги силы — короткая прогулка или пауза без экрана помогут вернуть ясность "
+        "и выбрать следующий шаг."
     )
 
-    number = (ctx.date.day + ctx.date.month + (ord(sun[:1]) if sun else 0)) % 98 + 1
+    if display_name:
+        opener = f"{display_name}, "
+        sentence_1 = opener + sentence_1[0].lower() + sentence_1[1:]
+
+    body = f"{sentence_1} {sentence_2} {sentence_3} {sentence_4}"
+
+    number = day_number_for_date(ctx.date, sun or None)
     color = _COLORS_BY_SUN.get(sun, "голубой")
-    advice = (
-        f"{name_dative}, выбери одно важное дело и доведи его до конца."
-        if name_dative
-        else "Выбери одно важное дело и доведи его до конца."
-    )
+    advice = "Выбери одно важное дело и доведи его до конца."
 
     return (
         f"✨ Прогноз дня\n\n{body}\n\n"

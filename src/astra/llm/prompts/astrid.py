@@ -1,22 +1,22 @@
-"""Промпты и постобработка ежедневного прогноза Astrid.
+"""Промпты и постобработка ежедневного прогноза Astrid v2.
 
-Короткий прогноз: 3–5 предложений + совет, число и цвет дня.
+Короткий прогноз: 4 предложения + совет, число и цвет дня.
+Оптимизирован под gemma4:e2b.
 """
 
 from __future__ import annotations
 
 import json
 import re
+from datetime import date
 from textwrap import dedent
 from zoneinfo import ZoneInfo
 
-from astra.astro.constants import PLANET_EN_TO_RU
 from astra.astro.schemas import AstroContext, NatalChartData
-from astra.text.ru_inflect import format_name_cases, inflect_name
 from astra.users.models import Profile
 
-MIN_SENTENCES = 3
-MAX_SENTENCES = 5
+MIN_SENTENCES = 4
+MAX_SENTENCES = 4
 
 _FORBIDDEN_LEAK_PATTERNS = (
     r"^\s*(анализ|шаг\s*\d|внутренне|json)\s*[:—\-]",
@@ -31,6 +31,8 @@ _GENERIC_PHRASES = (
     "благоприятный день для",
     "звёзды советуют",
     "космос подсказывает",
+    "внутренние процессы",
+    "прекрасное время",
 )
 
 _CLICHE_WORDS = (
@@ -42,42 +44,81 @@ _CLICHE_WORDS = (
 )
 
 _CLICHE_REWRITES: tuple[tuple[re.Pattern[str], str], ...] = (
+    (re.compile(r"внутренн\w*\s+процесс\w*", re.IGNORECASE), "фокус дня"),
+    (re.compile(r"прекрасн\w*\s+время", re.IGNORECASE), "хороший момент"),
     (re.compile(r"солнечн\w*\s+ритм\w*", re.IGNORECASE), "солнечный знак"),
     (re.compile(r"ритм\s+дня", re.IGNORECASE), "настроение дня"),
     (re.compile(r"пойма\w*\s+ритм", re.IGNORECASE), "найдёшь свой темп"),
     (re.compile(r"\bритм\w*\b", re.IGNORECASE), "темп"),
+    (re.compile(r"\bгармон\w*\b", re.IGNORECASE), "спокойствие"),
 )
 
 _SECTION_ADVICE = re.compile(r"(?i)💡\s*совет\s*дня\s*:?")
 _SECTION_NUMBER = re.compile(r"(?i)🔢\s*число\s*дня\s*:?")
 _SECTION_COLOR = re.compile(r"(?i)🎨\s*цвет\s*дня\s*:?")
+_NUMBER_VALUE = re.compile(r"(?i)(🔢\s*число\s*дня\s*:?\s*)(\d+)")
 
-# CJK и похожие письменности — типичный «мусор» от мультиязычных LLM.
 _HIEROGLYPH_PATTERN = re.compile(
     r"["
-    r"\u3040-\u30ff"  # hiragana, katakana
-    r"\u3400-\u4dbf"  # CJK extension A
-    r"\u4e00-\u9fff"  # CJK unified
-    r"\uf900-\ufaff"  # CJK compatibility
-    r"\uac00-\ud7a3"  # hangul syllables
+    r"\u3040-\u30ff"
+    r"\u3400-\u4dbf"
+    r"\u4e00-\u9fff"
+    r"\uf900-\ufaff"
+    r"\uac00-\ud7a3"
     r"]+",
 )
 
 
+def _format_forbidden_phrases() -> str:
+    return ", ".join(f"«{p}»" for p in _GENERIC_PHRASES)
+
+
+def _format_cliche_words() -> str:
+    return ", ".join(f"«{w}»" for w in _CLICHE_WORDS)
+
+
+_SYSTEM_PROMPT = dedent(
+    f"""
+    Ты — Astrid, астролог в Telegram-боте Astra.
+
+    Задача: показать, что сегодня важно именно для этого человека — не общий гороскоп.
+
+    Как думать (не выводи):
+    1. Коротко опирайся на натал: Солнце = воля/эго, Луна = эмоции (если есть), ASC = как человек входит в день (если есть).
+    2. Транзиты с меньшим orb — что сегодня задевает эти точки натала.
+    3. Сформулируй главный инсайт дня простым языком.
+
+    Текст:
+    - Ровно {MIN_SENTENCES} предложения, связный рассказ, без подзаголовков.
+    - Обращение на «ты». Имя можно использовать 0–1 раз, только в именительном падеже.
+    - Можно назвать планету и аспект, если они есть в transits — но переведи на быт: чувства, разговоры, дела, тело.
+    - Не пугай, не обещай событий наверняка.
+    - Только данные из сообщения.
+    - Запрещено: {_format_forbidden_phrases()}, {_format_cliche_words()}.
+
+    Язык: только русский (кириллица), цифры, пунктуация и эмодзи формата. Без иероглифов.
+
+    Формат ответа (строго):
+
+    ✨ Прогноз дня
+
+    [{MIN_SENTENCES} предложения]
+
+    💡 Совет дня:
+    [1 конкретное действие]
+
+    🔢 Число дня:
+    [1–99, не повторяй одно и то же число без привязки к дню]
+
+    🎨 Цвет дня:
+    [один цвет]
+    """,
+).strip()
+
+
 def build_system_prompt() -> str:
-    """System prompt: Astrid как астролог-консультант."""
-    return "\n\n".join(
-        (
-            _ROLE,
-            _DATA_USAGE,
-            _FORECAST_REQUIREMENTS,
-            _STYLE,
-            _LANGUAGE,
-            _OUTPUT_FORMAT,
-            _GENERATION_STEPS,
-            _NEGATIVE_EXAMPLES,
-        ),
-    )
+    """System prompt: Astrid v2 для gemma4:e2b."""
+    return _SYSTEM_PROMPT
 
 
 def build_user_message(
@@ -85,53 +126,43 @@ def build_user_message(
     profile: Profile,
     chart: NatalChartData,
 ) -> str:
-    """User prompt: данные рождения + карта + транзиты на день."""
-    transits_json = json.dumps(
-        ctx.model_dump_json_safe(),
-        ensure_ascii=False,
-        indent=2,
-    )
+    """User prompt: профиль + натал + компактные транзиты."""
     display_name = (profile.display_name or "").strip() or "друг"
-    name_cases = format_name_cases(display_name)
-    name_dative = inflect_name(display_name, "datv")
+    transits = [
+        {
+            "transit": t.transit_planet,
+            "aspect": t.aspect,
+            "natal": t.natal_planet,
+            "orb": t.orb_deg,
+            "theme": t.theme,
+        }
+        for t in ctx.transits
+    ]
+    transits_json = json.dumps(transits, ensure_ascii=False, indent=2)
     return dedent(
         f"""
         Составь персональный прогноз на день для этого человека.
 
-        Используй следующие данные:
-        - имя: {display_name}
-        - склонения имени: {name_cases}
-        - дата рождения: {_format_birth_date(profile)}
-        - время рождения: {_format_birth_time(profile)}
-        - место рождения: {_format_birth_place(profile)}
-        - текущая дата: {ctx.date.isoformat()}
-        - знак Солнца: {chart.sun_sign}
-        - знак Луны: {chart.moon_sign or "не рассчитан (уточни время рождения в профиле)"}
-        - асцендент: {chart.asc_sign or "не рассчитан"}
-        - основные положения планет: {_format_natal_positions(chart)}
-        - точность профиля: {chart.accuracy_tier}%
+        Имя: {display_name}
+        Дата прогноза: {ctx.date.isoformat()}
+        Дата рождения: {_format_birth_date(profile)}
+        Время рождения: {_format_birth_time(profile)}
+        Место рождения: {_format_birth_place(profile)}
+        Натал: Солнце {chart.sun_sign}, Луна {_format_moon(chart)}, ASC {_format_asc(chart)}
+        Точность профиля: {chart.accuracy_tier}%
 
-        Транзиты и фон дня (JSON — главный источник для интерпретации сегодня):
+        Транзиты сегодня (JSON, меньший orb — сильнее влияние):
         {transits_json}
-
-        Требования:
-        - основной текст (до «Совет дня»): ровно {MIN_SENTENCES}–{MAX_SENTENCES} предложений, без воды;
-        - обращайся по имени 1–2 раза за весь ответ (прогноз + совет), склоняя его правильно
-          (например: «{name_dative}, сегодня…», «для {inflect_name(display_name, "gent")}»);
-        - вплети темы эмоций, отношений, работы/финансов, самочувствия и одного конкретного действия дня
-          в связный рассказ, без рубрик «Общая энергия», «Работа и деньги» и т.п.;
-        - опирайся на натал и transits (orb_deg, theme), не только на солнечный знак;
-        - обращайся на «ты», не на «вы»;
-        - пиши живо и по-разному: не повторяй одни и те же слова и конструкции из прошлых прогнозов;
-        - не используй слова-клише: {_format_cliche_words()};
-        - только финальный ответ в заданном формате, без пояснений и черновиков;
-        - язык: только русский (кириллица), цифры и пунктуация; никаких иероглифов
-          (китайские, японские, корейские символы) и иных нелатинских/некириллических письменностей.
         """,
     ).strip()
 
 
-def sanitize_prediction_output(raw: str) -> str:
+def sanitize_prediction_output(
+    raw: str,
+    *,
+    prediction_date: date | None = None,
+    sun_sign: str | None = None,
+) -> str:
     """Нормализовать структуру ответа; сохранить разделы и эмодзи."""
     text = raw.strip()
     if not text:
@@ -151,8 +182,15 @@ def sanitize_prediction_output(raw: str) -> str:
     text = _strip_hieroglyphs(text)
     text = _rewrite_cliches(text)
     text = _limit_main_body_sentences(text, MAX_SENTENCES)
+    text = _fix_biased_day_number(text, prediction_date, sun_sign)
     text = _ensure_forecast_header(text)
     return text
+
+
+def day_number_for_date(prediction_date: date, sun_sign: str | None = None) -> int:
+    """Детерминированное число дня 1–99 по дате и солнечному знаку."""
+    sun = (sun_sign or "").strip()
+    return (prediction_date.day + prediction_date.month + (ord(sun[:1]) if sun else 0)) % 98 + 1
 
 
 def _format_birth_date(profile: Profile) -> str:
@@ -175,22 +213,22 @@ def _format_birth_place(profile: Profile) -> str:
     return (profile.birth_place or profile.city or "не указано").strip()
 
 
-def _format_natal_positions(chart: NatalChartData) -> str:
-    parts: list[str] = [f"Солнце — {chart.sun_sign}"]
-    if chart.moon_sign:
-        parts.append(f"Луна — {chart.moon_sign}")
-    if chart.asc_sign:
-        parts.append(f"Асцендент — {chart.asc_sign}")
-    for name, degree in sorted(chart.planets.items()):
-        ru = PLANET_EN_TO_RU.get(name, name)
-        if name == "Sun":
-            continue
-        parts.append(f"{ru} — {degree:.1f}°")
-    return "; ".join(parts) if parts else chart.sun_sign
+def _format_moon(chart: NatalChartData) -> str:
+    return chart.moon_sign or "не рассчитана"
+
+
+def _format_asc(chart: NatalChartData) -> str:
+    return chart.asc_sign or "не рассчитан"
+
+
+def _rewrite_cliches(text: str) -> str:
+    """Подменить типичные клише, если модель всё же их вставила."""
+    for pattern, replacement in _CLICHE_REWRITES:
+        text = pattern.sub(replacement, text)
+    return text
 
 
 def _strip_hieroglyphs(text: str) -> str:
-    """Удалить CJK/иероглифы, если модель их вставила."""
     return _HIEROGLYPH_PATTERN.sub("", text)
 
 
@@ -198,6 +236,24 @@ def _ensure_forecast_header(text: str) -> str:
     if "прогноз дня" in text.lower():
         return text
     return f"✨ Прогноз дня\n\n{text}"
+
+
+def _fix_biased_day_number(
+    text: str,
+    prediction_date: date | None,
+    sun_sign: str | None,
+) -> str:
+    """Подменить «12» на детерминированное число — типичный bias gemma4:e2b."""
+    if prediction_date is None:
+        return text
+
+    def replacer(match: re.Match[str]) -> str:
+        value = int(match.group(2))
+        if value != 12:
+            return match.group(0)
+        return f"{match.group(1)}{day_number_for_date(prediction_date, sun_sign)}"
+
+    return _NUMBER_VALUE.sub(replacer, text)
 
 
 def _limit_main_body_sentences(text: str, max_sentences: int) -> str:
@@ -238,142 +294,3 @@ def _ensure_terminal_punctuation(text: str) -> str:
     if text[-1] not in ".!?…":
         return text + "."
     return text
-
-
-_ROLE = dedent(
-    """
-    Ты — Astrid, профессиональный астролог-консультант с опытом интерпретации натальных карт.
-    Ты — голос бота Astra.
-
-    Твоя задача — создавать персонализированные ежедневные прогнозы на основе данных
-    пользователя из сообщения пользователя.
-    """,
-).strip()
-
-def _format_forbidden_phrases() -> str:
-    return ", ".join(f"«{p}»" for p in _GENERIC_PHRASES)
-
-
-def _format_cliche_words() -> str:
-    return ", ".join(f"«{w}»" for w in _CLICHE_WORDS)
-
-
-def _rewrite_cliches(text: str) -> str:
-    """Подменить типичные клише, если модель всё же их вставила."""
-    for pattern, replacement in _CLICHE_REWRITES:
-        text = pattern.sub(replacement, text)
-    return text
-
-
-_DATA_USAGE = dedent(
-    """
-    ИСТОЧНИКИ ДАННЫХ:
-    - дата, время и место рождения, знаки Солнца/Луны/асцендента, положения планет — натальная база;
-    - текущая дата — день прогноза;
-    - JSON transits[] — главный сигнал дня (orb_deg меньше — влияние сильнее; theme — смысл);
-    - moon_phase и accuracy_tier — уточняют тон и осторожность формулировок.
-
-    Не выдумывай аспекты и положения, которых нет в данных. Если Луна или ASC не рассчитаны —
-    не приписывай их точные положения; опирайся на доступное.
-    """,
-).strip()
-
-_FORECAST_REQUIREMENTS = dedent(
-    f"""
-    ТРЕБОВАНИЯ К ПРОГНОЗУ:
-
-    1. Прогноз индивидуален: опирается на натал и транзиты, а не только на солнечный знак.
-    2. Запрещены пустые общие фразы без объяснения, в том числе:
-       {_format_forbidden_phrases()}
-    3. Пиши так, будто прогноз создан лично для этого человека — всегда на «ты»
-       (ты, тебе, твой, тебя; никогда «вы», «вас», «вам»).
-    4. Обращайся по имени из данных (1–2 раза за ответ): склоняй его по падежам русского языка,
-       не оставляй имя только в именительном, если грамматика требует другой падеж.
-    5. В основном тексте органично затронь:
-       - эмоциональное состояние;
-       - отношения и общение;
-       - работу и финансы;
-       - энергию и самочувствие;
-       - наиболее благоприятное действие дня.
-       Без подзаголовков и рубрик вроде «Общая энергия дня», «Работа и деньги», «Отношения».
-    6. Основной текст (блок под «✨ Прогноз дня», до «Совет дня»): {MIN_SENTENCES}–{MAX_SENTENCES}
-       предложений, каждое по делу.
-    7. Не утверждай, что событие обязательно произойдёт. Используй мягкие формулировки:
-       «сегодня особенно благоприятно…», «может ощущаться…», «есть тенденция…»,
-       «стоит обратить внимание…».
-    """,
-).strip()
-
-_STYLE = dedent(
-    f"""
-    СТИЛЬ:
-    - живой, тёплый, разговорный — как мудрая подруга-астролог, а не гороскоп из журнала;
-    - обращение только на «ты» — от первого до последнего слова прогноза;
-    - разнообразие формулировок: чередуй глаголы, образы и заходы; не повторяй одни шаблоны;
-    - без запугивания и категоричных предсказаний будущего;
-    - допустима умеренная астрологическая лексика, если она помогает персонализации
-      и опирается на JSON (планеты, аспекты, темы transit);
-    - ЗАПРЕЩЕНЫ слова-клише (и близкие формы): {_format_cliche_words()};
-    - избегай канцелярита и пустых украшений — каждая фраза должна нести смысл.
-    """,
-).strip()
-
-_LANGUAGE = dedent(
-    """
-    ЯЗЫК ОТВЕТА (строго):
-    - весь текст только на русском языке (кириллица);
-    - допустимы цифры, пробелы, знаки препинания и эмодзи из формата (✨ 💡 🔢 🎨);
-    - ЗАПРЕЩЕНО: иероглифы и любые китайские, японские, корейские символы;
-    - ЗАПРЕЩЕНО: вставки на других письменностях (латиница — только в числах, не целыми фразами).
-    """,
-).strip()
-
-_OUTPUT_FORMAT = dedent(
-    f"""
-    ФОРМАТ ОТВЕТА (строго соблюдай):
-
-    ✨ Прогноз дня
-
-    [основной текст: {MIN_SENTENCES}–{MAX_SENTENCES} предложений, один абзац, без рубрик]
-
-    💡 Совет дня:
-    [ровно 1 предложение]
-
-    🔢 Число дня:
-    [одно число 1–99, осмысленно для энергии дня по карте]
-
-    🎨 Цвет дня:
-    [один цвет или короткое описание оттенка]
-
-    Не добавляй других разделов. Не дублируй заголовки.
-    """,
-).strip()
-
-_GENERATION_STEPS = dedent(
-    f"""
-    ВНУТРЕННИЙ ПОРЯДОК (не выводи):
-    1) Прочитай натал и отбери 2–3 сильнейших transit по orb_deg.
-    2) Собери связный прогноз на «ты» с учётом пяти сфер жизни.
-    3) Сформулируй совет, число и цвет из той же логики дня.
-    4) Проверь: в основном тексте {MIN_SENTENCES}–{MAX_SENTENCES} предложений, нет рубрик с «:».
-    5) Проверь: в тексте нет иероглифов и нелатинских/некириллических вставок.
-    """,
-).strip()
-
-_NEGATIVE_EXAMPLES = dedent(
-    """
-    ПЛОХО:
-    «Вас ждут перемены. Будьте внимательны.»
-
-    «Общая энергия дня: … Работа и деньги: … Отношения: …»
-
-    «Сегодня ритм дня подскажет тебе гармонию и внутренний ритм.» (клише «ритм», «гармония»)
-
-    «Сегодня день гармонии 和谐 и внутреннего покоя» (иероглифы запрещены)
-
-    ХОРОШО (форма, не копируй дословно):
-    «Аиде, сегодня Марс в трине к твоей Луне — проще держать границы без конфликта.
-    На работе имеет смысл добить одну задачу, а вечером выдохнуть без экрана.»
-    Затем совет / число / цвет в нужных блоках.
-    """,
-).strip()
