@@ -65,7 +65,9 @@ def test_system_prompt_astrologer_role() -> None:
     assert "✨ Прогноз дня" in prompt
     assert "💡 Совет дня" in prompt
     assert "именительном" in prompt.lower()
-    assert "склонен" not in prompt.lower()
+    assert "первое предложение" in prompt.lower()
+    assert "обязательно" in prompt.lower()
+    assert "склоняй" in prompt.lower()
     assert "внутренние процессы" in prompt
     assert "«ты»" in prompt or "на «ты»" in prompt
 

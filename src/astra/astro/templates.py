@@ -28,14 +28,19 @@ def body_from_context(ctx: AstroContext, *, name: str | None = None) -> str:
     display_name = (name or "").strip()
 
     if sun and moon:
-        sentence_1 = (
-            f"Твоё Солнце в {sun} задаёт направление дня, "
-            f"а Луна в {moon} подсказывает, как ты это проживёшь эмоционально."
+        core_1 = (
+            f"твоё Солнце в {sun} задаёт направление дня, "
+            f"а Луна в {moon} подсказывает, как ты это проживёшь эмоционально"
         )
     elif sun:
-        sentence_1 = f"Твоё Солнце в {sun} подсказывает, куда направить внимание сегодня."
+        core_1 = f"твоё Солнце в {sun} подсказывает, куда направить внимание"
     else:
-        sentence_1 = "Сегодня лучше держать один фокус и не распыляться."
+        core_1 = "лучше держать один фокус и не распыляться"
+
+    if display_name:
+        sentence_1 = f"{display_name}, сегодня {core_1}."
+    else:
+        sentence_1 = f"Сегодня {core_1[0].upper()}{core_1[1:]}." if core_1 else "Сегодня держи один фокус."
 
     if ctx.transits:
         main = ctx.transits[0]
@@ -57,10 +62,6 @@ def body_from_context(ctx: AstroContext, *, name: str | None = None) -> str:
         "Береги силы — короткая прогулка или пауза без экрана помогут вернуть ясность "
         "и выбрать следующий шаг."
     )
-
-    if display_name:
-        opener = f"{display_name}, "
-        sentence_1 = opener + sentence_1[0].lower() + sentence_1[1:]
 
     body = f"{sentence_1} {sentence_2} {sentence_3} {sentence_4}"
 
