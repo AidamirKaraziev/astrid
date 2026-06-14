@@ -118,3 +118,15 @@ make down
 
 Сервисы: **api** (8000), **worker**, **postgres**, **redis**, **rabbitmq** (15672 — UI), **ollama** (11434).
 В `.env` можно оставить `localhost` — в Compose для контейнеров подставляются внутренние URL (`postgres`, `redis`, …).
+
+## LLM / Astrid v3
+
+Ежедневное предсказание: **вопрос дня** (push preview) + персональный прогноз + совет. Код: `src/astra/llm/prompts/astrid.py`.
+
+```bash
+# Ollama должна быть запущена, модель gemma4:e2b
+uv run python scripts/smoke_astrid_v3.py      # быстрый smoke (2 кейса)
+uv run python scripts/e2e_astrid_v3.py        # E2E: 3 даты + чеклист + latency
+```
+
+Отчёт E2E: [docs/e2e/astrid-v3-e2e.md](docs/e2e/astrid-v3-e2e.md). Vault: `astra-vault/knowledge/patterns/промпт Astrid v3 — вопрос дня gemma4 e2b.md`.

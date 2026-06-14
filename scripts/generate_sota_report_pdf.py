@@ -142,7 +142,7 @@ MODELS: list[dict] = [
         "conditions": [
             "CPU-only на deadtiger (8 GB RAM, HDD)",
             "think=false, num_ctx=4096, num_predict=380 в Astra",
-            "Промпт Astrid v2 откалиброван под e2b",
+            "Промпт Astrid v3 откалиброван под e2b",
             "Генерация только в фоновой очереди (RabbitMQ)",
         ],
         "how_to": "OLLAMA_MODEL=gemma4:e2b в .env; docker-compose сервис ollama + ollama-init pull",
@@ -462,7 +462,7 @@ def build() -> Path:
             ["Продукт", "Astra — персональные астрологические предсказания в Telegram"],
             ["Аудитория", "RU, женщины, «магическое мышление»"],
             ["Текущий LLM", "gemma4:e2b через Ollama на deadtiger (CPU, 8 GB RAM)"],
-            ["Формат ответа", "4 предложения + совет / число / цвет дня (Astrid v2)"],
+            ["Формат ответа", "вопрос дня + прогноз + совет (Astrid v3)"],
             ["Цель отчёта", "Выбрать бесплатные API-fallback и понять trade-offs качества/лимитов"],
         ],
         [50, 227],
