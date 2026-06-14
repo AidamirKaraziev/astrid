@@ -14,3 +14,7 @@ build/
 data/geonames/RU.txt
 data/geonames/RU.zip
 data/geonames/admin1CodesASCII.txt
+cache/
+RU.zip
+.DS_Store
+scratch_*.py

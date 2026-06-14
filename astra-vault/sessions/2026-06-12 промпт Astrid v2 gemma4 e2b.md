@@ -14,7 +14,7 @@ date: 2026-06-12
 - [`astrid.py`](../../src/astra/llm/prompts/astrid.py): компактный system + user, 4 предложения + футер, компактный JSON транзитов
 - [`ollama.py`](../../src/astra/llm/ollama.py): `temp=0.72`, `num_predict=380`, `num_ctx=4096`
 - [`transits.py`](../../src/astra/astro/transits.py): дефолтная theme без «внутренние процессы»
-- [`templates.py`](../../src/astra/astro/templates.py): fallback на «ты», 4 предложения
+- при сбое LLM — `LlmGenerationError` + retry в worker (шаблонный fallback удалён 2026-06-14)
 - sanitize: клише, подмена числа дня `12` на детерминированное
 - тесты: 12 passed
 

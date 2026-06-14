@@ -49,7 +49,7 @@ uv run uvicorn astra.main:app --reload --app-dir src
 ```
 src/astra/
 ├── main.py              # FastAPI + lifespan (бот, scheduler)
-├── core/                # config, cities → timezone
+├── core/                # config, sentry, prediction_errors
 ├── db/                  # SQLAlchemy session
 ├── users/               # User, Profile
 ├── predictions/

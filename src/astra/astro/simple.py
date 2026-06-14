@@ -2,7 +2,7 @@
 
 from datetime import date
 
-from astra.astro.schemas import AstroContext, NatalChartData, TransitAspect
+from astra.astro.schemas import NatalChartData
 from astra.users.getters import calculate_profile_accuracy
 from astra.users.models import Profile
 
@@ -49,24 +49,3 @@ def build_natal_chart(
         timezone=timezone,
     )
 
-
-def build_daily_context(
-    profile: Profile,
-    chart: NatalChartData,
-    target: date,
-) -> AstroContext:
-    return AstroContext(
-        date=target,
-        accuracy_tier=chart.accuracy_tier,
-        natal={"sun": chart.sun_sign, "moon": chart.moon_sign, "asc": chart.asc_sign},
-        transits=[
-            TransitAspect(
-                transit_planet="Солнце",
-                aspect="фон дня",
-                natal_planet=f"Солнце ({chart.sun_sign})",
-                orb_deg=0.0,
-                theme="настроение солнечного знака",
-            ),
-        ],
-        moon_phase=None,
-    )

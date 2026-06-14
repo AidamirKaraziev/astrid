@@ -16,7 +16,7 @@ date: 2026-06-12
 - Промпт и постобработка: `src/astra/llm/prompts/astrid.py`
 - Ollama: `src/astra/llm/ollama.py` (`temperature` 0.72, `num_predict` 380, `num_ctx` 4096, `think=false`)
 - Транзиты: `src/astra/astro/transits.py`
-- Fallback: `src/astra/astro/templates.py`
+- Fallback без LLM: нет — при ошибке LLM `LlmGenerationError`, retry в worker (`prediction_generation.py`)
 
 ## Входные данные
 

@@ -1,4 +1,3 @@
-from astra.core.cities import resolve_timezone
 from astra.telegram.utils import extract_referral_code, parse_birth_date, parse_birth_time
 
 
@@ -16,7 +15,3 @@ def test_extract_referral_code() -> None:
     assert extract_referral_code("ref_abc123") == "abc123"
     assert extract_referral_code(None) is None
 
-
-def test_resolve_timezone() -> None:
-    assert resolve_timezone("Москва") == "Europe/Moscow"
-    assert resolve_timezone("Неизвестный") == "Europe/Moscow"

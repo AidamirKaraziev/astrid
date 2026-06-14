@@ -12,7 +12,8 @@ Python-бэкенд на FastAPI. Менеджер зависимостей: [uv
 
 ```
 Astra/
-├── main.py           # точка входа (пока шаблон PyCharm)
+├── main.py           # тонкая обёртка для IDE → astra.main:run
+├── src/astra/        # основной пакет (FastAPI, бот, worker)
 ├── pyproject.toml
 ├── spec/             # спецификация и требования
 └── astra-vault/      # Obsidian Knowledge Vault
