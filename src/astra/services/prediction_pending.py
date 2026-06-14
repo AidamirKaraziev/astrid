@@ -12,7 +12,7 @@ from astra.core.config import get_settings
 
 logger = logging.getLogger(__name__)
 
-_PENDING_TTL_SEC = 900
+_PENDING_TTL_SEC = 2700
 _KEY_PREFIX = "astra:prediction:pending"
 
 

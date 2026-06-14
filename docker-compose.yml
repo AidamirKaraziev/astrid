@@ -107,7 +107,7 @@ services:
       - .env
     environment:
       OLLAMA_HOST: http://ollama:11434
-    entrypoint: ["/bin/sh", "-c", "ollama pull \"$$OLLAMA_MODEL\" || true"]
+    entrypoint: ["/bin/sh", "-c", "ollama pull \"$$OLLAMA_MODEL\""]
     restart: "no"
 
   # ---------------------------------------------------------------------------
@@ -188,7 +188,9 @@ services:
       rabbitmq:
         condition: service_healthy
       ollama:
-        condition: service_started
+        condition: service_healthy
+      ollama-init:
+        condition: service_completed_successfully
     command: >
       sh -c "alembic upgrade head && astra-worker"
 

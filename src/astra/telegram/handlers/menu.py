@@ -70,6 +70,8 @@ async def today_prediction(message: Message, session: AsyncSession) -> None:
     }:
         await message.answer(PREDICTION_IN_PROGRESS_TEXT)
         return
+    if outcome.status == PredictionRequestStatus.FAILED:
+        return
     if outcome.prediction is None:
         await message.answer(PREDICTION_IN_PROGRESS_TEXT)
         return

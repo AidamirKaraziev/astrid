@@ -6,9 +6,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from astra.astro.calculator import build_natal_chart
 from astra.astro.crud import upsert_natal_chart
 from astra.astro.schemas import AstroContext, NatalChartData
-from astra.astro.templates import body_from_context
 from astra.astro.transits import build_daily_context
 from astra.core.config import Settings, get_settings
+from astra.core.prediction_errors import LlmGenerationError
 from astra.llm.ollama import generate_prediction_body as llm_generate_body
 from astra.places import crud as places_crud
 from astra.predictions import crud as predictions_crud
@@ -95,11 +95,12 @@ async def generate_prediction_body(
 ) -> tuple[str, dict]:
     cfg = settings or get_settings()
     ctx, chart = await build_context_for_date(session, user, profile, target)
-    body: str | None = None
-    if cfg.ollama_enabled:
-        body = await llm_generate_body(ctx, profile, chart, cfg)
+    if not cfg.ollama_enabled:
+        raise LlmGenerationError("disabled")
+
+    body, failure_reason = await llm_generate_body(ctx, profile, chart, cfg)
     if not body:
-        body = body_from_context(ctx, name=profile.display_name)
+        raise LlmGenerationError(failure_reason or "empty_response")
     return body, ctx.model_dump_json_safe()
 
 

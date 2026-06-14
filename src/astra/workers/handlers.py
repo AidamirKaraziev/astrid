@@ -9,10 +9,8 @@ from astra.messaging.publisher import publish_prediction_send
 from astra.services.prediction_pending import clear_prediction_pending
 from astra.messaging.schemas import TaskMessage, TaskType
 from astra.predictions import crud as predictions_crud
-from astra.services.astro_service import (
-    generate_daily_prediction,
-    refresh_natal_chart_for_profile,
-)
+from astra.services.astro_service import refresh_natal_chart_for_profile
+from astra.services.prediction_generation import generate_daily_prediction_resilient
 from astra.services.prediction_service import format_prediction_for_user, mark_prediction_sent
 from astra.users import crud as users_crud
 from astra.workers.telegram_send import send_telegram_html
@@ -50,15 +48,24 @@ async def handle_prediction_generate(session: AsyncSession, task: TaskMessage) -
 
         target = datetime.now(tz).date()
 
-    try:
-        await generate_daily_prediction(session, user, user.profile, target=target)
-        # Commit до publish send — иначе send-воркер не видит строку и падает с «not ready yet».
-        await session.commit()
-        await publish_prediction_send(user.id, target)
-        logger.info("Prediction generated for user %s date %s", task.user_id, target)
-    except Exception:
-        await clear_prediction_pending(user.id, target)
-        raise
+    prediction = await generate_daily_prediction_resilient(
+        session,
+        user,
+        user.profile,
+        target=target,
+    )
+    if prediction is None:
+        logger.warning(
+            "Prediction generation abandoned for user %s date %s",
+            task.user_id,
+            target,
+        )
+        return
+
+    # Commit до publish send — иначе send-воркер не видит строку и падает с «not ready yet».
+    await session.commit()
+    await publish_prediction_send(user.id, target)
+    logger.info("Prediction generated for user %s date %s", task.user_id, target)
 
 
 async def handle_prediction_send(session: AsyncSession, task: TaskMessage) -> None:

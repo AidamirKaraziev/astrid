@@ -16,7 +16,7 @@ from astra.services.prediction_pending import (
 )
 from astra.predictions import crud as predictions_crud
 from astra.predictions.models import Prediction
-from astra.services.astro_service import generate_daily_prediction
+from astra.services.prediction_generation import generate_daily_prediction_resilient
 from astra.services.prediction_service import format_prediction_for_user, mark_prediction_sent
 from astra.users import crud as users_crud
 from astra.workers.telegram_send import send_telegram_html
@@ -39,12 +39,19 @@ async def deliver_prediction_for_date(user_id: UUID, prediction_date: date) -> N
             prediction_date,
         )
         if prediction is None:
-            prediction = await generate_daily_prediction(
+            prediction = await generate_daily_prediction_resilient(
                 session,
                 user,
                 user.profile,
                 target=prediction_date,
             )
+            if prediction is None:
+                logger.warning(
+                    "deliver_prediction: generation failed for user %s date %s",
+                    user_id,
+                    prediction_date,
+                )
+                return
 
         text = format_prediction_for_user(prediction, user, user.profile)
         telegram_id = user.telegram_id

@@ -27,8 +27,8 @@ async def generate_prediction_body(
     profile: Profile,
     chart: NatalChartData,
     settings: Settings | None = None,
-) -> str | None:
-    """Сгенерировать текст инсайта на день; None — ошибка или пустой ответ."""
+) -> tuple[str | None, str]:
+    """Сгенерировать текст инсайта на день; (None, reason) — ошибка или пустой ответ."""
     cfg = settings or get_settings()
     payload = {
         "model": cfg.ollama_model,
@@ -51,18 +51,29 @@ async def generate_prediction_body(
             response = await client.post(url, json=payload)
             response.raise_for_status()
             data = response.json()
+    except httpx.TimeoutException:
+        logger.warning("Ollama request timed out")
+        return None, "timeout"
+    except httpx.ConnectError:
+        logger.warning("Ollama connection failed")
+        return None, "connection"
+    except httpx.HTTPStatusError as exc:
+        logger.warning("Ollama HTTP error: %s", exc.response.status_code)
+        return None, f"http_{exc.response.status_code}"
     except Exception:
         logger.exception("Ollama request failed")
-        return None
+        return None, "request_error"
 
     message = data.get("message") or {}
     raw = (message.get("content") or "").strip()
     if not raw:
-        return None
+        return None, "empty_response"
 
     cleaned = sanitize_prediction_output(
         raw,
         prediction_date=ctx.date,
         sun_sign=chart.sun_sign,
     )
-    return cleaned or None
+    if not cleaned:
+        return None, "sanitize_empty"
+    return cleaned, ""

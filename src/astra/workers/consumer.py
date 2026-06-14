@@ -6,6 +6,7 @@ from aio_pika.abc import AbstractIncomingMessage
 
 from astra.core.config import Settings, get_settings
 from astra.db.session import get_session_factory, init_engine
+from astra.llm.warmup import warmup_ollama_model
 from astra.messaging.publisher import _ensure_topology, parse_task
 from astra.messaging.queues import QUEUE_ASTRO, QUEUE_NOTIFICATIONS, QUEUE_PREDICTIONS
 from astra.workers.handlers import dispatch_task
@@ -25,6 +26,7 @@ async def _process_message(message: AbstractIncomingMessage) -> None:
 async def run_consumer(settings: Settings | None = None) -> None:
     cfg = settings or get_settings()
     init_engine(cfg)
+    await warmup_ollama_model(cfg)
     connection = await aio_pika.connect_robust(cfg.rabbitmq_url)
     channel = await connection.channel()
     await channel.set_qos(prefetch_count=cfg.rabbitmq_prefetch)

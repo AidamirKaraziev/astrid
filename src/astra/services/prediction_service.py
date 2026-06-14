@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from astra.predictions import crud as predictions_crud
 from astra.predictions.models import Prediction
-from astra.services.astro_service import generate_daily_prediction
+from astra.services.prediction_generation import generate_daily_prediction_resilient
 from astra.services.prediction_pending import (
     clear_prediction_pending,
     is_prediction_pending,
@@ -25,6 +25,7 @@ class PredictionRequestStatus(StrEnum):
     READY = "ready"
     QUEUED = "queued"
     IN_PROGRESS = "in_progress"
+    FAILED = "failed"
 
 
 @dataclass(frozen=True, slots=True)
@@ -120,7 +121,9 @@ async def request_today_prediction(
             raise
         return PredictionRequestOutcome(status=PredictionRequestStatus.QUEUED)
 
-    prediction = await generate_daily_prediction(session, user, profile, target=target)
+    prediction = await generate_daily_prediction_resilient(session, user, profile, target=target)
+    if prediction is None:
+        return PredictionRequestOutcome(status=PredictionRequestStatus.FAILED)
     return PredictionRequestOutcome(
         status=PredictionRequestStatus.READY,
         prediction=prediction,
