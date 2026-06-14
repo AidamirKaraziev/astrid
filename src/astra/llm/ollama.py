@@ -10,15 +10,17 @@ from astra.astro.schemas import AstroContext, NatalChartData
 from astra.core.config import Settings, get_settings
 from astra.users.models import Profile
 from astra.llm.prompts.astrid import (
+    QuestionArchetype,
     build_system_prompt,
     build_user_message,
     sanitize_prediction_output,
+    validate_prediction_output,
 )
 
 logger = logging.getLogger(__name__)
 
-_ASTRID_TEMPERATURE = 0.72
-_ASTRID_NUM_PREDICT = 380
+_ASTRID_TEMPERATURE = 0.76
+_ASTRID_NUM_PREDICT = 340
 _ASTRID_NUM_CTX = 4096
 
 
@@ -27,16 +29,20 @@ async def generate_prediction_body(
     profile: Profile,
     chart: NatalChartData,
     settings: Settings | None = None,
+    *,
+    archetype: QuestionArchetype | None = None,
 ) -> tuple[str | None, str]:
     """Сгенерировать текст инсайта на день; (None, reason) — ошибка или пустой ответ."""
     cfg = settings or get_settings()
+    display_name = (profile.display_name or "").strip() or "друг"
+    user_message = build_user_message(ctx, profile, chart, archetype=archetype)
     payload = {
         "model": cfg.ollama_model,
         "think": False,
         "keep_alive": "30m",
         "messages": [
             {"role": "system", "content": build_system_prompt()},
-            {"role": "user", "content": build_user_message(ctx, profile, chart)},
+            {"role": "user", "content": user_message},
         ],
         "stream": False,
         "options": {
@@ -69,11 +75,17 @@ async def generate_prediction_body(
     if not raw:
         return None, "empty_response"
 
-    cleaned = sanitize_prediction_output(
-        raw,
-        prediction_date=ctx.date,
-        sun_sign=chart.sun_sign,
-    )
+    cleaned = sanitize_prediction_output(raw)
     if not cleaned:
         return None, "sanitize_empty"
+
+    validation_error = validate_prediction_output(cleaned, display_name)
+    if validation_error:
+        logger.warning(
+            "Astrid output failed validation: %s (archetype=%s)",
+            validation_error,
+            archetype.id if archetype is not None else "auto",
+        )
+        return None, validation_error
+
     return cleaned, ""

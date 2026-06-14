@@ -10,6 +10,7 @@ from astra.astro.transits import build_daily_context
 from astra.core.config import Settings, get_settings
 from astra.core.prediction_errors import LlmGenerationError
 from astra.llm.ollama import generate_prediction_body as llm_generate_body
+from astra.llm.prompts.astrid import QuestionArchetype, pick_question_archetype
 from astra.places import crud as places_crud
 from astra.predictions import crud as predictions_crud
 from astra.predictions.models import Prediction
@@ -86,6 +87,16 @@ async def build_context_for_date(
     return ctx, chart
 
 
+def build_prediction_astro_context(
+    ctx: AstroContext,
+    archetype: QuestionArchetype,
+) -> dict:
+    """Контекст для predictions.astro_context: транзиты + метаданные генерации."""
+    payload = ctx.model_dump_json_safe()
+    payload["question_archetype_id"] = archetype.id
+    return payload
+
+
 async def generate_prediction_body(
     session: AsyncSession,
     user: User,
@@ -98,10 +109,17 @@ async def generate_prediction_body(
     if not cfg.ollama_enabled:
         raise LlmGenerationError("disabled")
 
-    body, failure_reason = await llm_generate_body(ctx, profile, chart, cfg)
+    archetype = pick_question_archetype(user.id, target)
+    body, failure_reason = await llm_generate_body(
+        ctx,
+        profile,
+        chart,
+        cfg,
+        archetype=archetype,
+    )
     if not body:
         raise LlmGenerationError(failure_reason or "empty_response")
-    return body, ctx.model_dump_json_safe()
+    return body, build_prediction_astro_context(ctx, archetype)
 
 
 async def create_or_update_prediction(

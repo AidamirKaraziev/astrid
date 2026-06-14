@@ -15,6 +15,16 @@ _REASON_LABELS: dict[str, str] = {
     "connection": "нет соединения с Ollama",
     "empty_response": "пустой ответ Ollama",
     "sanitize_empty": "ответ не прошёл постобработку",
+    "invalid_structure": "неверная структура ответа",
+    "invalid_question": "некорректный вопрос дня",
+    "question_length": "длина вопроса вне допустимого диапазона",
+    "missing_name": "имя не в начале прогноза",
+    "body_too_short": "слишком короткий прогноз",
+    "body_too_long": "слишком длинный прогноз",
+    "body_word_count": "объём текста прогноза вне нормы",
+    "invalid_advice": "некорректный совет",
+    "forbidden_content": "запрещённые фразы или символы",
+    "legacy_format": "устаревший формат ответа",
     "request_error": "ошибка запроса к Ollama",
 }
 
