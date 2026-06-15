@@ -13,7 +13,8 @@ from astra.notifications.scheduler import notification_worker
 from astra.predictions.routers import router as predictions_router
 from astra.points.routers import router as points_router
 from astra.referrals.routers import router as referrals_router
-from astra.telegram.bot import create_bot, create_dispatcher
+from astra.telegram.bot import configure_telegram_bot, create_bot, create_dispatcher
+from astra.workers.telegram_send import send_prediction_to_telegram
 from astra.telegram.polling import run_polling_supervisor
 from astra.telegram.webhook import router as telegram_webhook_router
 from astra.users.routers import router as users_router
@@ -53,11 +54,16 @@ async def lifespan(app: FastAPI):
     bot = create_bot(settings)
     notification_bot = create_bot(settings)
     dp = await create_dispatcher(settings)
+    if settings.telegram_bot_token:
+        try:
+            await configure_telegram_bot(bot)
+        except Exception:
+            logger.exception("Failed to configure Telegram bot menu")
     app.state.bot = bot
     app.state.dp = dp
 
     async def bot_send_text(telegram_id: int, text: str) -> None:
-        await notification_bot.send_message(telegram_id, text)
+        await send_prediction_to_telegram(telegram_id, text, settings=settings)
 
     worker_task = asyncio.create_task(
         notification_worker(bot_send_text, settings=settings),

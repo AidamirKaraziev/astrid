@@ -26,6 +26,8 @@ class Settings(BaseSettings):
 
     telegram_bot_token: str = ""
     telegram_bot_username: str = "AstraBot"
+    # Личный аккаунт Astrid для поддержки (без @)
+    telegram_support_username: str = ""
     telegram_mode: str = "polling"
     telegram_webhook_url: str | None = None
     telegram_webhook_secret: str | None = None

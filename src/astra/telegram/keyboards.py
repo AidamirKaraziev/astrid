@@ -1,11 +1,51 @@
+from aiogram.enums import ButtonStyle
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, KeyboardButton, ReplyKeyboardMarkup
+
+from astra.telegram.button_texts import (
+    BTN_ASK_STARS,
+    BTN_BACK_MENU,
+    BTN_COMPATIBILITY,
+    BTN_INVITE,
+    BTN_MONTH_FORECAST,
+    BTN_NATAL,
+    BTN_PREDICTION_TODAY,
+    BTN_PROFILE,
+    BTN_TAROT,
+    BTN_TAROT_DECISION,
+    BTN_TAROT_RELATIONS,
+    BTN_TAROT_THREE,
+    CB_PRODUCT_ASK_STARS,
+)
 
 
 def main_menu_keyboard() -> ReplyKeyboardMarkup:
     return ReplyKeyboardMarkup(
         keyboard=[
-            [KeyboardButton(text="🔮 Предсказание на сегодня")],
-            [KeyboardButton(text="👤 Профиль"), KeyboardButton(text="🎁 Пригласить друга")],
+            [KeyboardButton(text=BTN_PREDICTION_TODAY)],
+            [
+                KeyboardButton(text=BTN_COMPATIBILITY),
+                KeyboardButton(text=BTN_NATAL),
+            ],
+            [
+                KeyboardButton(text=BTN_MONTH_FORECAST),
+                KeyboardButton(text=BTN_TAROT),
+            ],
+            [
+                KeyboardButton(text=BTN_PROFILE),
+                KeyboardButton(text=BTN_INVITE),
+            ],
+        ],
+        resize_keyboard=True,
+    )
+
+
+def tarot_keyboard() -> ReplyKeyboardMarkup:
+    return ReplyKeyboardMarkup(
+        keyboard=[
+            [KeyboardButton(text=BTN_TAROT_THREE)],
+            [KeyboardButton(text=BTN_TAROT_RELATIONS)],
+            [KeyboardButton(text=BTN_TAROT_DECISION)],
+            [KeyboardButton(text=BTN_BACK_MENU)],
         ],
         resize_keyboard=True,
     )
@@ -46,5 +86,35 @@ def profile_menu_keyboard() -> InlineKeyboardMarkup:
                 ),
             ],
             [InlineKeyboardButton(text="◀️ Назад", callback_data="menu:home")],
+        ],
+    )
+
+
+def prediction_followup_keyboard() -> InlineKeyboardMarkup:
+    """CTA под ежедневным предсказанием."""
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text=BTN_ASK_STARS,
+                    callback_data=CB_PRODUCT_ASK_STARS,
+                    style=ButtonStyle.PRIMARY,
+                ),
+            ],
+        ],
+    )
+
+
+def help_keyboard(support_username: str) -> InlineKeyboardMarkup:
+    username = support_username.strip().lstrip("@")
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="💌 Написать Astrid",
+                    url=f"https://t.me/{username}",
+                    style=ButtonStyle.PRIMARY,
+                ),
+            ],
         ],
     )

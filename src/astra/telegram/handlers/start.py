@@ -10,16 +10,16 @@ from astra.services.points_service import register_daily_activity
 from astra.services.referral_service import apply_referral_on_start
 from aiogram.types import KeyboardButton, ReplyKeyboardMarkup, ReplyKeyboardRemove
 
+from astra.telegram.button_texts import BTN_PROFILE
 from astra.telegram.keyboards import main_menu_keyboard
 from astra.telegram.states import OnboardingStates
-from astra.text.ru_inflect import inflect_name
 from astra.telegram.utils import default_display_name, extract_referral_code
 from astra.users import crud as users_crud
 
 router = Router(name="start")
 
 
-@router.message(Command("start"))
+@router.message(Command("start", "menu"))
 async def cmd_start(
     message: Message,
     command: CommandObject,
@@ -54,14 +54,7 @@ async def cmd_start(
 
     restart = (command.args or "").strip().lower() in {"restart", "again", "reset", "заново"}
     if user.onboarding_completed and user.profile and not restart:
-        greeting_name = inflect_name(user.profile.display_name, "nomn")
-        await message.answer(
-            f"С возвращением, {greeting_name}! ✨\n"
-            "Твоё меню внизу — выбирай действие.\n\n"
-            "Чтобы пройти регистрацию заново: <code>/start restart</code>",
-            parse_mode="HTML",
-            reply_markup=main_menu_keyboard(),
-        )
+        await message.answer("Главное меню ✨", reply_markup=main_menu_keyboard())
         return
 
     if restart:
@@ -105,7 +98,7 @@ async def cmd_continue(
     await state.set_state(OnboardingStates.birth_date)
     await message.answer(
         f"Сохранила тебя как <b>{display_name}</b>. "
-        "Изменить имя можно в разделе «👤 Профиль».\n\n"
+        f"Изменить имя можно в разделе «{BTN_PROFILE}».\n\n"
         "📅 Укажи дату рождения в формате <b>ДД.ММ.ГГГГ</b>\n"
         "Например: <code>15.03.1990</code>",
         parse_mode="HTML",

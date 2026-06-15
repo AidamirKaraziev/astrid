@@ -15,7 +15,13 @@ from astra.services.prediction_service import (
     request_today_prediction,
 )
 from astra.telegram.handlers.places import start_profile_notification_place_step
-from astra.telegram.keyboards import main_menu_keyboard, profile_menu_keyboard, share_keyboard
+from astra.telegram.button_texts import BTN_INVITE, BTN_PREDICTION_TODAY, BTN_PROFILE
+from astra.telegram.keyboards import (
+    main_menu_keyboard,
+    prediction_followup_keyboard,
+    profile_menu_keyboard,
+    share_keyboard,
+)
 from astra.telegram.states import ProfileStates
 from astra.telegram.utils import parse_birth_date, parse_birth_time
 from astra.users import crud as users_crud
@@ -48,7 +54,7 @@ async def cb_menu_home(callback: CallbackQuery, state: FSMContext) -> None:
     await callback.answer()
 
 
-@router.message(F.text == "🔮 Предсказание на сегодня")
+@router.message(F.text == BTN_PREDICTION_TODAY)
 async def today_prediction(message: Message, session: AsyncSession) -> None:
     tg_id = _telegram_id_from_message(message)
     if tg_id is None:
@@ -78,10 +84,11 @@ async def today_prediction(message: Message, session: AsyncSession) -> None:
     await message.answer(
         format_prediction_for_user(outcome.prediction, user, user.profile),
         parse_mode="HTML",
+        reply_markup=prediction_followup_keyboard(),
     )
 
 
-@router.message(F.text == "🎁 Пригласить друга")
+@router.message(F.text == BTN_INVITE)
 async def invite_friend(message: Message, session: AsyncSession) -> None:
     user = await _get_user_from_message(session, message)
     if user is None:
@@ -103,7 +110,7 @@ async def invite_friend(message: Message, session: AsyncSession) -> None:
     )
 
 
-@router.message(F.text == "👤 Профиль")
+@router.message(F.text == BTN_PROFILE)
 async def show_profile(message: Message, session: AsyncSession) -> None:
     user = await _get_user_from_message(session, message)
     if user is None or user.profile is None:

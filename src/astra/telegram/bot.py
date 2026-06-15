@@ -14,7 +14,9 @@ from redis.asyncio import Redis
 
 from astra.core.config import Settings
 from astra.db.session import get_session_factory
-from astra.telegram.handlers import menu, onboarding, places, start
+from astra.telegram.auto_keyboard_middleware import AutoKeyboardMiddleware
+from astra.telegram.handlers import catalog, commands, menu, onboarding, places, start
+from astra.telegram.bot_menu import setup_bot_menu
 from astra.telegram.middlewares import DbSessionMiddleware
 
 logger = logging.getLogger(__name__)
@@ -68,6 +70,8 @@ async def create_dispatcher(settings: Settings) -> Dispatcher:
 
     dp.update.outer_middleware(UpdateLoggingMiddleware())
     dp.update.middleware(DbSessionMiddleware(get_session_factory()))
+    dp.message.middleware(AutoKeyboardMiddleware())
+    dp.callback_query.middleware(AutoKeyboardMiddleware())
 
     @dp.errors()
     async def on_error(event: ErrorEvent) -> None:
@@ -77,15 +81,22 @@ async def create_dispatcher(settings: Settings) -> Dispatcher:
         capture_exception(event.exception)
 
     dp.include_router(start.router)
+    dp.include_router(commands.router)
     dp.include_router(places.router)
     dp.include_router(onboarding.router)
     dp.include_router(menu.router)
+    dp.include_router(catalog.router)
     return dp
 
 
 async def send_text_to_user(telegram_id: int, text: str, settings: Settings) -> None:
-    bot = create_bot(settings)
-    try:
-        await bot.send_message(telegram_id, text)
-    finally:
-        await bot.session.close()
+    from astra.workers.telegram_send import send_prediction_to_telegram
+
+    await send_prediction_to_telegram(telegram_id, text, settings=settings)
+
+
+async def configure_telegram_bot(bot: Bot) -> None:
+    """Menu Button, команды и прочая настройка Bot API при старте."""
+    if not bot.token:
+        return
+    await setup_bot_menu(bot)

@@ -19,7 +19,7 @@ from astra.predictions.models import Prediction
 from astra.services.prediction_generation import generate_daily_prediction_resilient
 from astra.services.prediction_service import format_prediction_for_user, mark_prediction_sent
 from astra.users import crud as users_crud
-from astra.workers.telegram_send import send_telegram_html
+from astra.workers.telegram_send import send_prediction_to_telegram
 
 logger = logging.getLogger(__name__)
 
@@ -59,7 +59,7 @@ async def deliver_prediction_for_date(user_id: UUID, prediction_date: date) -> N
         await session.commit()
 
     try:
-        await send_telegram_html(telegram_id, text)
+        await send_prediction_to_telegram(telegram_id, text)
     except Exception:
         logger.exception("failed to send prediction to telegram_id=%s", telegram_id)
         return

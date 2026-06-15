@@ -13,7 +13,7 @@ from astra.services.astro_service import refresh_natal_chart_for_profile
 from astra.services.prediction_generation import generate_daily_prediction_resilient
 from astra.services.prediction_service import format_prediction_for_user, mark_prediction_sent
 from astra.users import crud as users_crud
-from astra.workers.telegram_send import send_telegram_html
+from astra.workers.telegram_send import send_prediction_to_telegram
 
 logger = logging.getLogger(__name__)
 
@@ -103,7 +103,7 @@ async def handle_prediction_send(session: AsyncSession, task: TaskMessage) -> No
         return
 
     message = format_prediction_for_user(prediction, user, user.profile)
-    await send_telegram_html(user.telegram_id, message)
+    await send_prediction_to_telegram(user.telegram_id, message)
     await mark_prediction_sent(session, prediction)
     await clear_prediction_pending(user.id, task.prediction_date)
     logger.info("Prediction sent to telegram_id=%s", user.telegram_id)
