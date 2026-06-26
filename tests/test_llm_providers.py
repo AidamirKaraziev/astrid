@@ -4,18 +4,46 @@ from unittest.mock import AsyncMock, patch
 import httpx
 import pytest
 
+from astra.llm.api.deepseek import DeepSeekProvider
 from astra.llm.api.gemini import GeminiProvider
 from astra.llm.api.grok import GrokProvider
+from astra.llm.api.openai import OpenAIProvider
 from astra.llm.api.openrouter import OpenRouterProvider
 from astra.llm.factory import (
+    get_deepseek_provider,
     get_gemini_provider,
     get_grok_provider,
     get_llm_provider,
     get_ollama_provider,
+    get_openai_provider,
     get_openrouter_provider,
 )
 from astra.llm.local.ollama import OllamaProvider
 from astra.llm.types import ChatMessage, CompletionRequest
+
+
+def _deepseek_settings(**overrides: object) -> SimpleNamespace:
+    defaults = {
+        "deepseek_enabled": True,
+        "deepseek_api_key": "test-deepseek-key",
+        "deepseek_model": "deepseek-v4-flash",
+        "deepseek_base_url": "https://api.deepseek.com/v1",
+        "deepseek_timeout_seconds": 120.0,
+    }
+    defaults.update(overrides)
+    return SimpleNamespace(**defaults)
+
+
+def _openai_settings(**overrides: object) -> SimpleNamespace:
+    defaults = {
+        "openai_enabled": True,
+        "openai_api_key": "test-openai-key",
+        "openai_model": "gpt-5.5",
+        "openai_base_url": "https://api.openai.com/v1",
+        "openai_timeout_seconds": 60.0,
+    }
+    defaults.update(overrides)
+    return SimpleNamespace(**defaults)
 
 
 def _openrouter_settings(**overrides: object) -> SimpleNamespace:
@@ -78,10 +106,14 @@ def test_get_llm_provider_returns_typed_instances() -> None:
     assert isinstance(get_grok_provider(), GrokProvider)
     assert isinstance(get_gemini_provider(), GeminiProvider)
     assert isinstance(get_openrouter_provider(), OpenRouterProvider)
+    assert isinstance(get_openai_provider(), OpenAIProvider)
+    assert isinstance(get_deepseek_provider(), DeepSeekProvider)
     assert isinstance(get_llm_provider("ollama"), OllamaProvider)
     assert isinstance(get_llm_provider("grok"), GrokProvider)
     assert isinstance(get_llm_provider("gemini"), GeminiProvider)
     assert isinstance(get_llm_provider("openrouter"), OpenRouterProvider)
+    assert isinstance(get_llm_provider("openai"), OpenAIProvider)
+    assert isinstance(get_llm_provider("deepseek"), DeepSeekProvider)
 
 
 def test_grok_provider_is_configured() -> None:
@@ -112,6 +144,117 @@ def test_openrouter_provider_is_configured() -> None:
     assert enabled.is_configured()
     assert not disabled.is_configured()
     assert not no_key.is_configured()
+
+
+def test_openai_provider_is_configured() -> None:
+    enabled = OpenAIProvider(_openai_settings())
+    disabled = OpenAIProvider(_openai_settings(openai_enabled=False))
+    no_key = OpenAIProvider(_openai_settings(openai_api_key=""))
+
+    assert enabled.is_configured()
+    assert not disabled.is_configured()
+    assert not no_key.is_configured()
+
+
+def test_deepseek_provider_is_configured() -> None:
+    enabled = DeepSeekProvider(_deepseek_settings())
+    disabled = DeepSeekProvider(_deepseek_settings(deepseek_enabled=False))
+    no_key = DeepSeekProvider(_deepseek_settings(deepseek_api_key=""))
+
+    assert enabled.is_configured()
+    assert not disabled.is_configured()
+    assert not no_key.is_configured()
+
+
+@pytest.mark.anyio
+async def test_deepseek_provider_complete_success() -> None:
+    provider = DeepSeekProvider(_deepseek_settings())
+    request = CompletionRequest(
+        messages=(
+            ChatMessage("system", "sys"),
+            ChatMessage("user", "ping"),
+        ),
+        temperature=0.7,
+        max_tokens=8192,
+        extra={"json_mode": True, "thinking_disabled": True},
+    )
+    mock_response = httpx.Response(
+        200,
+        json={"choices": [{"message": {"role": "assistant", "content": " pong "}}]},
+        request=httpx.Request("POST", "https://api.deepseek.com/v1/chat/completions"),
+    )
+
+    with patch(
+        "astra.llm.api.deepseek.httpx.AsyncClient.post",
+        new_callable=AsyncMock,
+        return_value=mock_response,
+    ) as post:
+        result = await provider.complete(request)
+
+    assert result.text == "pong"
+    assert result.reason == ""
+    post.assert_awaited_once()
+    call_kwargs = post.await_args.kwargs
+    assert call_kwargs["headers"]["Authorization"] == "Bearer test-deepseek-key"
+    assert call_kwargs["json"]["model"] == "deepseek-v4-flash"
+    assert call_kwargs["json"]["response_format"] == {"type": "json_object"}
+    assert call_kwargs["json"]["thinking"] == {"type": "disabled"}
+    assert call_kwargs["json"]["max_tokens"] == 8192
+
+
+@pytest.mark.anyio
+async def test_deepseek_provider_complete_disabled() -> None:
+    provider = DeepSeekProvider(_deepseek_settings(deepseek_enabled=False))
+    result = await provider.complete(
+        CompletionRequest(messages=(ChatMessage("user", "ping"),)),
+    )
+    assert result.text is None
+    assert result.reason == "disabled"
+
+
+@pytest.mark.anyio
+async def test_openai_provider_complete_success() -> None:
+    provider = OpenAIProvider(_openai_settings())
+    request = CompletionRequest(
+        messages=(
+            ChatMessage("system", "sys"),
+            ChatMessage("user", "ping"),
+        ),
+        max_tokens=256,
+        extra={"json_mode": True},
+    )
+    mock_response = httpx.Response(
+        200,
+        json={"choices": [{"message": {"role": "assistant", "content": " pong "}}]},
+        request=httpx.Request("POST", "https://api.openai.com/v1/chat/completions"),
+    )
+
+    with patch(
+        "astra.llm.api.openai.httpx.AsyncClient.post",
+        new_callable=AsyncMock,
+        return_value=mock_response,
+    ) as post:
+        result = await provider.complete(request)
+
+    assert result.text == "pong"
+    assert result.reason == ""
+    post.assert_awaited_once()
+    call_kwargs = post.await_args.kwargs
+    assert call_kwargs["headers"]["Authorization"] == "Bearer test-openai-key"
+    assert call_kwargs["json"]["model"] == "gpt-5.5"
+    assert call_kwargs["json"]["response_format"] == {"type": "json_object"}
+    assert call_kwargs["json"]["max_completion_tokens"] == 256
+    assert "temperature" not in call_kwargs["json"]
+
+
+@pytest.mark.anyio
+async def test_openai_provider_complete_disabled() -> None:
+    provider = OpenAIProvider(_openai_settings(openai_enabled=False))
+    result = await provider.complete(
+        CompletionRequest(messages=(ChatMessage("user", "ping"),)),
+    )
+    assert result.text is None
+    assert result.reason == "disabled"
 
 
 @pytest.mark.anyio

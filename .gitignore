@@ -18,3 +18,4 @@ cache/
 RU.zip
 .DS_Store
 scratch_*.py
+/docs/output/

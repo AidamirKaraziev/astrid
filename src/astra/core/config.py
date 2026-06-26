@@ -79,6 +79,21 @@ class Settings(BaseSettings):
     )
     openrouter_timeout_seconds: float = 120.0
 
+    # OpenAI — платные продукты (совместимость, GPT-5.5)
+    openai_enabled: bool = False
+    openai_api_key: str = ""
+    openai_model: str = "gpt-5.5"
+    openai_base_url: str = "https://api.openai.com/v1"
+    openai_timeout_seconds: float = 180.0
+
+    # DeepSeek — совместимость (V4-Flash non-thinking по умолчанию)
+    # Ключ: https://platform.deepseek.com/api_keys
+    deepseek_enabled: bool = False
+    deepseek_api_key: str = ""
+    deepseek_model: str = "deepseek-v4-flash"
+    deepseek_base_url: str = "https://api.deepseek.com/v1"
+    deepseek_timeout_seconds: float = 120.0
+
     # Sentry — ошибки и (опционально) трейсы; стенд: local | dev | prod
     sentry_dsn: str | None = None
     sentry_enabled: bool = True

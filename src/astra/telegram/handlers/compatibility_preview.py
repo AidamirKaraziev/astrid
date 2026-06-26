@@ -1,20 +1,18 @@
-"""Временный A/B: Astrid v3 через OpenRouter по кнопке «Совместимость»."""
+"""Превью синастрии через DeepSeek по кнопке «Совместимость»."""
 
 from __future__ import annotations
 
 import logging
-from datetime import date, datetime
-from zoneinfo import ZoneInfo
 
 from aiogram import F, Router
 from aiogram.types import Message
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from astra.core.config import get_settings
-from astra.llm.astrid_generate import generate_astrid_body
-from astra.llm.factory import get_openrouter_provider
-from astra.llm.prompts.astrid import pick_question_archetype
-from astra.services.astro_service import build_context_for_date
+from astra.llm.compatibility_generate import generate_compatibility_output
+from astra.llm.factory import get_deepseek_provider
+from astra.llm.prompts.compatibility_fixtures import build_aidamir_angela_prompt_input
+from astra.llm.schemas.compatibility import CompatibilityLlmOutput
 from astra.telegram.button_texts import BTN_COMPATIBILITY
 from astra.telegram.keyboards import main_menu_keyboard, prediction_followup_keyboard
 from astra.users import crud as users_crud
@@ -24,22 +22,21 @@ logger = logging.getLogger(__name__)
 router = Router(name="compatibility_preview")
 
 COMPATIBILITY_LLM_IN_PROGRESS = (
-    "Генерирую через <b>OpenRouter</b>…\n"
-    "Тот же промпт, что в «Предсказание на сегодня» — сравни ответы ✨"
+    "Генерирую разбор совместимости через <b>DeepSeek</b>…\n"
+    "Промпт синастрии → JSON под PDF ✨"
 )
 COMPATIBILITY_LLM_HEADER = (
-    "🧪 <b>OpenRouter</b> — тот же промпт Astrid v3\n"
-    "Сравни с «Предсказание на сегодня» (Ollama) и выбери, что лучше.\n\n"
+    "🧪 <b>DeepSeek</b> — превью синастрии\n"
+    "Пока на эталонной паре Айдамир × Анжела (до FSM партнёра).\n\n"
 )
-OPENROUTER_NOT_CONFIGURED_TEXT = (
-    "OpenRouter не настроен.\n"
-    "Добавь <code>OPENROUTER_API_KEY</code> и <code>OPENROUTER_ENABLED=true</code> в .env"
+DEEPSEEK_NOT_CONFIGURED_TEXT = (
+    "DeepSeek не настроен.\n"
+    "Добавь <code>DEEPSEEK_API_KEY</code> и <code>DEEPSEEK_ENABLED=true</code> в .env"
 )
 _COMPATIBILITY_FAILURE_TEXT = {
-    "disabled": OPENROUTER_NOT_CONFIGURED_TEXT,
-    "timeout": "OpenRouter не ответил вовремя. Попробуй ещё раз чуть позже.",
-    "connection": "Не удалось подключиться к OpenRouter. Проверь сеть и ключ.",
-    "sanitize_empty": "Модель вернула пустой текст после очистки.",
+    "disabled": DEEPSEEK_NOT_CONFIGURED_TEXT,
+    "timeout": "DeepSeek не ответил вовремя. Попробуй ещё раз чуть позже.",
+    "connection": "Не удалось подключиться к DeepSeek. Проверь сеть и ключ.",
     "empty_response": "Модель вернула пустой ответ.",
 }
 
@@ -49,26 +46,51 @@ def _failure_message(reason: str) -> str:
         return _COMPATIBILITY_FAILURE_TEXT[reason]
     if reason.startswith("http_429"):
         return (
-            "Free-модель на OpenRouter перегружена (лимит провайдера).\n"
-            "Подожди 1–2 минуты и нажми снова. "
-            "Лимит free: ~20 запросов/мин и ~50/день — см. openrouter.ai/docs."
+            "DeepSeek вернул 429 — лимит запросов.\n"
+            "Подожди минуту и попробуй снова."
         )
     if reason.startswith("http_"):
         detail = reason.split(":", 1)[1] if ":" in reason else ""
         code = reason.split(":", 1)[0].removeprefix("http_")
         if detail:
-            return f"OpenRouter API: {code} — {detail}"
-        return f"OpenRouter API вернул ошибку ({reason}). Проверь ключ на openrouter.ai."
+            return f"DeepSeek API: {code} — {detail}"
+        return (
+            f"DeepSeek API вернул ошибку ({reason}). "
+            "Проверь ключ на platform.deepseek.com."
+        )
+    if reason.startswith(("json_invalid", "validation")):
+        return f"Модель вернула невалидный JSON: {reason}"
     return "Не получилось сгенерировать ответ. Попробуй ещё раз."
 
 
-def _today_for_profile(profile) -> date:  # noqa: ANN001
-    return datetime.now(ZoneInfo(profile.timezone)).date()
+def _format_metric_bars(output: CompatibilityLlmOutput) -> str:
+    lines: list[str] = []
+    for metric in output.metrics:
+        pct = int(round(metric.value * 100))
+        lines.append(f"• {metric.label}: {pct}%")
+    return "\n".join(lines)
+
+
+def _format_compatibility_preview(output: CompatibilityLlmOutput, *, model_label: str) -> str:
+    header = COMPATIBILITY_LLM_HEADER.replace(
+        "<b>DeepSeek</b>",
+        f"<b>DeepSeek</b> ({model_label})",
+        1,
+    )
+    parts = [
+        header,
+        f"<b>Краткий итог</b>\n{output.tldr}",
+        f"<b>Метрики</b>\n{_format_metric_bars(output)}",
+        f"<b>Натальный инсайт</b>\n{output.natal_insight}",
+        f"<b>Вывод</b>\n{output.conclusion_quote}",
+        f"<b>Практика на неделю</b>\n{output.conclusion_tip}",
+    ]
+    return "\n\n".join(parts)
 
 
 @router.message(F.text == BTN_COMPATIBILITY)
-async def compatibility_openrouter_preview(message: Message, session: AsyncSession) -> None:
-    """Временно: OpenRouter с тем же Astrid-промптом для сравнения с Ollama."""
+async def compatibility_deepseek_preview(message: Message, session: AsyncSession) -> None:
+    """Превью: промпт синастрии → DeepSeek V4-Flash → структурированный ответ."""
     if message.from_user is None:
         return
 
@@ -78,35 +100,29 @@ async def compatibility_openrouter_preview(message: Message, session: AsyncSessi
         return
 
     settings = get_settings()
-    openrouter = get_openrouter_provider(settings)
-    if not openrouter.is_configured():
-        await message.answer(OPENROUTER_NOT_CONFIGURED_TEXT, parse_mode="HTML")
+    deepseek = get_deepseek_provider(settings)
+    if not deepseek.is_configured():
+        await message.answer(DEEPSEEK_NOT_CONFIGURED_TEXT, parse_mode="HTML")
         return
 
     await message.answer(COMPATIBILITY_LLM_IN_PROGRESS, parse_mode="HTML")
 
-    profile = user.profile
-    target = _today_for_profile(profile)
+    prompt_input = build_aidamir_angela_prompt_input()
     try:
-        ctx, chart = await build_context_for_date(session, user, profile, target)
-        archetype = pick_question_archetype(user.id, target)
-        body, failure_reason = await generate_astrid_body(
-            ctx,
-            profile,
-            chart,
-            openrouter,
+        output, failure_reason = await generate_compatibility_output(
+            prompt_input,
+            deepseek,
             settings,
-            archetype=archetype,
         )
     except Exception:
-        logger.exception("Compatibility OpenRouter preview failed for user %s", user.id)
+        logger.exception("Compatibility DeepSeek preview failed for user %s", user.id)
         await message.answer(
-            "Что-то пошло не так при подготовке данных. Попробуй позже.",
+            "Что-то пошло не так при генерации. Попробуй позже.",
             reply_markup=main_menu_keyboard(),
         )
         return
 
-    if not body:
+    if output is None:
         await message.answer(
             _failure_message(failure_reason),
             parse_mode="HTML",
@@ -114,14 +130,8 @@ async def compatibility_openrouter_preview(message: Message, session: AsyncSessi
         )
         return
 
-    model_label = settings.openrouter_model
-    header = COMPATIBILITY_LLM_HEADER.replace(
-        "<b>OpenRouter</b>",
-        f"<b>OpenRouter</b> ({model_label})",
-        1,
-    )
     await message.answer(
-        header + body,
+        _format_compatibility_preview(output, model_label=settings.deepseek_model),
         parse_mode="HTML",
         reply_markup=prediction_followup_keyboard(),
     )
