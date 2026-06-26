@@ -3,13 +3,15 @@
 from __future__ import annotations
 
 from astra.core.config import Settings, get_settings
+from astra.llm.api.deepseek import DeepSeekProvider
 from astra.llm.api.gemini import GeminiProvider
 from astra.llm.api.grok import GrokProvider
+from astra.llm.api.openai import OpenAIProvider
 from astra.llm.api.openrouter import OpenRouterProvider
 from astra.llm.base import BaseLlmProvider
 from astra.llm.local.ollama import OllamaProvider
 
-_KNOWN_PROVIDERS = frozenset({"ollama", "grok", "gemini", "openrouter"})
+_KNOWN_PROVIDERS = frozenset({"ollama", "grok", "gemini", "openrouter", "openai", "deepseek"})
 
 
 def get_llm_provider(name: str, settings: Settings | None = None) -> BaseLlmProvider:
@@ -25,6 +27,10 @@ def get_llm_provider(name: str, settings: Settings | None = None) -> BaseLlmProv
         return GrokProvider(cfg)
     if provider == "gemini":
         return GeminiProvider(cfg)
+    if provider == "openai":
+        return OpenAIProvider(cfg)
+    if provider == "deepseek":
+        return DeepSeekProvider(cfg)
     return OpenRouterProvider(cfg)
 
 
@@ -42,3 +48,11 @@ def get_gemini_provider(settings: Settings | None = None) -> GeminiProvider:
 
 def get_openrouter_provider(settings: Settings | None = None) -> OpenRouterProvider:
     return OpenRouterProvider(settings or get_settings())
+
+
+def get_openai_provider(settings: Settings | None = None) -> OpenAIProvider:
+    return OpenAIProvider(settings or get_settings())
+
+
+def get_deepseek_provider(settings: Settings | None = None) -> DeepSeekProvider:
+    return DeepSeekProvider(settings or get_settings())
