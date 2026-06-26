@@ -51,6 +51,34 @@ class Settings(BaseSettings):
     ollama_enabled: bool = True
     ollama_timeout_seconds: float = 300.0
 
+    # xAI Grok — платные продукты (совместимость и др.)
+    grok_enabled: bool = False
+    xai_api_key: str = ""
+    # Дешёвая модель для тестов на бесплатных кредитах console.x.ai ($25 при регистрации)
+    grok_model: str = "grok-4-1-fast-non-reasoning"
+    grok_base_url: str = "https://api.x.ai/v1"
+    grok_timeout_seconds: float = 120.0
+
+    # Google Gemini (AI Studio) — платные продукты / A-B тесты
+    gemini_enabled: bool = False
+    gemini_api_key: str = ""
+    gemini_model: str = "gemini-2.0-flash"
+    gemini_base_url: str = "https://generativelanguage.googleapis.com/v1beta"
+    gemini_timeout_seconds: float = 120.0
+
+    # OpenRouter — единый API к разным LLM (OpenAI-compatible)
+    openrouter_enabled: bool = False
+    openrouter_api_key: str = ""
+    openrouter_base_url: str = "https://openrouter.ai/api/v1"
+    # Qwen3 Next 80B Instruct — сильный instruct, RU, 262K ctx, :free на OpenRouter
+    openrouter_model: str = "qwen/qwen3-next-80b-a3b-instruct:free"
+    # Через запятую — fallback при 429/даунтайме upstream (см. openrouter.ai/docs/guides/routing/model-fallbacks)
+    openrouter_fallback_models: str = (
+        "google/gemma-4-31b-it:free,google/gemma-4-26b-a4b-it:free,"
+        "mistralai/mistral-small-3.1-24b-instruct:free"
+    )
+    openrouter_timeout_seconds: float = 120.0
+
     # Sentry — ошибки и (опционально) трейсы; стенд: local | dev | prod
     sentry_dsn: str | None = None
     sentry_enabled: bool = True

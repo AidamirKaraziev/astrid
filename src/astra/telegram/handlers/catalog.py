@@ -5,6 +5,7 @@ from aiogram.types import CallbackQuery, Message
 from astra.core.config import get_settings
 from astra.telegram.button_texts import (
     BTN_BACK_MENU,
+    BTN_COMPATIBILITY,
     BTN_TAROT,
     BTN_TAROT_DECISION,
     BTN_TAROT_RELATIONS,
@@ -23,7 +24,7 @@ from astra.telegram.keyboards import help_keyboard, main_menu_keyboard, tarot_ke
 
 router = Router(name="catalog")
 
-_PAID_STUB_BUTTONS = frozenset(PAID_PRODUCT_BUTTONS) - {BTN_TAROT}
+_PAID_STUB_BUTTONS = frozenset(PAID_PRODUCT_BUTTONS) - {BTN_TAROT, BTN_COMPATIBILITY}
 _TAROT_STUB_BUTTONS = frozenset(TAROT_PRODUCT_BUTTONS)
 
 
