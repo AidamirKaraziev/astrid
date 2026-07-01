@@ -9,13 +9,14 @@ src/astra/reports/synastry/
 ├── __init__.py      # generate_synastry_pdf(), публичные типы
 ├── types.py         # SynastryReportData и вложенные dataclass
 ├── theme.py         # цвета, размеры, звёздное поле, легенда аспектов
-├── fonts.py         # регистрация DejaVu/Arial с кириллицей
+├── fonts.py         # Cormorant Garamond (bundled TTF, кириллица)
+├── assets/fonts/    # CormorantGaramond Regular + Bold, OFL, едут в wheel
 ├── bot_link.py      # resolve_telegram_bot_url()
 ├── sample_data.py   # демо: Айдамир × Анжела
 ├── builder.py       # SynastryPdfBuilder — отрисовка страниц
 ```
 
-Шрифты: `data/fonts/DejaVuSans.ttf`, `data/fonts/DejaVuSans-Bold.ttf`.
+Шрифт: **Cormorant Garamond** в `src/astra/reports/synastry/assets/fonts/` — bundled OFL, работает на macOS, Linux, CI и Docker без системных зависимостей. Тонкий сериф под тёмный космический фон и золотые акценты.
 
 ## Зависимости
 

@@ -26,6 +26,7 @@ def profile_to_read(profile: Profile) -> ProfileRead:
         birth_time_value = profile.birth_time.time()
     return ProfileRead(
         display_name=profile.display_name,
+        gender=profile.gender,
         birth_date=profile.birth_date,
         birth_time=birth_time_value,
         birth_place=profile.birth_place,

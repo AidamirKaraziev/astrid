@@ -22,6 +22,7 @@ from astra.telegram.states import OnboardingStates, ProfileStates
 _KEYBOARD_SUPPRESSED_FSM_STATES: frozenset[str] = frozenset(
     {
         OnboardingStates.welcome.state,
+        OnboardingStates.gender.state,
         OnboardingStates.birth_date.state,
         OnboardingStates.birth_place_query.state,
         ProfileStates.edit_notification_place_query.state,

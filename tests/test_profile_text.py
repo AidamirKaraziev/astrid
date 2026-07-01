@@ -18,6 +18,7 @@ def test_profile_card_a2_layout() -> None:
     user = SimpleNamespace(points=7, streak_current=1)
     profile = SimpleNamespace(
         display_name="Aidamir",
+        gender="мужчина",
         birth_date=date(1998, 2, 14),
         birth_time=datetime(1998, 2, 14, 0, 34, tzinfo=timezone.utc),
         birth_place="Козет, Республика Адыгея, Россия",
@@ -28,6 +29,7 @@ def test_profile_card_a2_layout() -> None:
     text = format_profile_card(user, profile)
     assert text.startswith("✨ Твой профиль")
     assert "👤 <b>Aidamir</b>" in text
+    assert "👨 Мужчина" in text
     assert "📅 14.02.1998" in text
     assert "🕐 " in text
     assert "📍 Козет, Адыгея" in text
@@ -44,6 +46,7 @@ def test_profile_card_hints_when_incomplete() -> None:
     user = SimpleNamespace(points=0, streak_current=0)
     profile = SimpleNamespace(
         display_name="Тест",
+        gender=None,
         birth_date=date(2000, 1, 1),
         birth_time=None,
         birth_place="",
@@ -54,3 +57,4 @@ def test_profile_card_hints_when_incomplete() -> None:
     text = format_profile_card(user, profile)
     assert "время рождения" in text.lower()
     assert "место рождения" in text.lower()
+    assert "укажи пол" in text.lower()

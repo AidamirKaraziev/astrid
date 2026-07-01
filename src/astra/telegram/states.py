@@ -3,6 +3,7 @@ from aiogram.fsm.state import State, StatesGroup
 
 class OnboardingStates(StatesGroup):
     welcome = State()
+    gender = State()
     birth_date = State()
     birth_place_query = State()
 

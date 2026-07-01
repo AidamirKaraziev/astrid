@@ -41,6 +41,7 @@ def test_free_text_refreshes_main_menu() -> None:
 
 
 def test_onboarding_fsm_suppresses_keyboard() -> None:
+    assert is_fsm_keyboard_suppressed(OnboardingStates.gender.state)
     assert is_fsm_keyboard_suppressed(OnboardingStates.birth_date.state)
     zone = resolve_keyboard_zone(
         incoming_text=BTN_PREDICTION_TODAY,

@@ -19,13 +19,16 @@ from astra.telegram.button_texts import BTN_INVITE, BTN_PREDICTION_TODAY, BTN_PR
 from astra.telegram.keyboards import (
     main_menu_keyboard,
     prediction_followup_keyboard,
+    profile_gender_inline_keyboard,
     profile_menu_keyboard,
     share_keyboard,
 )
+from astra.telegram.profile_gender_prompt import GENDER_SAVED_TEXT
 from astra.telegram.states import ProfileStates
 from astra.telegram.utils import parse_birth_date, parse_birth_time
 from astra.users import crud as users_crud
 from astra.telegram.profile_text import format_profile_card
+from astra.users.gender import GENDER_FEMALE, GENDER_MALE, gender_display_label
 from astra.users.getters import profile_to_read
 
 router = Router(name="menu")
@@ -143,6 +146,43 @@ async def save_name(message: Message, state: FSMContext, session: AsyncSession) 
     await users_crud.update_profile(session, user.profile, display_name=name)
     await state.clear()
     await message.answer(f"Имя обновлено: {name} ✨", reply_markup=main_menu_keyboard())
+
+
+@router.callback_query(F.data == "profile:gender")
+async def cb_edit_gender(callback: CallbackQuery) -> None:
+    if callback.message:
+        await callback.message.answer(
+            "Выбери пол:",
+            reply_markup=profile_gender_inline_keyboard(),
+        )
+    await callback.answer()
+
+
+@router.callback_query(F.data.in_({"profile:gender:male", "profile:gender:female"}))
+async def cb_save_gender(callback: CallbackQuery, session: AsyncSession) -> None:
+    if callback.message is None or callback.from_user is None:
+        await callback.answer()
+        return
+    user = await _get_user(session, callback.from_user.id)
+    if user is None or user.profile is None:
+        await callback.answer("Сначала: /start", show_alert=True)
+        return
+
+    gender = GENDER_MALE if callback.data == "profile:gender:male" else GENDER_FEMALE
+    had_gender = user.profile.gender is not None
+    await users_crud.update_profile(session, user.profile, gender=gender)
+    label = gender_display_label(gender) or gender
+    if callback.message:
+        text = (
+            f"Пол обновлён: {label} ✨"
+            if had_gender
+            else GENDER_SAVED_TEXT.format(label=label)
+        )
+        await callback.message.answer(
+            text,
+            reply_markup=main_menu_keyboard(),
+        )
+    await callback.answer()
 
 
 @router.callback_query(F.data == "profile:date")

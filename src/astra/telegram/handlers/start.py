@@ -8,10 +8,12 @@ from astra.referrals import crud as referrals_crud
 from astra.services.onboarding_service import sync_user_from_telegram
 from astra.services.points_service import register_daily_activity
 from astra.services.referral_service import apply_referral_on_start
-from aiogram.types import KeyboardButton, ReplyKeyboardMarkup, ReplyKeyboardRemove
+from aiogram.types import KeyboardButton, ReplyKeyboardMarkup
 
 from astra.telegram.button_texts import BTN_PROFILE
 from astra.telegram.keyboards import main_menu_keyboard
+from astra.telegram.keyboards import gender_keyboard
+from astra.telegram.profile_gender_prompt import prompt_gender_if_missing
 from astra.telegram.states import OnboardingStates
 from astra.telegram.utils import default_display_name, extract_referral_code
 from astra.users import crud as users_crud
@@ -55,6 +57,7 @@ async def cmd_start(
     restart = (command.args or "").strip().lower() in {"restart", "again", "reset", "заново"}
     if user.onboarding_completed and user.profile and not restart:
         await message.answer("Главное меню ✨", reply_markup=main_menu_keyboard())
+        await prompt_gender_if_missing(message, user.profile)
         return
 
     if restart:
@@ -95,12 +98,11 @@ async def cmd_continue(
             await state.update_data(user_id=str(user.id))
     display_name = data.get("default_name", "друг")
     await state.update_data(display_name=display_name)
-    await state.set_state(OnboardingStates.birth_date)
+    await state.set_state(OnboardingStates.gender)
     await message.answer(
         f"Сохранила тебя как <b>{display_name}</b>. "
         f"Изменить имя можно в разделе «{BTN_PROFILE}».\n\n"
-        "📅 Укажи дату рождения в формате <b>ДД.ММ.ГГГГ</b>\n"
-        "Например: <code>15.03.1990</code>",
+        "Укажи свой пол — так точнее будут формулировки в разборе.",
         parse_mode="HTML",
-        reply_markup=ReplyKeyboardRemove(),
+        reply_markup=gender_keyboard(),
     )

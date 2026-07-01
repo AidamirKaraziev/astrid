@@ -4,6 +4,7 @@ from uuid import uuid4
 import pytest
 
 from astra.services.onboarding_service import OnboardingRegistrationData, parse_registration_fsm
+from astra.users.gender import GENDER_FEMALE
 
 
 def test_registration_from_fsm_ok() -> None:
@@ -24,6 +25,33 @@ def test_registration_from_fsm_ok() -> None:
     assert reg.birth_place_id == birth_place_id
     assert reg.birth_place_display == "Москва"
     assert reg.notification_place_id is None
+    assert reg.gender is None
+
+
+def test_registration_from_fsm_with_gender() -> None:
+    reg = OnboardingRegistrationData.from_fsm(
+        {
+            "user_id": str(uuid4()),
+            "display_name": "Аида",
+            "gender": GENDER_FEMALE,
+            "birth_date": "1990-03-15",
+            "birth_place_id": str(uuid4()),
+        },
+    )
+    assert reg.gender == GENDER_FEMALE
+
+
+def test_registration_from_fsm_invalid_gender() -> None:
+    with pytest.raises(ValueError, match="gender must be"):
+        OnboardingRegistrationData.from_fsm(
+            {
+                "user_id": str(uuid4()),
+                "display_name": "Test",
+                "gender": "unknown",
+                "birth_date": "1990-03-15",
+                "birth_place_id": str(uuid4()),
+            },
+        )
 
 
 def test_registration_from_fsm_with_notification_optional() -> None:

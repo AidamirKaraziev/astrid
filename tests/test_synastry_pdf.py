@@ -21,7 +21,10 @@ def test_resolve_telegram_bot_url_explicit() -> None:
 
 
 def test_resolve_telegram_bot_url_from_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    from astra.core.config import get_settings
+
     monkeypatch.setenv("TELEGRAM_BOT_USERNAME", "env_bot")
+    get_settings.cache_clear()
     assert resolve_telegram_bot_url() == "https://t.me/env_bot"
 
 

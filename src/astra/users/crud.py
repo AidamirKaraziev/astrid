@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from astra.places import crud as places_crud
+from astra.users.gender import Gender
 from astra.users.models import Profile, User
 
 logger = logging.getLogger(__name__)
@@ -64,10 +65,12 @@ async def create_profile(
     notification_place_id: UUID | None = None,
     city: str,
     timezone: str,
+    gender: Gender | None = None,
 ) -> Profile:
     profile = Profile(
         user_id=user_id,
         display_name=display_name,
+        gender=gender,
         birth_date=birth_date,
         birth_place_id=birth_place_id,
         notification_place_id=notification_place_id,

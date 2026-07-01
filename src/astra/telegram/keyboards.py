@@ -5,6 +5,8 @@ from astra.telegram.button_texts import (
     BTN_ASK_STARS,
     BTN_BACK_MENU,
     BTN_COMPATIBILITY,
+    BTN_GENDER_FEMALE,
+    BTN_GENDER_MALE,
     BTN_INVITE,
     BTN_MONTH_FORECAST,
     BTN_NATAL,
@@ -58,6 +60,18 @@ def skip_keyboard() -> ReplyKeyboardMarkup:
     )
 
 
+def gender_keyboard() -> ReplyKeyboardMarkup:
+    return ReplyKeyboardMarkup(
+        keyboard=[
+            [
+                KeyboardButton(text=BTN_GENDER_MALE),
+                KeyboardButton(text=BTN_GENDER_FEMALE),
+            ],
+        ],
+        resize_keyboard=True,
+    )
+
+
 def share_keyboard(share_url: str) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
@@ -76,6 +90,7 @@ def profile_menu_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [InlineKeyboardButton(text="✏️ Имя", callback_data="profile:name")],
+            [InlineKeyboardButton(text="⚧ Пол", callback_data="profile:gender")],
             [InlineKeyboardButton(text="📅 Дата рождения", callback_data="profile:date")],
             [InlineKeyboardButton(text="🕐 Время рождения", callback_data="profile:time")],
             [InlineKeyboardButton(text="📍 Место рождения", callback_data="profile:place")],
@@ -86,6 +101,17 @@ def profile_menu_keyboard() -> InlineKeyboardMarkup:
                 ),
             ],
             [InlineKeyboardButton(text="◀️ Назад", callback_data="menu:home")],
+        ],
+    )
+
+
+def profile_gender_inline_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(text=BTN_GENDER_MALE, callback_data="profile:gender:male"),
+                InlineKeyboardButton(text=BTN_GENDER_FEMALE, callback_data="profile:gender:female"),
+            ],
         ],
     )
 

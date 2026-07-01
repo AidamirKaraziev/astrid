@@ -13,6 +13,7 @@ from astra.places.getters import get_place_read
 from astra.referrals import crud as referrals_crud
 from astra.services.referral_service import complete_referral_rewards
 from astra.users import crud as users_crud
+from astra.users.gender import Gender, normalize_gender
 from astra.users.models import Profile, User
 
 logger = logging.getLogger(__name__)
@@ -26,6 +27,7 @@ class OnboardingRegistrationData(BaseModel):
 
     user_id: UUID
     display_name: str = Field(min_length=1, max_length=255)
+    gender: Gender | None = None
     birth_date: date
     birth_place_id: UUID
     birth_place_display: str = ""
@@ -63,9 +65,15 @@ class OnboardingRegistrationData(BaseModel):
             UUID(str(raw_notification_place_id)) if raw_notification_place_id else None
         )
 
+        raw_gender = data.get("gender")
+        gender = normalize_gender(str(raw_gender)) if raw_gender else None
+        if raw_gender and gender is None:
+            raise ValueError("gender must be 'мужчина' or 'женщина'")
+
         return cls(
             user_id=UUID(str(raw_user_id)),
             display_name=display_name,
+            gender=gender,
             birth_date=birth_date,
             birth_place_id=UUID(str(raw_birth_place_id)),
             birth_place_display=str(data.get("birth_place_display") or ""),
@@ -96,6 +104,7 @@ def _profile_fields_from_registration(
 ) -> dict[str, object]:
     return {
         "display_name": reg.display_name,
+        "gender": reg.gender,
         "birth_date": reg.birth_date,
         "birth_place_id": reg.birth_place_id,
         "notification_place_id": reg.notification_place_id,

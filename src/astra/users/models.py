@@ -6,6 +6,7 @@ from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from astra.db.base import Base, TimestampMixin
+from astra.users.gender import Gender
 
 
 class User(Base, TimestampMixin):
@@ -58,6 +59,7 @@ class Profile(Base, TimestampMixin):
         unique=True,
     )
     display_name: Mapped[str] = mapped_column(String(255))
+    gender: Mapped[Gender | None] = mapped_column(String(16), nullable=True)
     birth_date: Mapped[date] = mapped_column(Date)
     birth_time: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     birth_place: Mapped[str | None] = mapped_column(String(255), nullable=True)

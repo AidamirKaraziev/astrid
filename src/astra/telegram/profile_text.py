@@ -5,6 +5,7 @@ from typing import Protocol
 from zoneinfo import ZoneInfo
 
 from astra.places.normalize import normalize_place_query
+from astra.users.gender import Gender, gender_display_label
 
 _SEPARATOR = "──────────────"
 
@@ -18,10 +19,14 @@ _HINT_NOTIFICATION_CITY = (
     "🌍 <i>Выбери город для уведомлений в профиле — "
     "пришлю предсказание в 09:00 по твоему времени</i>"
 )
+_HINT_GENDER = (
+    "⚧ <i>Укажи пол в профиле — так формулировки в разборе будут точнее</i>"
+)
 
 
 class _ProfileView(Protocol):
     display_name: str
+    gender: Gender | None
     birth_date: date
     birth_time: datetime | None
     birth_place: str | None
@@ -71,6 +76,13 @@ def shorten_city_label(full: str) -> str:
     return text.split(",")[0].strip()
 
 
+def _format_gender_line(profile: _ProfileView) -> str:
+    label = gender_display_label(profile.gender)
+    if label is None:
+        return _HINT_GENDER
+    return label
+
+
 def _format_birth_time_line(profile: _ProfileView) -> str:
     if profile.birth_time is None:
         return _HINT_BIRTH_TIME
@@ -104,6 +116,7 @@ def format_profile_card(user: _UserView, profile: _ProfileView) -> str:
         "",
         f"👤 <b>{profile.display_name}</b>",
         "",
+        _format_gender_line(profile),
         f"📅 {profile.birth_date.strftime('%d.%m.%Y')}",
         _format_birth_time_line(profile),
         _format_birth_place_line(profile),

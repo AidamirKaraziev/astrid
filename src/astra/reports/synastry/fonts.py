@@ -11,9 +11,12 @@ from astra.reports.synastry.theme import FONT, FONT_BOLD
 
 _FONTS_REGISTERED = False
 
+_FONT_REGULAR = "CormorantGaramond-Regular.ttf"
+_FONT_BOLD = "CormorantGaramond-Bold.ttf"
 
-def repo_root() -> Path:
-    return Path(__file__).resolve().parents[4]
+
+def bundled_fonts_dir() -> Path:
+    return Path(__file__).resolve().parent / "assets" / "fonts"
 
 
 def register_synastry_fonts() -> None:
@@ -21,24 +24,17 @@ def register_synastry_fonts() -> None:
     if _FONTS_REGISTERED:
         return
 
-    root = repo_root()
-    candidates: list[tuple[Path, Path]] = [
-        (root / "data/fonts/DejaVuSans.ttf", root / "data/fonts/DejaVuSans-Bold.ttf"),
-        (
-            Path("/System/Library/Fonts/Supplemental/Arial.ttf"),
-            Path("/System/Library/Fonts/Supplemental/Arial Bold.ttf"),
-        ),
-        (
-            Path("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"),
-            Path("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"),
-        ),
-    ]
-    for regular, bold in candidates:
-        if regular.is_file() and bold.is_file():
-            pdfmetrics.registerFont(TTFont(FONT, str(regular)))
-            pdfmetrics.registerFont(TTFont(FONT_BOLD, str(bold)))
-            pdfmetrics.registerFontFamily(FONT, normal=FONT, bold=FONT_BOLD)
-            _FONTS_REGISTERED = True
-            return
-    msg = "Не найден TTF с кириллицей. Положи DejaVuSans в data/fonts/."
-    raise RuntimeError(msg)
+    bundled = bundled_fonts_dir()
+    regular = bundled / _FONT_REGULAR
+    bold = bundled / _FONT_BOLD
+    if not regular.is_file() or not bold.is_file():
+        msg = (
+            f"Не найден TTF с кириллицей. "
+            f"Ожидаются {_FONT_REGULAR} и {_FONT_BOLD} в {bundled}/."
+        )
+        raise RuntimeError(msg)
+
+    pdfmetrics.registerFont(TTFont(FONT, str(regular)))
+    pdfmetrics.registerFont(TTFont(FONT_BOLD, str(bold)))
+    pdfmetrics.registerFontFamily(FONT, normal=FONT, bold=FONT_BOLD)
+    _FONTS_REGISTERED = True
