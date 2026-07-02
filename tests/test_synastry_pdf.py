@@ -28,6 +28,14 @@ def test_resolve_telegram_bot_url_from_env(monkeypatch: pytest.MonkeyPatch) -> N
     assert resolve_telegram_bot_url() == "https://t.me/env_bot"
 
 
+def test_bundled_synastry_fonts_present() -> None:
+    from astra.reports.synastry.fonts import bundled_fonts_dir
+
+    fonts_dir = bundled_fonts_dir()
+    assert (fonts_dir / "PTSans-Regular.ttf").is_file(), f"missing regular font in {fonts_dir}"
+    assert (fonts_dir / "PTSans-Bold.ttf").is_file(), f"missing bold font in {fonts_dir}"
+
+
 def test_generate_synastry_pdf_smoke(tmp_path: Path) -> None:
     out = tmp_path / "synastry.pdf"
     path = generate_synastry_pdf(out, build_sample_report())

@@ -1,2 +1,3 @@
-Cormorant Garamond — SIL Open Font License 1.1.
-Источник: https://fonts.google.com/specimen/Cormorant+Garamond
+PT Sans — SIL Open Font License 1.1.
+Источник: https://fonts.google.com/specimen/PT+Sans
+Файлы: PTSans-Regular.ttf, PTSans-Bold.ttf (PT Sans Web)

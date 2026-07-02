@@ -17,6 +17,11 @@ COPY src ./src
 COPY alembic ./alembic
 COPY alembic.ini ./
 
+# PDF синастрии: PT Sans должен быть в репозитории (не скачивается при сборке)
+RUN test -f src/astra/reports/synastry/assets/fonts/PTSans-Regular.ttf \
+    && test -f src/astra/reports/synastry/assets/fonts/PTSans-Bold.ttf \
+    || (echo "ERROR: PTSans-Regular.ttf / PTSans-Bold.ttf отсутствуют в src/astra/reports/synastry/assets/fonts/" >&2; exit 1)
+
 ENV PATH="/app/.venv/bin:$PATH"
 ENV PYTHONPATH=/app/src
 

@@ -11,8 +11,8 @@ CONTENT_W = W - 2 * MARGIN
 FOOTER_TOP = 34
 CONTENT_BOTTOM = FOOTER_TOP + 8
 
-FONT = "AstraSans"
-FONT_BOLD = "AstraSans-Bold"
+FONT = "PTSans"
+FONT_BOLD = "PTSans-Bold"
 
 GAP = {"xs": 6, "sm": 10, "md": 14, "lg": 18}
 TYPE = {"caption": 11, "body": 14, "h2": 17, "h1": 20, "display": 26, "quote": 15}

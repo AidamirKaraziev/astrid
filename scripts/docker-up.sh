@@ -25,6 +25,18 @@ docker compose --profile test run --rm --build test
 echo "==> 4/4 Собираем и запускаем весь стек..."
 docker compose up --build -d
 
+echo "==> Проверяем PT Sans в образе worker..."
+docker compose exec -T worker python -c "
+from pathlib import Path
+from astra.reports.synastry.fonts import bundled_fonts_dir, register_synastry_fonts
+d = bundled_fonts_dir()
+for name in ('PTSans-Regular.ttf', 'PTSans-Bold.ttf'):
+    p = d / name
+    assert p.is_file(), f'missing {p}'
+register_synastry_fonts()
+print('PT Sans OK:', d)
+"
+
 echo ""
 echo "Готово. Проверка:"
 echo "  curl http://localhost:8000/health"

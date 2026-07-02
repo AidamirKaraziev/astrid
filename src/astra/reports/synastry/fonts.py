@@ -11,8 +11,8 @@ from astra.reports.synastry.theme import FONT, FONT_BOLD
 
 _FONTS_REGISTERED = False
 
-_FONT_REGULAR = "CormorantGaramond-Regular.ttf"
-_FONT_BOLD = "CormorantGaramond-Bold.ttf"
+_FONT_REGULAR = "PTSans-Regular.ttf"
+_FONT_BOLD = "PTSans-Bold.ttf"
 
 
 def bundled_fonts_dir() -> Path:
