@@ -299,7 +299,19 @@ async def generate_compatibility_llm(
         prompt_input = await build_prompt_input_from_report(session, report)
         output, failure = await generate_compatibility_output(prompt_input, deepseek, settings)
         if output is None:
+            logger.error(
+                "Compatibility LLM failed report=%s reason=%s",
+                report_id,
+                failure,
+            )
             await compatibility_crud.mark_report_failed(session, report, failure or "llm_failed")
+            user = await users_crud.get_user_by_id(session, report.owner_user_id)
+            if user is not None:
+                from astra.services.compatibility_failure_notify import (
+                    send_compatibility_failure_notification,
+                )
+
+                await send_compatibility_failure_notification(user.telegram_id)
             return None
         await compatibility_crud.mark_report_text_ready(session, report, output.model_dump())
         return report

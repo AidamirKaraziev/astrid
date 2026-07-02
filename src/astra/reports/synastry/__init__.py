@@ -7,7 +7,7 @@ from pathlib import Path
 from astra.reports.synastry.bot_link import resolve_telegram_bot_url
 from astra.reports.synastry.builder import SynastryPdfBuilder
 from astra.reports.synastry.fonts import register_synastry_fonts
-from astra.reports.synastry.sample_data import build_sample_report
+from astra.reports.synastry.sample_data import build_prototype_report, build_sample_report
 from astra.reports.synastry.types import (
     AspectData,
     MetricScore,
@@ -23,6 +23,7 @@ __all__ = [
     "SynastryPdfBuilder",
     "SynastryReportData",
     "ZoneBlock",
+    "build_prototype_report",
     "build_sample_report",
     "generate_synastry_pdf",
     "resolve_telegram_bot_url",

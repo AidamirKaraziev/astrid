@@ -79,6 +79,7 @@ def llm_output_to_report_data(
         person_a=_person_data(prompt_input.person_a, accent=ACCENT_BLUE),
         person_b=_person_data(prompt_input.person_b, accent=ACCENT_PURPLE),
         tldr=llm.tldr,
+        pair_story=llm.pair_story,
         natal_insight=llm.natal_insight,
         metrics=tuple(
             MetricScore(m.label, m.value, _METRIC_COLORS[m.label])
@@ -93,4 +94,5 @@ def llm_output_to_report_data(
         conclusion_quote=llm.conclusion_quote,
         conclusion_tip=llm.conclusion_tip,
         working_aspects_intro=llm.working_aspects_intro,
+        read_time_label="~6–7 мин чтения" if llm.pair_story.strip() else "~4 мин чтения",
     )

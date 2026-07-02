@@ -54,6 +54,7 @@ class SynastryReportData:
     zone_blocks: tuple[ZoneBlock, ...]
     conclusion_quote: str
     conclusion_tip: str
+    pair_story: str = ""
     working_aspects_intro: str = "Орб 2–6° — требуют внимания, дают точки роста"
     read_time_label: str = "~4 мин чтения"
     cta_text: str = "Забери еще одно предсказание"

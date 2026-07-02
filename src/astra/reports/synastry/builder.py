@@ -64,6 +64,8 @@ class SynastryPdfBuilder:
 
         self._page_cover()
         self._page_tldr()
+        if self._report.pair_story.strip():
+            self._page_pair_story()
         self._page_natal_both()
         remaining_strong = self._page_legend_and_strong_start()
         if remaining_strong:
@@ -80,6 +82,8 @@ class SynastryPdfBuilder:
 
     def _simulate_page_count(self) -> int:
         total = 5  # cover, tldr, natal, zones, conclusion
+        if self._report.pair_story.strip():
+            total += 1
         total += 1  # legend + first strong batch
 
         y = self._content_top()
@@ -669,6 +673,42 @@ class SynastryPdfBuilder:
 
         for metric in self._report.metrics:
             self._y = self._draw_progress_bar(self._y, metric.label, metric.value, metric.color)
+
+        self._draw_footer()
+
+    def _page_pair_story(self) -> None:
+        self._new_page("story", "История пары")
+        self._draw_bg(vibe="content")
+        self._draw_page_header("История пары", "Как вы звучите вместе")
+        self._draw_radial_glow(W / 2, self._y - 50, 100, GOLD, intensity="section")
+
+        paragraphs = [p.strip() for p in self._report.pair_story.split("\n\n") if p.strip()]
+        pad = 14
+        text_w = CONTENT_W - 2 * pad
+
+        for idx, paragraph in enumerate(paragraphs):
+            box_h = self._text_height(paragraph, text_w, leading=LEADING["body"]) + 2 * pad
+            if not self._fits(box_h + GAP["sm"]) and idx > 0:
+                self._draw_footer()
+                self._new_page("story-cont", "История пары")
+                self._draw_bg(vibe="content")
+                self._draw_page_header("История пары", "продолжение")
+
+            bottom = self._y - box_h
+            glow = "section" if idx == 0 else "card"
+            self._draw_card_bg(bottom, box_h, accent=GOLD if idx == 0 else None, glow=glow)
+            color = CREAM if idx == 0 else MUTED
+            size = TYPE["body"] if idx == 0 else TYPE["body"]
+            self._draw_text_block(
+                paragraph,
+                MARGIN + pad,
+                self._y - pad,
+                text_w,
+                size=size,
+                leading=LEADING["body"],
+                color=color,
+            )
+            self._y = bottom - GAP["md"]
 
         self._draw_footer()
 

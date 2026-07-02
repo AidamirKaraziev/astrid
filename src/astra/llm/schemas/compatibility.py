@@ -112,13 +112,14 @@ class LlmZoneBlock(BaseModel):
 
 
 class CompatibilityLlmOutput(BaseModel):
-    """Текстовые поля PDF — всё, что генерирует LLM."""
+    """Текстовые поля PDF — финальный контракт после assemble."""
 
     tldr: str = Field(..., min_length=40, max_length=340)
+    pair_story: str = Field(..., min_length=120, max_length=1400)
     natal_insight: str = Field(..., min_length=30, max_length=260)
     metrics: list[LlmMetric] = Field(min_length=4, max_length=4)
-    strong_aspects: list[LlmAspectBlock] = Field(min_length=1, max_length=6)
-    working_aspects: list[LlmAspectBlock] = Field(min_length=1, max_length=10)
+    strong_aspects: list[LlmAspectBlock] = Field(min_length=1, max_length=12)
+    working_aspects: list[LlmAspectBlock] = Field(min_length=0, max_length=12)
     zone_blocks: list[LlmZoneBlock] = Field(min_length=3, max_length=3)
     conclusion_quote: str = Field(..., min_length=50, max_length=420)
     conclusion_tip: str = Field(..., min_length=20, max_length=220)

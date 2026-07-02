@@ -20,6 +20,11 @@ _AIDAMIR_ANGELA_STUB_LLM: dict[str, object] = {
         "ваши эмоциональные ритмы и представления о заботе могут сильно различаться, "
         "но это не минус, а задача для роста."
     ),
+    "pair_story": (
+        "Вы встречаетесь на стыке идей и чувств — рядом легче рискнуть и остаться собой.\n\n"
+        "В конфликте один тянет к решению, другой — к проговариванию эмоций; это разные скорости, не война.\n\n"
+        "Сильная сторона — вы не гасите друг друга: даже споря, сохраняете уважение к чувствам партнёра."
+    ),
     "natal_insight": (
         "В этой паре встречаются воздух (Айдамир) и огонь (Анжела): много идей, энтузиазма и движения. "
         "Но Луна Айдамира в Деве требует порядка и анализа, а Луна Анжелы в Близнецах ищет разнообразия "
@@ -238,6 +243,7 @@ def build_aidamir_angela_stub_report() -> SynastryReportData:
     raw = _AIDAMIR_ANGELA_STUB_LLM
     llm = CompatibilityLlmOutput.model_construct(
         tldr=raw["tldr"],
+        pair_story=raw["pair_story"],
         natal_insight=raw["natal_insight"],
         metrics=[LlmMetric.model_construct(**m) for m in raw["metrics"]],  # type: ignore[arg-type]
         strong_aspects=[LlmAspectBlock.model_construct(**a) for a in raw["strong_aspects"]],  # type: ignore[arg-type]
