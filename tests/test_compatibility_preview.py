@@ -1,5 +1,5 @@
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock
 
 import pytest
 
@@ -12,10 +12,6 @@ from astra.llm.api.openai import OpenAIProvider
 from astra.llm.prompts.compatibility_fixtures import build_aidamir_angela_prompt_input
 from astra.llm.types import CompletionResult
 from astra.reports.synastry.stub_report import build_aidamir_angela_stub_report
-from astra.telegram.handlers.compatibility_preview import (
-    COMPATIBILITY_PDF_FAILED,
-    compatibility_pdf_stub,
-)
 
 
 def test_build_compatibility_completion_request_openai_json_mode() -> None:
@@ -112,95 +108,3 @@ def test_build_aidamir_angela_stub_report() -> None:
     assert len(report.strong_aspects) == 3
     assert len(report.working_aspects) == 9
     assert report.metrics[0].value == pytest.approx(0.95)
-
-
-@pytest.mark.anyio
-async def test_compatibility_pdf_stub_sends_document() -> None:
-    message = AsyncMock()
-    message.from_user.id = 42
-    message.answer = AsyncMock()
-    message.answer_document = AsyncMock()
-    session = AsyncMock()
-
-    user = SimpleNamespace(
-        id=1,
-        onboarding_completed=True,
-        profile=SimpleNamespace(gender="мужчина", timezone="Europe/Moscow"),
-    )
-    pdf_path = MagicMock()
-    pdf_path.unlink = MagicMock()
-
-    with patch(
-        "astra.telegram.handlers.compatibility_preview.users_crud.get_user_by_telegram_id",
-        new_callable=AsyncMock,
-        return_value=user,
-    ):
-        with patch(
-            "astra.telegram.handlers.compatibility_preview.render_stub_compatibility_pdf",
-            return_value=pdf_path,
-        ):
-            with patch(
-                "astra.telegram.handlers.compatibility_preview.FSInputFile",
-                return_value="doc",
-            ) as fs_input:
-                await compatibility_pdf_stub(message, session)
-
-    message.answer.assert_awaited_once()
-    fs_input.assert_called_once_with(pdf_path, filename="synastry-aidamir-angela.pdf")
-    message.answer_document.assert_awaited_once()
-    pdf_path.unlink.assert_called_once_with(missing_ok=True)
-
-
-@pytest.mark.anyio
-async def test_compatibility_pdf_stub_failure() -> None:
-    message = AsyncMock()
-    message.from_user.id = 42
-    message.answer = AsyncMock()
-    message.answer_document = AsyncMock()
-    session = AsyncMock()
-
-    user = SimpleNamespace(
-        id=1,
-        onboarding_completed=True,
-        profile=SimpleNamespace(gender="мужчина", timezone="Europe/Moscow"),
-    )
-
-    with patch(
-        "astra.telegram.handlers.compatibility_preview.users_crud.get_user_by_telegram_id",
-        new_callable=AsyncMock,
-        return_value=user,
-    ):
-        with patch(
-            "astra.telegram.handlers.compatibility_preview.render_stub_compatibility_pdf",
-            side_effect=RuntimeError("pdf boom"),
-        ):
-            await compatibility_pdf_stub(message, session)
-
-    assert message.answer.await_count == 2
-    assert COMPATIBILITY_PDF_FAILED in message.answer.await_args_list[-1].args[0]
-
-
-@pytest.mark.anyio
-async def test_compatibility_pdf_stub_prompts_gender_when_missing() -> None:
-    message = AsyncMock()
-    message.from_user.id = 42
-    message.answer = AsyncMock()
-    message.answer_document = AsyncMock()
-    session = AsyncMock()
-
-    user = SimpleNamespace(
-        id=1,
-        onboarding_completed=True,
-        profile=SimpleNamespace(gender=None, timezone="Europe/Moscow"),
-    )
-
-    with patch(
-        "astra.telegram.handlers.compatibility_preview.users_crud.get_user_by_telegram_id",
-        new_callable=AsyncMock,
-        return_value=user,
-    ):
-        await compatibility_pdf_stub(message, session)
-
-    message.answer.assert_awaited_once()
-    assert "пол" in message.answer.await_args.args[0].lower()
-    message.answer_document.assert_not_awaited()

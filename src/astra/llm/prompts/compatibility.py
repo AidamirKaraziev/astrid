@@ -113,8 +113,12 @@ COMPATIBILITY_USER_TEMPLATE = dedent(
     """\
     Составь разбор совместимости для этой пары.
 
+    Контекст разбора: {relationship_context_label}.
+    Режим: {pair_mode_label}.
     Читатель: {reader_name} (person_a, {reader_gender}). Партнёр: {partner_name} (person_b, {partner_gender}).
     Тип продукта: синастрия пары (оба человека с натальными данными).
+
+    {context_instructions}
 
     person_a:
     {person_a_json}
@@ -157,7 +161,7 @@ COMPATIBILITY_USER_TEMPLATE = dedent(
 
     ## Правила заполнения
 
-    1. Пиши на «ты» к {reader_name}; про пару — {reader_name} и {partner_name}.
+    1. {tone_rule}
     2. strong_aspects: только аспекты из synastry_aspects с orb_deg < 2.0 (все такие, обычно 2–5 шт.).
     3. working_aspects: только аспекты с orb_deg от 2.0 до 6.0 (все такие из списка).
     4. Не выдумывай аспекты — каждая карточка должна соответствовать строке из synastry_aspects.
@@ -246,12 +250,65 @@ def build_compatibility_system_prompt() -> str:
     return COMPATIBILITY_SYSTEM_PROMPT
 
 
+def _relationship_label(context: str) -> str:
+    return {
+        "love": "отношения / романтика",
+        "work": "работа / коллеги / деловое партнёрство",
+        "friendship": "дружба",
+    }.get(context, context)
+
+
+def _pair_mode_label(mode: str) -> str:
+    return {
+        "me_partner": "я + партнёр",
+        "two_people": "два человека (нейтральный разбор)",
+    }.get(mode, mode)
+
+
+def _context_instructions(context: str, pair_mode: str, reader_name: str, partner_name: str) -> str:
+    focus = {
+        "love": "Акцент: притяжение, эмоции, Венера/Марс/Луна, язык любви, долгосрочность пары.",
+        "work": "Акцент: совместная работа, роли, Меркурий/Сатурн, границы, доверие, не романтика.",
+        "friendship": "Акцент: дружба, поддержка, общие интересы, Луна/Юпитер, без давления романтики.",
+    }.get(context, "")
+    if pair_mode == "two_people":
+        tone = (
+            f"Пиши нейтрально про пару {reader_name} и {partner_name} (на «они»), "
+            "без обращения «ты» к читателю."
+        )
+    else:
+        tone = f"Пиши на «ты» к {reader_name}; про пару — {reader_name} и {partner_name}."
+    return f"{focus}\n{tone}"
+
+
+def _tone_rule(pair_mode: str, reader_name: str, partner_name: str) -> str:
+    if pair_mode == "two_people":
+        return (
+            f"Пиши нейтрально про {reader_name} и {partner_name} (на «они»), "
+            "без обращения «ты» к читателю."
+        )
+    return f"Пиши на «ты» к {reader_name}; про пару — {reader_name} и {partner_name}."
+
+
 def build_compatibility_user_message(data: CompatibilityPromptInput) -> str:
     aspects = sorted(data.aspects, key=lambda a: a.orb_deg)
     aspect_types = ", ".join(
         typing_cast_aspect_types(),
     )
+    ctx_label = _relationship_label(data.relationship_context)
+    mode_label = _pair_mode_label(data.pair_mode)
+    ctx_instructions = _context_instructions(
+        data.relationship_context,
+        data.pair_mode,
+        data.person_a.name,
+        data.person_b.name,
+    )
+    tone_rule = _tone_rule(data.pair_mode, data.person_a.name, data.person_b.name)
     return COMPATIBILITY_USER_TEMPLATE.format(
+        relationship_context_label=ctx_label,
+        pair_mode_label=mode_label,
+        context_instructions=ctx_instructions,
+        tone_rule=tone_rule,
         reader_name=data.person_a.name,
         reader_gender=data.person_a.gender,
         partner_name=data.person_b.name,

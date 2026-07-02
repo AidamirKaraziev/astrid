@@ -62,6 +62,8 @@ class CompatibilityPromptInput(BaseModel):
     person_a: CompatibilityPersonInput
     person_b: CompatibilityPersonInput
     aspects: list[SynastryAspectInput]
+    relationship_context: Literal["love", "work", "friendship"] = "love"
+    pair_mode: Literal["me_partner", "two_people"] = "me_partner"
 
 
 class LlmAspectBlock(BaseModel):

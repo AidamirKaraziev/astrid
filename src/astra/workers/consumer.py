@@ -8,7 +8,12 @@ from astra.core.config import Settings, get_settings
 from astra.db.session import get_session_factory, init_engine
 from astra.llm.warmup import warmup_ollama_model
 from astra.messaging.publisher import _ensure_topology, parse_task
-from astra.messaging.queues import QUEUE_ASTRO, QUEUE_NOTIFICATIONS, QUEUE_PREDICTIONS
+from astra.messaging.queues import (
+    QUEUE_ASTRO,
+    QUEUE_COMPATIBILITY,
+    QUEUE_NOTIFICATIONS,
+    QUEUE_PREDICTIONS,
+)
 from astra.workers.handlers import dispatch_task
 
 logger = logging.getLogger(__name__)
@@ -33,7 +38,7 @@ async def run_consumer(settings: Settings | None = None) -> None:
 
     await _ensure_topology(channel)
     queues = []
-    for name in (QUEUE_ASTRO, QUEUE_PREDICTIONS, QUEUE_NOTIFICATIONS):
+    for name in (QUEUE_ASTRO, QUEUE_PREDICTIONS, QUEUE_NOTIFICATIONS, QUEUE_COMPATIBILITY):
         queue = await channel.declare_queue(name, durable=True)
         queues.append(queue)
 

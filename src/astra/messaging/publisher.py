@@ -9,8 +9,10 @@ from astra.core.config import Settings, get_settings
 from astra.messaging.queues import (
     EXCHANGE_NAME,
     QUEUE_ASTRO,
+    QUEUE_COMPATIBILITY,
     QUEUE_NOTIFICATIONS,
     QUEUE_PREDICTIONS,
+    ROUTING_COMPATIBILITY_GENERATE,
     ROUTING_NATAL_CHART,
     ROUTING_PREDICTION_GENERATE,
     ROUTING_PREDICTION_SEND,
@@ -37,6 +39,7 @@ async def _ensure_topology(channel: aio_pika.Channel) -> aio_pika.Exchange:
         (QUEUE_ASTRO, ROUTING_NATAL_CHART),
         (QUEUE_PREDICTIONS, ROUTING_PREDICTION_GENERATE),
         (QUEUE_NOTIFICATIONS, ROUTING_PREDICTION_SEND),
+        (QUEUE_COMPATIBILITY, ROUTING_COMPATIBILITY_GENERATE),
     )
     for queue_name, routing_key in bindings:
         queue = await channel.declare_queue(queue_name, durable=True)
@@ -121,6 +124,17 @@ async def publish_prediction_send(
             user_id=user_id,
             prediction_date=prediction_date,
         ),
+        settings,
+    )
+
+
+async def publish_compatibility_generate(
+    report_id: UUID,
+    settings: Settings | None = None,
+) -> None:
+    await _publish(
+        ROUTING_COMPATIBILITY_GENERATE,
+        TaskMessage(type=TaskType.COMPATIBILITY_GENERATE, report_id=report_id),
         settings,
     )
 

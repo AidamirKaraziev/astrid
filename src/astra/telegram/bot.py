@@ -15,7 +15,7 @@ from redis.asyncio import Redis
 from astra.core.config import Settings
 from astra.db.session import get_session_factory
 from astra.telegram.auto_keyboard_middleware import AutoKeyboardMiddleware
-from astra.telegram.handlers import catalog, commands, compatibility_preview, menu, onboarding, places, start
+from astra.telegram.handlers import catalog, commands, compatibility, menu, onboarding, places, start
 from astra.telegram.bot_menu import setup_bot_menu
 from astra.telegram.middlewares import DbSessionMiddleware
 
@@ -85,7 +85,7 @@ async def create_dispatcher(settings: Settings) -> Dispatcher:
     dp.include_router(places.router)
     dp.include_router(onboarding.router)
     dp.include_router(menu.router)
-    dp.include_router(compatibility_preview.router)
+    dp.include_router(compatibility.router)
     dp.include_router(catalog.router)
     return dp
 

@@ -147,6 +147,9 @@ services:
     environment:
       <<: *app-env
       SENTRY_SERVICE: api
+      COMPATIBILITY_PDF_DIR: /data/compatibility
+    volumes:
+      - compatibility_data:/data/compatibility
     ports:
       - "8000:8000"
     depends_on:
@@ -182,6 +185,9 @@ services:
     environment:
       <<: *app-env
       SENTRY_SERVICE: worker
+      COMPATIBILITY_PDF_DIR: /data/compatibility
+    volumes:
+      - compatibility_data:/data/compatibility
     depends_on:
       postgres:
         condition: service_healthy
@@ -197,3 +203,4 @@ services:
 volumes:
   postgres_data:
   ollama_data:
+  compatibility_data:

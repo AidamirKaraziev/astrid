@@ -10,6 +10,10 @@ from astra.services.prediction_pending import clear_prediction_pending
 from astra.messaging.schemas import TaskMessage, TaskType
 from astra.predictions import crud as predictions_crud
 from astra.services.astro_service import refresh_natal_chart_for_profile
+from astra.services.compatibility_service import (
+    deliver_compatibility_report,
+    process_compatibility_report,
+)
 from astra.services.prediction_generation import generate_daily_prediction_resilient
 from astra.services.prediction_service import format_prediction_for_user, mark_prediction_sent
 from astra.users import crud as users_crud
@@ -27,6 +31,8 @@ class PredictionNotReadyError(RuntimeError):
 
 
 async def handle_natal_chart_generate(session: AsyncSession, task: TaskMessage) -> None:
+    if task.user_id is None:
+        return
     user = await users_crud.get_user_by_id(session, task.user_id)
     if user is None or user.profile is None:
         logger.warning("Skip natal chart: user or profile missing %s", task.user_id)
@@ -36,6 +42,8 @@ async def handle_natal_chart_generate(session: AsyncSession, task: TaskMessage) 
 
 
 async def handle_prediction_generate(session: AsyncSession, task: TaskMessage) -> None:
+    if task.user_id is None:
+        return
     user = await users_crud.get_user_by_id(session, task.user_id)
     if user is None or user.profile is None:
         logger.warning("Skip prediction generate: user or profile missing %s", task.user_id)
@@ -69,7 +77,7 @@ async def handle_prediction_generate(session: AsyncSession, task: TaskMessage) -
 
 
 async def handle_prediction_send(session: AsyncSession, task: TaskMessage) -> None:
-    if task.prediction_date is None:
+    if task.prediction_date is None or task.user_id is None:
         logger.warning("Skip send: no prediction_date for %s", task.user_id)
         return
 
@@ -109,6 +117,16 @@ async def handle_prediction_send(session: AsyncSession, task: TaskMessage) -> No
     logger.info("Prediction sent to telegram_id=%s", user.telegram_id)
 
 
+async def handle_compatibility_generate(session: AsyncSession, task: TaskMessage) -> None:
+    if task.report_id is None:
+        logger.warning("Skip compatibility: no report_id")
+        return
+    await process_compatibility_report(session, task.report_id)
+    await session.commit()
+    await deliver_compatibility_report(session, task.report_id)
+    logger.info("Compatibility report delivered %s", task.report_id)
+
+
 async def dispatch_task(session: AsyncSession, task: TaskMessage) -> None:
     if task.type == TaskType.NATAL_CHART_GENERATE:
         await handle_natal_chart_generate(session, task)
@@ -116,5 +134,7 @@ async def dispatch_task(session: AsyncSession, task: TaskMessage) -> None:
         await handle_prediction_generate(session, task)
     elif task.type == TaskType.PREDICTION_SEND:
         await handle_prediction_send(session, task)
+    elif task.type == TaskType.COMPATIBILITY_GENERATE:
+        await handle_compatibility_generate(session, task)
     else:
         logger.warning("Unknown task type: %s", task.type)

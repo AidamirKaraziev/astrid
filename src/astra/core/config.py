@@ -94,6 +94,9 @@ class Settings(BaseSettings):
     deepseek_base_url: str = "https://api.deepseek.com/v1"
     deepseek_timeout_seconds: float = 120.0
 
+    # PDF совместимости на volume (Docker: /data/compatibility)
+    compatibility_pdf_dir: str = "data/compatibility_pdfs"
+
     # Sentry — ошибки и (опционально) трейсы; стенд: local | dev | prod
     sentry_dsn: str | None = None
     sentry_enabled: bool = True

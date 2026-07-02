@@ -35,3 +35,9 @@ TAROT_PRODUCT_BUTTONS = (
 COMING_SOON_TEXT = "Скоро появится, выбери что-то другое."
 
 CB_PRODUCT_ASK_STARS = "product:ask_stars"
+CB_PROFILE_REPORTS = "profile:reports"
+CB_COMPAT_CONTEXT_PREFIX = "compatibility:context:"
+CB_COMPAT_MODE_PREFIX = "compatibility:mode:"
+CB_COMPAT_CONFIRM = "compatibility:confirm:yes"
+CB_COMPAT_CANCEL = "compatibility:cancel"
+CB_COMPAT_REPORT_PREFIX = "compatibility:report:"

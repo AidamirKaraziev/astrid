@@ -16,7 +16,7 @@ from astra.db.session import get_session_factory
 from astra.services.greeting_service import run_greeting_phase
 from astra.services.onboarding_service import parse_registration_fsm, run_registration_phase
 from astra.telegram.keyboards import profile_menu_keyboard
-from astra.telegram.states import OnboardingStates, ProfileStates
+from astra.telegram.states import CompatibilityStates, OnboardingStates, ProfileStates
 from astra.users import crud as users_crud
 from astra.telegram.keyboards_places import places_pick_keyboard
 
@@ -27,6 +27,7 @@ router = Router(name="places")
 PLACE_STATES = (
     OnboardingStates.birth_place_query,
     ProfileStates.edit_notification_place_query,
+    CompatibilityStates.birth_place_query,
 )
 
 SEARCH_HINT = (
@@ -53,6 +54,8 @@ async def _ensure_places_ready(session: AsyncSession) -> bool:
 def _context_key_for_state(state: str | None) -> str:
     if state == OnboardingStates.birth_place_query.state:
         return "birth"
+    if state == CompatibilityStates.birth_place_query.state:
+        return "compatibility"
     return "notification"
 
 
@@ -72,6 +75,18 @@ async def start_birth_place_step(message: Message, state: FSMContext) -> None:
     await state.set_state(OnboardingStates.birth_place_query)
     await state.update_data(place_context="birth")
     await send_place_step_prompt(message, title="📍 Где ты родилась?")
+
+
+async def start_compatibility_birth_place_step(
+    message: Message,
+    state: FSMContext,
+    *,
+    collecting: str,
+) -> None:
+    await state.set_state(CompatibilityStates.birth_place_query)
+    await state.update_data(place_context="compatibility", collecting=collecting)
+    label = "первого человека" if collecting == "person_a" else "партнёра"
+    await send_place_step_prompt(message, title=f"📍 Где родился(ась) {label}?")
 
 
 async def start_profile_notification_place_step(message: Message, state: FSMContext) -> None:
@@ -116,6 +131,8 @@ async def handle_place_query(
     current = await state.get_state()
     if context_key == "birth":
         await state.set_state(OnboardingStates.birth_place_query)
+    elif context_key == "compatibility":
+        await state.set_state(CompatibilityStates.birth_place_query)
     elif current != ProfileStates.edit_notification_place_query.state:
         await state.set_state(ProfileStates.edit_notification_place_query)
     await message.answer(
@@ -247,6 +264,19 @@ async def _apply_place_selection(
             session,
             place_id,
             actor_telegram_id=actor_telegram_id,
+        )
+        return
+
+    if current_state == CompatibilityStates.birth_place_query.state:
+        from astra.telegram.handlers.compatibility import complete_person_birth_place
+
+        await complete_person_birth_place(
+            message,
+            state,
+            session,
+            place_display=place.display_name,
+            place_id=place.id,
+            timezone=place.timezone,
         )
         return
 

@@ -62,10 +62,12 @@ def build_natal_chart(
     )
 
     planets: dict[str, float] = {}
+    planet_signs: dict[str, str] = {}
     for name in ("sun", "moon", "mercury", "venus", "mars", "jupiter", "saturn"):
         body = getattr(subject, name, None)
         if body is not None:
             planets[name.capitalize()] = float(body.abs_pos)
+            planet_signs[name] = _sign_ru(body.sign)
 
     asc_sign: str | None = None
     if accuracy >= 66 and hasattr(subject, "first_house"):
@@ -78,6 +80,76 @@ def build_natal_chart(
         sun_sign=_sign_ru(subject.sun.sign),
         moon_sign=moon_sign,
         asc_sign=asc_sign,
+        planet_signs=planet_signs,
+        planets=planets,
+        birth_lat=lat,
+        birth_lon=lon,
+        timezone=timezone,
+    )
+
+
+def build_natal_chart_for_birth(
+    *,
+    name: str,
+    birth_date: date,
+    birth_time: datetime | None,
+    lat: float,
+    lon: float,
+    timezone: str,
+    accuracy_tier: int,
+) -> NatalChartData:
+    """Натал для NatalProfile (не User.profile)."""
+    if not _KERYKEION:
+        from astra.astro.simple import NatalChartData as ChartData
+
+        return ChartData(
+            accuracy_tier=accuracy_tier,
+            sun_sign="Водолей",
+            moon_sign=None,
+            asc_sign=None,
+            birth_lat=lat,
+            birth_lon=lon,
+            timezone=timezone,
+        )
+
+    tz = ZoneInfo(timezone)
+    if birth_time is not None:
+        bt = birth_time
+        local_dt = bt.replace(tzinfo=tz) if bt.tzinfo is None else bt.astimezone(tz)
+    else:
+        local_dt = datetime.combine(birth_date, time(12, 0), tzinfo=tz)
+
+    subject = AstrologicalSubject(
+        name,
+        local_dt.year,
+        local_dt.month,
+        local_dt.day,
+        local_dt.hour,
+        local_dt.minute,
+        lng=lon,
+        lat=lat,
+        tz_str=timezone,
+    )
+
+    planets: dict[str, float] = {}
+    planet_signs: dict[str, str] = {}
+    for pname in ("sun", "moon", "mercury", "venus", "mars", "jupiter", "saturn"):
+        body = getattr(subject, pname, None)
+        if body is not None:
+            planets[pname.capitalize()] = float(body.abs_pos)
+            planet_signs[pname] = _sign_ru(body.sign)
+
+    asc_sign: str | None = None
+    if accuracy_tier >= 66 and hasattr(subject, "first_house"):
+        asc_sign = _sign_ru(subject.first_house.sign)
+    moon_sign: str | None = _sign_ru(subject.moon.sign) if accuracy_tier >= 66 else None
+
+    return NatalChartData(
+        accuracy_tier=accuracy_tier,
+        sun_sign=_sign_ru(subject.sun.sign),
+        moon_sign=moon_sign,
+        asc_sign=asc_sign,
+        planet_signs=planet_signs,
         planets=planets,
         birth_lat=lat,
         birth_lon=lon,

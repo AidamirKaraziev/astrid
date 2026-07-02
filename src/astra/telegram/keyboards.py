@@ -16,7 +16,13 @@ from astra.telegram.button_texts import (
     BTN_TAROT_DECISION,
     BTN_TAROT_RELATIONS,
     BTN_TAROT_THREE,
+    CB_COMPAT_CANCEL,
+    CB_COMPAT_CONFIRM,
+    CB_COMPAT_CONTEXT_PREFIX,
+    CB_COMPAT_MODE_PREFIX,
+    CB_COMPAT_REPORT_PREFIX,
     CB_PRODUCT_ASK_STARS,
+    CB_PROFILE_REPORTS,
 )
 
 
@@ -100,9 +106,54 @@ def profile_menu_keyboard() -> InlineKeyboardMarkup:
                     callback_data="profile:notification_city",
                 ),
             ],
+            [
+                InlineKeyboardButton(
+                    text="📚 Мои разборы",
+                    callback_data=CB_PROFILE_REPORTS,
+                ),
+            ],
             [InlineKeyboardButton(text="◀️ Назад", callback_data="menu:home")],
         ],
     )
+
+
+def compatibility_context_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="💑 Отношения", callback_data=f"{CB_COMPAT_CONTEXT_PREFIX}love")],
+            [InlineKeyboardButton(text="💼 Работа", callback_data=f"{CB_COMPAT_CONTEXT_PREFIX}work")],
+            [InlineKeyboardButton(text="🤝 Дружба", callback_data=f"{CB_COMPAT_CONTEXT_PREFIX}friendship")],
+            [InlineKeyboardButton(text="◀️ В меню", callback_data="menu:home")],
+        ],
+    )
+
+
+def compatibility_pair_mode_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="Я + он/она", callback_data=f"{CB_COMPAT_MODE_PREFIX}me_partner")],
+            [InlineKeyboardButton(text="Он + она", callback_data=f"{CB_COMPAT_MODE_PREFIX}two_people")],
+            [InlineKeyboardButton(text="◀️ Назад", callback_data=f"{CB_COMPAT_CONTEXT_PREFIX}back")],
+        ],
+    )
+
+
+def compatibility_confirm_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="✅ Создать разбор", callback_data=CB_COMPAT_CONFIRM)],
+            [InlineKeyboardButton(text="❌ Отмена", callback_data=CB_COMPAT_CANCEL)],
+        ],
+    )
+
+
+def compatibility_reports_keyboard(report_buttons: list[tuple[str, str]]) -> InlineKeyboardMarkup:
+    rows = [
+        [InlineKeyboardButton(text=label, callback_data=f"{CB_COMPAT_REPORT_PREFIX}{report_id}")]
+        for label, report_id in report_buttons
+    ]
+    rows.append([InlineKeyboardButton(text="◀️ Назад", callback_data="profile:back")])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
 def profile_gender_inline_keyboard() -> InlineKeyboardMarkup:

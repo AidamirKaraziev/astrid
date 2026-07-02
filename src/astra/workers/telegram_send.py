@@ -1,4 +1,5 @@
 import logging
+from pathlib import Path
 from typing import Any
 
 import httpx
@@ -67,6 +68,35 @@ async def send_telegram_html(
         response = await client.post(url, json=payload)
         response.raise_for_status()
     logger.info("Sent Telegram message to %s", telegram_id)
+
+
+async def send_compatibility_pdf(
+    telegram_id: int,
+    pdf_path: Path,
+    *,
+    caption: str,
+    settings: Settings | None = None,
+) -> None:
+    """Отправить PDF разбора совместимости."""
+    cfg = settings or get_settings()
+    if not cfg.telegram_bot_token:
+        raise RuntimeError("TELEGRAM_BOT_TOKEN is not set")
+
+    url = f"https://api.telegram.org/bot{cfg.telegram_bot_token}/sendDocument"
+    client_kwargs: dict[str, Any] = {"timeout": 120.0}
+    if proxy := cfg.telegram_proxy_url_effective:
+        client_kwargs["proxy"] = proxy
+
+    filename = pdf_path.name
+    async with httpx.AsyncClient(**client_kwargs) as client:
+        with pdf_path.open("rb") as pdf_file:
+            response = await client.post(
+                url,
+                data={"chat_id": str(telegram_id), "caption": caption},
+                files={"document": (filename, pdf_file, "application/pdf")},
+            )
+        response.raise_for_status()
+    logger.info("Sent compatibility PDF to %s", telegram_id)
 
 
 async def send_prediction_to_telegram(

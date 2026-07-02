@@ -1,6 +1,7 @@
 """Import all ORM models for Alembic autogenerate and mapper configuration."""
 
 from astra.astro.models import NatalChart  # noqa: F401
+from astra.compatibility.models import CompatibilityReport, NatalProfile  # noqa: F401
 from astra.places.models import Place  # noqa: F401
 from astra.points.models import PointsLedger  # noqa: F401
 from astra.predictions.models import Prediction  # noqa: F401

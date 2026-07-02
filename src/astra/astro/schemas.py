@@ -9,6 +9,7 @@ class NatalChartData(BaseModel):
     sun_sign: str
     moon_sign: str | None = None
     asc_sign: str | None = None
+    planet_signs: dict[str, str] = Field(default_factory=dict)
     planets: dict[str, float] = Field(default_factory=dict)
     birth_lat: float | None = None
     birth_lon: float | None = None
