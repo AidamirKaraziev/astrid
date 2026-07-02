@@ -2,100 +2,36 @@
 
 from __future__ import annotations
 
-import asyncio
 import logging
 from datetime import date
 from uuid import UUID
 
-from astra.core.config import get_settings
 from astra.db.session import get_session_factory
-from astra.messaging.publisher import publish_prediction_generate
 from astra.services.prediction_pending import (
     clear_prediction_pending,
     try_mark_prediction_pending,
 )
-from astra.predictions import crud as predictions_crud
-from astra.predictions.models import Prediction
-from astra.services.prediction_generation import generate_daily_prediction_resilient
-from astra.services.prediction_service import format_prediction_for_user, mark_prediction_sent
+from astra.services.prediction_pipeline import enqueue_prediction_pipeline
 from astra.users import crud as users_crud
-from astra.workers.telegram_send import send_prediction_to_telegram
 
 logger = logging.getLogger(__name__)
 
 
-async def deliver_prediction_for_date(user_id: UUID, prediction_date: date) -> None:
-    """Сгенерировать (если нет) и отправить предсказание пользователю."""
+async def enqueue_first_prediction_after_registration(user_id: UUID) -> None:
+    """Запустить пайплайн первого предсказания после регистрации (без staged UX)."""
+    target = date.today()
     session_factory = get_session_factory()
-    async with session_factory() as session:
-        user = await users_crud.get_user_by_id(session, user_id)
-        if user is None or user.profile is None:
-            logger.warning("deliver_prediction: user or profile missing %s", user_id)
-            return
 
-        prediction = await predictions_crud.get_prediction_for_date(
-            session,
-            user.id,
-            prediction_date,
-        )
-        if prediction is None:
-            prediction = await generate_daily_prediction_resilient(
-                session,
-                user,
-                user.profile,
-                target=prediction_date,
-            )
-            if prediction is None:
-                logger.warning(
-                    "deliver_prediction: generation failed for user %s date %s",
-                    user_id,
-                    prediction_date,
-                )
-                return
-
-        text = format_prediction_for_user(prediction, user, user.profile)
-        telegram_id = user.telegram_id
-        prediction_id = prediction.id
-        await session.commit()
+    if not await try_mark_prediction_pending(user_id, target):
+        logger.info("first prediction already pending for user %s", user_id)
+        return
 
     try:
-        await send_prediction_to_telegram(telegram_id, text)
-    except Exception:
-        logger.exception("failed to send prediction to telegram_id=%s", telegram_id)
-        return
-
-    async with session_factory() as session:
-        prediction = await session.get(Prediction, prediction_id)
-        if prediction is not None and prediction.sent_at is None:
-            await mark_prediction_sent(session, prediction)
+        async with session_factory() as session:
+            await enqueue_prediction_pipeline(session, user_id, target)
             await session.commit()
-            await clear_prediction_pending(user_id, prediction_date)
+    except Exception:
+        await clear_prediction_pending(user_id, target)
+        raise
 
-
-async def enqueue_first_prediction_after_registration(user_id: UUID) -> None:
-    """Запустить генерацию и доставку первого предсказания после регистрации."""
-    target = date.today()
-    settings = get_settings()
-
-    if settings.rabbitmq_enabled:
-        if not await try_mark_prediction_pending(user_id, target):
-            logger.info("first prediction already pending for user %s", user_id)
-            return
-        try:
-            await publish_prediction_generate(user_id, target)
-        except Exception:
-            await clear_prediction_pending(user_id, target)
-            raise
-        logger.info("queued first prediction via RabbitMQ for user %s", user_id)
-        return
-
-    def _log_task_error(done: asyncio.Task[None]) -> None:
-        if exc := done.exception():
-            logger.error("first prediction task failed for user %s", user_id, exc_info=exc)
-
-    task = asyncio.create_task(
-        deliver_prediction_for_date(user_id, target),
-        name=f"first-prediction-{user_id}",
-    )
-    task.add_done_callback(_log_task_error)
-    logger.info("started inline first prediction task for user %s", user_id)
+    logger.info("queued first prediction pipeline for user %s", user_id)

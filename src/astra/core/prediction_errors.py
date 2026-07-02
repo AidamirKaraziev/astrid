@@ -26,6 +26,8 @@ _REASON_LABELS: dict[str, str] = {
     "forbidden_content": "запрещённые фразы или символы",
     "legacy_format": "устаревший формат ответа",
     "request_error": "ошибка запроса к Ollama",
+    "missing_context": "нет астрологического контекста",
+    "missing_natal_chart": "нет натальной карты",
 }
 
 

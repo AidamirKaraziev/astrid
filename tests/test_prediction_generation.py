@@ -54,10 +54,10 @@ async def test_generate_daily_prediction_resilient_success_after_retry() -> None
         prediction,
     ]
 
-    with patch(
-        "astra.services.prediction_generation.generate_daily_prediction",
-        side_effect=side_effects,
-    ) as generate:
+    with         patch(
+            "astra.services.prediction_generation.generate_prediction_text_only",
+            side_effect=side_effects,
+        ) as generate:
         with patch(
             "astra.services.prediction_generation.maybe_send_delayed_notification",
             new_callable=AsyncMock,
@@ -102,7 +102,7 @@ async def test_generate_daily_prediction_resilient_sends_delayed_notice() -> Non
         2,
     ):
         with patch(
-            "astra.services.prediction_generation.generate_daily_prediction",
+            "astra.services.prediction_generation.generate_prediction_text_only",
             side_effect=slow_fail,
         ):
             with patch(
@@ -121,16 +121,20 @@ async def test_generate_daily_prediction_resilient_sends_delayed_notice() -> Non
                             "astra.services.prediction_generation.send_final_failure_notification",
                             new_callable=AsyncMock,
                         ):
-                            with patch(
-                                "astra.services.prediction_generation.clear_prediction_pending",
-                                new_callable=AsyncMock,
-                            ):
-                                result = await generate_daily_prediction_resilient(
-                                    session,
-                                    user,
-                                    profile,
-                                    date(2026, 6, 14),
-                                )
+                                with patch(
+                                    "astra.services.prediction_generation.clear_prediction_pending",
+                                    new_callable=AsyncMock,
+                                ):
+                                    with patch(
+                                        "astra.services.prediction_generation._mark_prediction_failed",
+                                        new_callable=AsyncMock,
+                                    ):
+                                        result = await generate_daily_prediction_resilient(
+                                            session,
+                                            user,
+                                            profile,
+                                            date(2026, 6, 14),
+                                        )
 
     assert result is None
     delayed.assert_called_with(user.id, user.telegram_id, date(2026, 6, 14))
@@ -145,7 +149,7 @@ async def test_generate_daily_prediction_resilient_final_failure() -> None:
     session = AsyncMock()
 
     with patch(
-        "astra.services.prediction_generation.generate_daily_prediction",
+        "astra.services.prediction_generation.generate_prediction_text_only",
         side_effect=LlmGenerationError("connection"),
     ):
         with patch(
@@ -161,14 +165,18 @@ async def test_generate_daily_prediction_resilient_final_failure() -> None:
                     new_callable=AsyncMock,
                 ) as clear_pending:
                     with patch(
-                        "astra.services.prediction_generation.report_prediction_generation_failure",
-                    ) as report:
-                        result = await generate_daily_prediction_resilient(
-                            session,
-                            user,
-                            profile,
-                            date(2026, 6, 14),
-                        )
+                        "astra.services.prediction_generation._mark_prediction_failed",
+                        new_callable=AsyncMock,
+                    ):
+                        with patch(
+                            "astra.services.prediction_generation.report_prediction_generation_failure",
+                        ) as report:
+                            result = await generate_daily_prediction_resilient(
+                                session,
+                                user,
+                                profile,
+                                date(2026, 6, 14),
+                            )
 
     assert result is None
     assert report.call_count == PREDICTION_MAX_ATTEMPTS

@@ -44,6 +44,7 @@ date: 2026-06-26
 - [[Sentry environment local dev prod и service api worker]]
 - [[главное меню бота платные продукты в reply без каталога]]
 - [[пайплайн совместимости промпт LLM PDF worker]]
+- [[Split Contract LLM и Pydantic для совместимости]]
 
 ### Паттерны (`knowledge/patterns/`)
 
@@ -81,6 +82,7 @@ date: 2026-06-26
 - [[2026-06-14 Astrid v3 вопрос дня gemma4 e2b]]
 - [[2026-06-15 UX меню бота платные продукты Menu Button]]
 - [[2026-06-26 PDF синастрия рефакторинг и план совместимости]]
+- [[2026-07-02 staged progress pipelines и диагностика LLM совместимости]]
 - [[2026-06-12 промпт Astrid v2 gemma4 e2b]]
 - [[2026-06-12 имя в начале прогноза Astrid]]
 

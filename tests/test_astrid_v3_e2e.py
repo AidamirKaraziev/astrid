@@ -70,7 +70,7 @@ async def test_resilient_generation_retries_on_validation_failure() -> None:
         return prediction
 
     with patch(
-        "astra.services.prediction_generation.generate_daily_prediction",
+        "astra.services.prediction_generation.generate_prediction_text_only",
         side_effect=_generate,
     ):
         with patch(

@@ -28,7 +28,6 @@ x-app-env: &app-env
   REDIS_URL: redis://redis:6379/0
   FSM_STORAGE: redis
   RABBITMQ_URL: amqp://astra:astra@rabbitmq:5672/
-  RABBITMQ_ENABLED: "true"
   OLLAMA_BASE_URL: http://ollama:11434
   OLLAMA_ENABLED: "true"
 

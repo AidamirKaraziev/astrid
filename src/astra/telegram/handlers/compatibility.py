@@ -12,14 +12,26 @@ from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message, ReplyKeyboardRemove
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from astra.compatibility.enums import PairMode, RelationshipContext
+from astra.compatibility.enums import (
+    COMPATIBILITY_IN_FLIGHT_STATUSES,
+    PairMode,
+    RelationshipContext,
+    ReportStatus,
+)
+from astra.compatibility.models import CompatibilityReport
 from astra.compatibility import crud as compatibility_crud
 from astra.services.compatibility_service import (
-    COMPATIBILITY_IN_PROGRESS_TEXT,
     CompatibilityRequestStatus,
     FsmPersonData,
     create_report_from_fsm,
+    delete_compatibility_report_for_user,
     request_compatibility_report,
+)
+from astra.telegram.progress import (
+    CompatibilityStage,
+    current_progress_message_id,
+    compatibility_job_key,
+    notify_compatibility_stage,
 )
 from astra.telegram.button_texts import (
     BTN_COMPATIBILITY,
@@ -30,6 +42,11 @@ from astra.telegram.button_texts import (
     CB_COMPAT_CONTEXT_PREFIX,
     CB_COMPAT_MODE_PREFIX,
     CB_COMPAT_REPORT_PREFIX,
+    CB_COMPAT_REPORT_PDF_PREFIX,
+    CB_COMPAT_REPORTS_LIST,
+    CB_COMPAT_DELETE_PREFIX,
+    CB_COMPAT_DELETE_CONFIRM_PREFIX,
+    CB_COMPAT_DELETE_CANCEL_PREFIX,
     CB_PROFILE_REPORTS,
     GENDER_REPLY_BUTTONS,
 )
@@ -40,7 +57,9 @@ from astra.telegram.handlers.places import (
 from astra.telegram.keyboards import (
     compatibility_confirm_keyboard,
     compatibility_context_keyboard,
+    compatibility_delete_confirm_keyboard,
     compatibility_pair_mode_keyboard,
+    compatibility_report_card_keyboard,
     compatibility_reports_keyboard,
     gender_keyboard,
     main_menu_keyboard,
@@ -351,7 +370,7 @@ async def cb_compat_confirm(
             person_b=person_b,
         )
         await session.commit()
-        outcome = await request_compatibility_report(session, report.id, allow_async=True)
+        outcome = await request_compatibility_report(session, report.id)
     except Exception:
         logger.exception("Failed to create compatibility report")
         await callback.message.answer(
@@ -368,12 +387,73 @@ async def cb_compat_confirm(
             "Не получилось запустить генерацию. Проверь DeepSeek в настройках.",
             reply_markup=main_menu_keyboard(),
         )
-    else:
+    elif outcome.status == CompatibilityRequestStatus.IN_PROGRESS:
+        job_key = compatibility_job_key(report.id)
+        if await current_progress_message_id(user.id, job_key) is None:
+            await notify_compatibility_stage(
+                callback.message.chat.id,
+                user.id,
+                report.id,
+                CompatibilityStage.STARTED,
+            )
         await callback.message.answer(
-            COMPATIBILITY_IN_PROGRESS_TEXT,
+            "Разбор уже готовится — пришлю сюда, как только будет готов ✨",
+            reply_markup=main_menu_keyboard(),
+        )
+    else:
+        await notify_compatibility_stage(
+            callback.message.chat.id,
+            user.id,
+            report.id,
+            CompatibilityStage.STARTED,
+        )
+        await callback.message.answer(
+            "Приняла вашу пару в работу — скоро пришлю разбор ✨",
             reply_markup=main_menu_keyboard(),
         )
     await callback.answer()
+
+
+def _report_status_label(report: CompatibilityReport) -> str:
+    if report.pdf_path:
+        return "✅ PDF готов"
+    status = ReportStatus(report.status)
+    if status == ReportStatus.FAILED:
+        return "❌ Не удалось сгенерировать"
+    if status in COMPATIBILITY_IN_FLIGHT_STATUSES or status == ReportStatus.PENDING:
+        return "⏳ Готовится"
+    return "⏳ Готовится"
+
+
+def _format_report_card_text(report: CompatibilityReport) -> str:
+    created = report.created_at.strftime("%d.%m.%Y %H:%M") if report.created_at else "—"
+    return (
+        f"💕 <b>{report.title}</b>\n\n"
+        f"Статус: {_report_status_label(report)}\n"
+        f"Создан: {created}"
+    )
+
+
+def _report_list_buttons(reports: list[CompatibilityReport]) -> list[tuple[str, str]]:
+    buttons: list[tuple[str, str]] = []
+    for report in reports:
+        status_icon = "✅" if report.pdf_path else "⏳"
+        created = report.created_at.strftime("%d.%m") if report.created_at else ""
+        label = f"{status_icon} {report.title} ({created})"
+        buttons.append((label, str(report.id)))
+    return buttons
+
+
+def _reports_list_text() -> str:
+    return "📚 <b>Мои разборы</b>\nНажми на разбор, чтобы открыть карточку."
+
+
+async def _send_reports_list(message: Message, reports: list[CompatibilityReport]) -> None:
+    await message.answer(
+        _reports_list_text(),
+        parse_mode="HTML",
+        reply_markup=compatibility_reports_keyboard(_report_list_buttons(reports)),
+    )
 
 
 @router.callback_query(F.data == CB_PROFILE_REPORTS)
@@ -395,15 +475,9 @@ async def cb_profile_reports(callback: CallbackQuery, session: AsyncSession) -> 
         await callback.answer()
         return
 
-    buttons: list[tuple[str, str]] = []
-    for report in reports:
-        status_icon = "✅" if report.pdf_path else "⏳"
-        created = report.created_at.strftime("%d.%m") if report.created_at else ""
-        label = f"{status_icon} {report.title} ({created})"
-        buttons.append((label[:60], str(report.id)))
-
+    buttons = _report_list_buttons(reports)
     await callback.message.answer(
-        "📚 <b>Мои разборы</b>\nНажми, чтобы получить PDF ещё раз:",
+        _reports_list_text(),
         parse_mode="HTML",
         reply_markup=compatibility_reports_keyboard(buttons),
     )
@@ -430,11 +504,35 @@ async def cb_profile_back(callback: CallbackQuery, session: AsyncSession) -> Non
 
 
 @router.callback_query(F.data.startswith(CB_COMPAT_REPORT_PREFIX))
-async def cb_resend_report(callback: CallbackQuery, session: AsyncSession) -> None:
+async def cb_open_report_card(callback: CallbackQuery, session: AsyncSession) -> None:
     if callback.message is None or callback.from_user is None or callback.data is None:
         await callback.answer()
         return
     report_id = UUID(callback.data.removeprefix(CB_COMPAT_REPORT_PREFIX))
+    user = await users_crud.get_user_by_telegram_id(session, callback.from_user.id)
+    if user is None:
+        await callback.answer()
+        return
+
+    report = await compatibility_crud.get_compatibility_report(session, report_id)
+    if report is None or report.owner_user_id != user.id:
+        await callback.answer("Разбор не найден", show_alert=True)
+        return
+
+    await callback.message.answer(
+        _format_report_card_text(report),
+        parse_mode="HTML",
+        reply_markup=compatibility_report_card_keyboard(str(report.id)),
+    )
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith(CB_COMPAT_REPORT_PDF_PREFIX))
+async def cb_send_report_pdf(callback: CallbackQuery, session: AsyncSession) -> None:
+    if callback.message is None or callback.from_user is None or callback.data is None:
+        await callback.answer()
+        return
+    report_id = UUID(callback.data.removeprefix(CB_COMPAT_REPORT_PDF_PREFIX))
     user = await users_crud.get_user_by_telegram_id(session, callback.from_user.id)
     if user is None:
         await callback.answer()
@@ -455,3 +553,92 @@ async def cb_resend_report(callback: CallbackQuery, session: AsyncSession) -> No
             return
 
     await callback.answer("PDF ещё не готов", show_alert=True)
+
+
+@router.callback_query(F.data == CB_COMPAT_REPORTS_LIST)
+async def cb_back_to_reports_list(callback: CallbackQuery, session: AsyncSession) -> None:
+    if callback.message is None or callback.from_user is None:
+        await callback.answer()
+        return
+    user = await users_crud.get_user_by_telegram_id(session, callback.from_user.id)
+    if user is None:
+        await callback.answer()
+        return
+
+    reports = await compatibility_crud.list_compatibility_reports(session, user.id, limit=15)
+    if not reports:
+        await callback.message.answer(
+            "Пока нет сохранённых разборов.",
+            reply_markup=profile_menu_keyboard(),
+        )
+        await callback.answer()
+        return
+
+    await _send_reports_list(callback.message, reports)
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith(CB_COMPAT_DELETE_CONFIRM_PREFIX))
+async def cb_delete_report_confirm(callback: CallbackQuery, session: AsyncSession) -> None:
+    if callback.message is None or callback.from_user is None or callback.data is None:
+        await callback.answer()
+        return
+
+    report_id = UUID(callback.data.removeprefix(CB_COMPAT_DELETE_CONFIRM_PREFIX))
+    user = await users_crud.get_user_by_telegram_id(session, callback.from_user.id)
+    if user is None:
+        await callback.answer()
+        return
+
+    deleted = await delete_compatibility_report_for_user(session, report_id, user.id)
+    await session.commit()
+    if not deleted:
+        await callback.answer("Не получилось удалить", show_alert=True)
+        return
+
+    await callback.answer("Разбор удалён")
+    reports = await compatibility_crud.list_compatibility_reports(session, user.id, limit=15)
+    if not reports:
+        await callback.message.answer(
+            "Список пуст. Нажми «💕 Совместимость», чтобы создать новый разбор.",
+            reply_markup=profile_menu_keyboard(),
+        )
+        return
+    await _send_reports_list(callback.message, reports)
+
+
+@router.callback_query(F.data.startswith(CB_COMPAT_DELETE_CANCEL_PREFIX))
+async def cb_delete_report_cancel(callback: CallbackQuery) -> None:
+    if callback.message:
+        await callback.message.answer("Оставила разбор как есть ✨")
+    await callback.answer()
+
+
+@router.callback_query(
+    F.data.startswith(CB_COMPAT_DELETE_PREFIX)
+    & ~F.data.startswith(CB_COMPAT_DELETE_CONFIRM_PREFIX)
+    & ~F.data.startswith(CB_COMPAT_DELETE_CANCEL_PREFIX),
+)
+async def cb_delete_report_prompt(callback: CallbackQuery, session: AsyncSession) -> None:
+    if callback.message is None or callback.from_user is None or callback.data is None:
+        await callback.answer()
+        return
+
+    report_id = UUID(callback.data.removeprefix(CB_COMPAT_DELETE_PREFIX))
+    user = await users_crud.get_user_by_telegram_id(session, callback.from_user.id)
+    if user is None:
+        await callback.answer()
+        return
+
+    report = await compatibility_crud.get_compatibility_report(session, report_id)
+    if report is None or report.owner_user_id != user.id:
+        await callback.answer("Разбор не найден", show_alert=True)
+        return
+
+    await callback.message.answer(
+        f"Удалить разбор <b>{report.title}</b>?\n"
+        "PDF исчезнет из списка — восстановить не получится.",
+        parse_mode="HTML",
+        reply_markup=compatibility_delete_confirm_keyboard(str(report.id)),
+    )
+    await callback.answer()

@@ -13,6 +13,7 @@ from astra.messaging.queues import (
     QUEUE_COMPATIBILITY,
     QUEUE_NOTIFICATIONS,
     QUEUE_PREDICTIONS,
+    QUEUE_REPORTS,
 )
 from astra.workers.handlers import dispatch_task
 
@@ -38,7 +39,7 @@ async def run_consumer(settings: Settings | None = None) -> None:
 
     await _ensure_topology(channel)
     queues = []
-    for name in (QUEUE_ASTRO, QUEUE_PREDICTIONS, QUEUE_NOTIFICATIONS, QUEUE_COMPATIBILITY):
+    for name in (QUEUE_ASTRO, QUEUE_PREDICTIONS, QUEUE_NOTIFICATIONS, QUEUE_COMPATIBILITY, QUEUE_REPORTS):
         queue = await channel.declare_queue(name, durable=True)
         queues.append(queue)
 

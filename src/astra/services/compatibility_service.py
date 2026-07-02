@@ -25,6 +25,7 @@ from astra.astro.synastry import (
 )
 from astra.compatibility import crud as compatibility_crud
 from astra.compatibility.enums import (
+    COMPATIBILITY_IN_FLIGHT_STATUSES,
     RELATIONSHIP_LABELS,
     PairMode,
     RelationshipContext,
@@ -34,20 +35,27 @@ from astra.compatibility.models import CompatibilityReport, NatalProfile
 from astra.core.config import Settings, get_settings
 from astra.llm.compatibility_generate import generate_compatibility_output
 from astra.llm.factory import get_deepseek_provider
-from astra.llm.schemas.compatibility import CompatibilityPersonInput, CompatibilityPromptInput
+from astra.llm.schemas.compatibility import (
+    CompatibilityLlmOutput,
+    CompatibilityPersonInput,
+    CompatibilityPromptInput,
+    SynastryAspectInput,
+)
 from astra.places import crud as places_crud
 from astra.reports.synastry import generate_synastry_pdf
 from astra.reports.synastry.mapper import llm_output_to_report_data
 from astra.users import crud as users_crud
-from astra.users.gender import GENDER_FEMALE, GENDER_MALE
 from astra.users.models import Profile, User
+from astra.services.compatibility_pdf_filenames import (
+    build_pdf_download_filename_from_report,
+    pdf_path_for_report_file,
+)
+from astra.services.compatibility_pipeline import (
+    enqueue_compatibility_pipeline,
+    resume_compatibility_pipeline,
+)
 
 logger = logging.getLogger(__name__)
-
-COMPATIBILITY_IN_PROGRESS_TEXT = (
-    "Готовлю PDF-разбор совместимости ✨\n"
-    "Пришлю сюда через пару минут."
-)
 
 
 class CompatibilityRequestStatus(StrEnum):
@@ -151,17 +159,17 @@ def build_report_title(
     return f"{person_a_name} × {person_b_name} · {ctx}"
 
 
-def pdf_filename(report_id: uuid.UUID) -> str:
-    return f"compatibility-{report_id}.pdf"
+def pdf_filename(report: CompatibilityReport) -> str:
+    return build_pdf_download_filename_from_report(report)
 
 
-def pdf_path_for_report(settings: Settings, report_id: uuid.UUID) -> Path:
+def pdf_path_for_report(settings: Settings, report: CompatibilityReport) -> Path:
     base = Path(settings.compatibility_pdf_dir)
-    base.mkdir(parents=True, exist_ok=True)
-    return base / pdf_filename(report_id)
+    filename = pdf_filename(report)
+    return pdf_path_for_report_file(base, filename, report.id)
 
 
-async def build_prompt_input_from_report(
+async def _compute_prompt_input_from_snapshots(
     session: AsyncSession,
     report: CompatibilityReport,
 ) -> CompatibilityPromptInput:
@@ -224,100 +232,172 @@ async def build_prompt_input_from_report(
     )
 
 
-async def process_compatibility_report(session: AsyncSession, report_id: uuid.UUID) -> None:
-    """Полный цикл генерации PDF (вызывается из worker)."""
+async def build_prompt_input_from_report(
+    session: AsyncSession,
+    report: CompatibilityReport,
+) -> CompatibilityPromptInput:
+    if report.astro_context and report.astro_context.get("aspects"):
+        person_a = person_input_from_snapshot(report.person_a_snapshot)
+        person_b = person_input_from_snapshot(report.person_b_snapshot)
+        aspects = [
+            SynastryAspectInput.model_validate(item)
+            for item in report.astro_context["aspects"]
+        ]
+        return CompatibilityPromptInput(
+            person_a=person_a,
+            person_b=person_b,
+            aspects=aspects,
+            relationship_context=report.relationship_context,  # type: ignore[arg-type]
+            pair_mode=report.pair_mode,  # type: ignore[arg-type]
+        )
+    return await _compute_prompt_input_from_snapshots(session, report)
+
+
+async def build_and_store_synastry(
+    session: AsyncSession,
+    report_id: uuid.UUID,
+) -> CompatibilityReport | None:
+    report = await compatibility_crud.get_compatibility_report(session, report_id)
+    if report is None:
+        logger.warning("Compatibility report missing: %s", report_id)
+        return None
+    if report.status in {
+        ReportStatus.SYNASTRY_READY,
+        ReportStatus.TEXT_READY,
+        ReportStatus.READY,
+    } and report.astro_context:
+        return report
+
+    prompt_input = await _compute_prompt_input_from_snapshots(session, report)
+    astro_context = {
+        "aspects": [aspect.model_dump() for aspect in prompt_input.aspects],
+        "relationship_context": report.relationship_context,
+        "pair_mode": report.pair_mode,
+    }
+    await compatibility_crud.mark_report_synastry_ready(session, report, astro_context)
+    return report
+
+
+async def generate_compatibility_llm(
+    session: AsyncSession,
+    report_id: uuid.UUID,
+) -> CompatibilityReport | None:
     settings = get_settings()
     report = await compatibility_crud.get_compatibility_report(session, report_id)
     if report is None:
         logger.warning("Compatibility report missing: %s", report_id)
-        return
-    if report.status == ReportStatus.READY and report.pdf_path:
-        return
-
-    await compatibility_crud.mark_report_generating(session, report)
+        return None
+    if report.status in {ReportStatus.TEXT_READY, ReportStatus.READY} and report.llm_output:
+        return report
 
     deepseek = get_deepseek_provider(settings)
     if not deepseek.is_configured():
         await compatibility_crud.mark_report_failed(session, report, "deepseek_disabled")
-        return
+        return None
 
     try:
         prompt_input = await build_prompt_input_from_report(session, report)
         output, failure = await generate_compatibility_output(prompt_input, deepseek, settings)
         if output is None:
             await compatibility_crud.mark_report_failed(session, report, failure or "llm_failed")
-            return
+            return None
+        await compatibility_crud.mark_report_text_ready(session, report, output.model_dump())
+        return report
+    except Exception as exc:
+        logger.exception("Compatibility LLM failed %s", report_id)
+        await compatibility_crud.mark_report_failed(session, report, str(exc))
+        return None
 
+
+async def generate_compatibility_pdf(
+    session: AsyncSession,
+    report_id: uuid.UUID,
+) -> CompatibilityReport | None:
+    settings = get_settings()
+    report = await compatibility_crud.get_compatibility_report(session, report_id)
+    if report is None:
+        logger.warning("Compatibility report missing: %s", report_id)
+        return None
+    if report.status == ReportStatus.READY and report.pdf_path:
+        return report
+    if not report.llm_output:
+        await compatibility_crud.mark_report_failed(session, report, "missing_llm_output")
+        return None
+
+    try:
+        prompt_input = await build_prompt_input_from_report(session, report)
+        output = CompatibilityLlmOutput.model_validate(report.llm_output)
         report_data = llm_output_to_report_data(prompt_input, output)
-        out_path = pdf_path_for_report(settings, report.id)
+        out_path = pdf_path_for_report(settings, report)
         generate_synastry_pdf(out_path, report_data)
-
-        astro_context = {
-            "aspects": [a.model_dump() for a in prompt_input.aspects],
-            "relationship_context": report.relationship_context,
-            "pair_mode": report.pair_mode,
-        }
         await compatibility_crud.mark_report_ready(
             session,
             report,
-            llm_output=output.model_dump(),
-            astro_context=astro_context,
+            llm_output=report.llm_output,
+            astro_context=report.astro_context or {},
             pdf_path=str(out_path),
         )
+        return report
     except Exception as exc:
-        logger.exception("Compatibility report failed %s", report_id)
+        logger.exception("Compatibility PDF failed %s", report_id)
         await compatibility_crud.mark_report_failed(session, report, str(exc))
+        return None
+
+
+async def process_compatibility_report(session: AsyncSession, report_id: uuid.UUID) -> None:
+    """Полный цикл (legacy sync helper для тестов и отладки)."""
+    report = await build_and_store_synastry(session, report_id)
+    if report is None:
+        return
+    report = await generate_compatibility_llm(session, report_id)
+    if report is None:
+        return
+    report = await generate_compatibility_pdf(session, report_id)
+    if report is None:
+        return
+    await deliver_compatibility_report(session, report_id)
 
 
 async def enqueue_compatibility_report(
     report_id: uuid.UUID,
     settings: Settings | None = None,
 ) -> None:
-    from astra.messaging.publisher import publish_compatibility_generate
-
-    await publish_compatibility_generate(report_id, settings)
+    del settings
+    await enqueue_compatibility_pipeline(report_id)
 
 
 async def request_compatibility_report(
     session: AsyncSession,
     report_id: uuid.UUID,
-    *,
-    allow_async: bool = True,
 ) -> CompatibilityRequestOutcome:
-    settings = get_settings()
     report = await compatibility_crud.get_compatibility_report(session, report_id)
     if report is None:
         return CompatibilityRequestOutcome(status=CompatibilityRequestStatus.FAILED)
 
-    if report.status == ReportStatus.GENERATING:
+    status = ReportStatus(report.status)
+    if status in COMPATIBILITY_IN_FLIGHT_STATUSES and report.sent_at is None:
         return CompatibilityRequestOutcome(
             status=CompatibilityRequestStatus.IN_PROGRESS,
             report_id=report_id,
         )
-    if report.status == ReportStatus.FAILED:
+    if status == ReportStatus.FAILED:
         return CompatibilityRequestOutcome(
             status=CompatibilityRequestStatus.FAILED,
             report_id=report_id,
         )
-    if report.status == ReportStatus.READY:
+    if status == ReportStatus.READY and report.sent_at is not None:
         return CompatibilityRequestOutcome(
             status=CompatibilityRequestStatus.QUEUED,
             report_id=report_id,
         )
 
-    if allow_async and settings.rabbitmq_enabled:
-        await enqueue_compatibility_report(report_id, settings)
-        return CompatibilityRequestOutcome(
-            status=CompatibilityRequestStatus.QUEUED,
-            report_id=report_id,
-        )
-
-    await process_compatibility_report(session, report_id)
-    await deliver_compatibility_report(session, report_id)
-    refreshed = await compatibility_crud.get_compatibility_report(session, report_id)
-    if refreshed is None or refreshed.status == ReportStatus.FAILED:
-        return CompatibilityRequestOutcome(status=CompatibilityRequestStatus.FAILED, report_id=report_id)
-    return CompatibilityRequestOutcome(status=CompatibilityRequestStatus.QUEUED, report_id=report_id)
+    if status == ReportStatus.PENDING:
+        await compatibility_crud.mark_report_generating(session, report)
+    await resume_compatibility_pipeline(report)
+    return CompatibilityRequestOutcome(
+        status=CompatibilityRequestStatus.QUEUED,
+        report_id=report_id,
+    )
 
 
 @dataclass(frozen=True, slots=True)
@@ -471,8 +551,28 @@ async def deliver_compatibility_report(
     )
     await compatibility_crud.mark_report_sent(session, report)
     return True
-    if gender == GENDER_MALE:
-        return "мужчина"
-    if gender == GENDER_FEMALE:
-        return "женщина"
-    return "не указан"
+
+
+async def delete_compatibility_report_for_user(
+    session: AsyncSession,
+    report_id: uuid.UUID,
+    owner_user_id: uuid.UUID,
+) -> bool:
+    """Удалить разбор пользователя: PDF с диска, запись в БД, progress в Redis."""
+    report = await compatibility_crud.get_compatibility_report(session, report_id)
+    if report is None or report.owner_user_id != owner_user_id:
+        return False
+
+    if report.pdf_path:
+        pdf_path = Path(report.pdf_path)
+        if pdf_path.is_file():
+            pdf_path.unlink(missing_ok=True)
+
+    from astra.telegram.progress import clear_progress_message_id, compatibility_job_key
+    from astra.users import crud as users_crud
+
+    user = await users_crud.get_user_by_id(session, owner_user_id)
+    if user is not None:
+        await clear_progress_message_id(owner_user_id, compatibility_job_key(report_id))
+
+    return await compatibility_crud.delete_compatibility_report(session, report_id)

@@ -1,5 +1,5 @@
 from datetime import datetime
-from uuid import UUID
+from zoneinfo import ZoneInfo
 
 from aiogram import F, Router
 from aiogram.fsm.context import FSMContext
@@ -9,10 +9,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from astra.referrals.getters import get_referral_stats
 from astra.services.points_service import register_daily_activity
 from astra.services.prediction_service import (
-    PREDICTION_IN_PROGRESS_TEXT,
     PredictionRequestStatus,
     format_prediction_for_user,
     request_today_prediction,
+)
+from astra.telegram.progress import (
+    PredictionStage,
+    current_progress_message_id,
+    notify_prediction_stage,
+    prediction_job_key,
 )
 from astra.telegram.handlers.places import start_profile_notification_place_step
 from astra.telegram.button_texts import BTN_INVITE, BTN_PREDICTION_TODAY, BTN_PROFILE
@@ -71,18 +76,36 @@ async def today_prediction(message: Message, session: AsyncSession) -> None:
         session,
         user,
         user.profile,
-        allow_async=True,
     )
-    if outcome.status in {
-        PredictionRequestStatus.QUEUED,
-        PredictionRequestStatus.IN_PROGRESS,
-    }:
-        await message.answer(PREDICTION_IN_PROGRESS_TEXT)
+    target = datetime.now(ZoneInfo(user.profile.timezone)).date()
+    job_key = prediction_job_key(target)
+
+    if outcome.status == PredictionRequestStatus.QUEUED:
+        await notify_prediction_stage(
+            message.chat.id,
+            user.id,
+            target,
+            PredictionStage.STARTED,
+        )
+        return
+    if outcome.status == PredictionRequestStatus.IN_PROGRESS:
+        if await current_progress_message_id(user.id, job_key) is None:
+            await notify_prediction_stage(
+                message.chat.id,
+                user.id,
+                target,
+                PredictionStage.STARTED,
+            )
         return
     if outcome.status == PredictionRequestStatus.FAILED:
         return
     if outcome.prediction is None:
-        await message.answer(PREDICTION_IN_PROGRESS_TEXT)
+        await notify_prediction_stage(
+            message.chat.id,
+            user.id,
+            target,
+            PredictionStage.STARTED,
+        )
         return
     await message.answer(
         format_prediction_for_user(outcome.prediction, user, user.profile),

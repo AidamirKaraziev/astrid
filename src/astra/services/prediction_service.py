@@ -7,18 +7,17 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from astra.predictions import crud as predictions_crud
 from astra.predictions.models import Prediction
-from astra.services.prediction_generation import generate_daily_prediction_resilient
+from astra.predictions.status import PredictionStatus
 from astra.services.prediction_pending import (
     clear_prediction_pending,
     is_prediction_pending,
     try_mark_prediction_pending,
 )
-from astra.users.models import Profile, User
-
-PREDICTION_IN_PROGRESS_TEXT = (
-    "Почти готово ✨\n"
-    "Твоё предсказание уже готовится — пришлю сюда через минутку."
+from astra.services.prediction_pipeline import (
+    enqueue_prediction_pipeline,
+    resume_prediction_pipeline,
 )
+from astra.users.models import Profile, User
 
 
 class PredictionRequestStatus(StrEnum):
@@ -52,7 +51,7 @@ def format_prediction_for_user(
     profile: Profile,
 ) -> str:
     del user, profile
-    return prediction.text.strip()
+    return (prediction.text or "").strip()
 
 
 def _today_for_profile(profile: Profile, today: date | None) -> date:
@@ -61,16 +60,16 @@ def _today_for_profile(profile: Profile, today: date | None) -> date:
     return datetime.now(ZoneInfo(profile.timezone)).date()
 
 
-async def _enqueue_generate(user_id, target: date) -> None:  # noqa: ANN001
-    from astra.messaging.publisher import publish_prediction_generate
-
-    await publish_prediction_generate(user_id, target)
-
-
-async def _enqueue_send(user_id, target: date) -> None:  # noqa: ANN001
-    from astra.messaging.publisher import publish_prediction_send
-
-    await publish_prediction_send(user_id, target)
+async def _enqueue_pipeline(
+    session: AsyncSession,
+    user_id,
+    target: date,
+    prediction: Prediction | None,
+) -> None:  # noqa: ANN001
+    if prediction is None:
+        await enqueue_prediction_pipeline(session, user_id, target)
+        return
+    await resume_prediction_pipeline(session, user_id, target, prediction)
 
 
 async def request_today_prediction(
@@ -78,56 +77,36 @@ async def request_today_prediction(
     user: User,
     profile: Profile,
     today: date | None = None,
-    *,
-    allow_async: bool = False,
 ) -> PredictionRequestOutcome:
-    """Запросить предсказание на день: без дублей в RabbitMQ при повторных нажатиях."""
-    from astra.core.config import get_settings
-
+    """Запросить предсказание на день через RabbitMQ (без дублей при повторных нажатиях)."""
     target = _today_for_profile(profile, today)
     existing = await predictions_crud.get_prediction_for_date(session, user.id, target)
 
     if existing is not None:
-        if existing.sent_at is not None:
+        if existing.sent_at is not None or existing.status == PredictionStatus.SENT.value:
             return PredictionRequestOutcome(
                 status=PredictionRequestStatus.READY,
                 prediction=existing,
             )
         if await is_prediction_pending(user.id, target):
             return PredictionRequestOutcome(status=PredictionRequestStatus.IN_PROGRESS)
-        settings = get_settings()
-        if allow_async and settings.rabbitmq_enabled:
-            if not await try_mark_prediction_pending(user.id, target):
-                return PredictionRequestOutcome(status=PredictionRequestStatus.IN_PROGRESS)
-            try:
-                await _enqueue_send(user.id, target)
-            except Exception:
-                await clear_prediction_pending(user.id, target)
-                raise
-            return PredictionRequestOutcome(status=PredictionRequestStatus.QUEUED)
-        return PredictionRequestOutcome(
-            status=PredictionRequestStatus.READY,
-            prediction=existing,
-        )
-
-    settings = get_settings()
-    if allow_async and settings.rabbitmq_enabled:
         if not await try_mark_prediction_pending(user.id, target):
             return PredictionRequestOutcome(status=PredictionRequestStatus.IN_PROGRESS)
         try:
-            await _enqueue_generate(user.id, target)
+            await _enqueue_pipeline(session, user.id, target, existing)
         except Exception:
             await clear_prediction_pending(user.id, target)
             raise
         return PredictionRequestOutcome(status=PredictionRequestStatus.QUEUED)
 
-    prediction = await generate_daily_prediction_resilient(session, user, profile, target=target)
-    if prediction is None:
-        return PredictionRequestOutcome(status=PredictionRequestStatus.FAILED)
-    return PredictionRequestOutcome(
-        status=PredictionRequestStatus.READY,
-        prediction=prediction,
-    )
+    if not await try_mark_prediction_pending(user.id, target):
+        return PredictionRequestOutcome(status=PredictionRequestStatus.IN_PROGRESS)
+    try:
+        await _enqueue_pipeline(session, user.id, target, None)
+    except Exception:
+        await clear_prediction_pending(user.id, target)
+        raise
+    return PredictionRequestOutcome(status=PredictionRequestStatus.QUEUED)
 
 
 async def get_or_create_today_prediction(
@@ -135,16 +114,8 @@ async def get_or_create_today_prediction(
     user: User,
     profile: Profile,
     today: date | None = None,
-    *,
-    allow_async: bool = False,
 ) -> Prediction | None:
-    outcome = await request_today_prediction(
-        session,
-        user,
-        profile,
-        today,
-        allow_async=allow_async,
-    )
+    outcome = await request_today_prediction(session, user, profile, today)
     if outcome.status == PredictionRequestStatus.READY:
         return outcome.prediction
     return None
@@ -152,4 +123,5 @@ async def get_or_create_today_prediction(
 
 async def mark_prediction_sent(session: AsyncSession, prediction: Prediction) -> None:
     prediction.sent_at = datetime.now(timezone.utc)
+    prediction.status = PredictionStatus.SENT.value
     await session.flush()

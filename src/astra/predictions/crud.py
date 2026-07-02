@@ -5,6 +5,7 @@ from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from astra.predictions.models import Prediction
+from astra.predictions.status import PredictionStatus
 
 
 async def get_prediction_for_date(
@@ -26,14 +27,16 @@ async def create_prediction(
     *,
     user_id: UUID,
     prediction_date: date,
-    text: str,
+    text: str | None = None,
     astro_context: dict | None = None,
+    status: PredictionStatus = PredictionStatus.PENDING,
 ) -> Prediction:
     prediction = Prediction(
         user_id=user_id,
         prediction_date=prediction_date,
         text=text,
         astro_context=astro_context,
+        status=status.value,
     )
     session.add(prediction)
     await session.flush()
@@ -60,10 +63,37 @@ async def update_prediction(
     *,
     text: str | None = None,
     astro_context: dict | None = None,
+    status: PredictionStatus | None = None,
 ) -> Prediction:
     if text is not None:
         prediction.text = text
     if astro_context is not None:
         prediction.astro_context = astro_context
+    if status is not None:
+        prediction.status = status.value
     await session.flush()
     return prediction
+
+
+async def upsert_context_draft(
+    session: AsyncSession,
+    *,
+    user_id: UUID,
+    prediction_date: date,
+    astro_context: dict,
+) -> Prediction:
+    existing = await get_prediction_for_date(session, user_id, prediction_date)
+    if existing is None:
+        return await create_prediction(
+            session,
+            user_id=user_id,
+            prediction_date=prediction_date,
+            astro_context=astro_context,
+            status=PredictionStatus.CONTEXT_READY,
+        )
+    return await update_prediction(
+        session,
+        existing,
+        astro_context=astro_context,
+        status=PredictionStatus.CONTEXT_READY,
+    )

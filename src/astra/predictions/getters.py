@@ -23,7 +23,7 @@ async def get_today_prediction(
     return PredictionRead(
         id=row.id,
         prediction_date=row.prediction_date,
-        text=row.text,
-        message=row.text.strip(),
+        text=row.text or "",
+        message=(row.text or "").strip(),
         sent_at=row.sent_at,
     )

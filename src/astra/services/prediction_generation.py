@@ -11,8 +11,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from astra.core.config import Settings, get_settings
 from astra.core.prediction_errors import LlmGenerationError, report_prediction_generation_failure
+from astra.predictions import crud as predictions_crud
 from astra.predictions.models import Prediction
-from astra.services.astro_service import generate_daily_prediction
+from astra.predictions.status import PredictionStatus
+from astra.services.astro_service import generate_prediction_text_only
 from astra.services.prediction_delayed_notify import (
     maybe_send_delayed_notification,
     send_final_failure_notification,
@@ -32,6 +34,20 @@ def _backoff_seconds(attempt: int) -> float:
     return float(_BACKOFF_SEC[index])
 
 
+async def _mark_prediction_failed(
+    session: AsyncSession,
+    user_id,
+    target: date,
+) -> None:  # noqa: ANN001
+    prediction = await predictions_crud.get_prediction_for_date(session, user_id, target)
+    if prediction is not None:
+        await predictions_crud.update_prediction(
+            session,
+            prediction,
+            status=PredictionStatus.FAILED,
+        )
+
+
 async def generate_daily_prediction_resilient(
     session: AsyncSession,
     user: User,
@@ -39,7 +55,7 @@ async def generate_daily_prediction_resilient(
     target: date,
     settings: Settings | None = None,
 ) -> Prediction | None:
-    """Генерировать предсказание с ретраями; None — исчерпаны попытки, юзер уведомлён."""
+    """Сгенерировать текст предсказания (LLM) с ретраями; None — исчерпаны попытки."""
     cfg = settings or get_settings()
     started = time.monotonic()
     last_reason = "unknown"
@@ -50,7 +66,7 @@ async def generate_daily_prediction_resilient(
             await maybe_send_delayed_notification(user.id, user.telegram_id, target)
 
         try:
-            prediction = await generate_daily_prediction(
+            prediction = await generate_prediction_text_only(
                 session,
                 user,
                 profile,
@@ -86,6 +102,7 @@ async def generate_daily_prediction_resilient(
                     exc,
                 )
                 await send_final_failure_notification(user.telegram_id)
+                await _mark_prediction_failed(session, user.id, target)
                 await clear_prediction_pending(user.id, target)
                 return None
 

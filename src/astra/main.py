@@ -9,6 +9,7 @@ from astra.core.config import get_settings
 from astra.core.sentry import init_sentry
 from astra.db.session import get_session_factory, init_engine
 from astra.places.geonames_import import ensure_places_catalog
+from astra.messaging.publisher import close_publisher, verify_rabbitmq
 from astra.notifications.scheduler import notification_worker
 from astra.predictions.routers import router as predictions_router
 from astra.points.routers import router as points_router
@@ -59,6 +60,16 @@ async def lifespan(app: FastAPI):
             await configure_telegram_bot(bot)
         except Exception:
             logger.exception("Failed to configure Telegram bot menu")
+
+    try:
+        await verify_rabbitmq(settings)
+        logger.info("RabbitMQ topology verified")
+    except Exception:
+        logger.exception(
+            "RabbitMQ недоступен — фоновые задачи (предсказания, совместимость) не будут работать. "
+            "Запустите: docker compose up -d rabbitmq worker",
+        )
+
     app.state.bot = bot
     app.state.dp = dp
 
@@ -100,6 +111,7 @@ async def lifespan(app: FastAPI):
             pass
     await bot.session.close()
     await notification_bot.session.close()
+    await close_publisher()
 
 
 def create_app(*, with_lifespan: bool = True) -> FastAPI:

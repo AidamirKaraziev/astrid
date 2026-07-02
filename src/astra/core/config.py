@@ -43,7 +43,6 @@ class Settings(BaseSettings):
     notification_minute: int = 0
 
     rabbitmq_url: str = "amqp://astra:astra@localhost:5672/"
-    rabbitmq_enabled: bool = True
     rabbitmq_prefetch: int = 8
 
     ollama_base_url: str = "http://localhost:11434"

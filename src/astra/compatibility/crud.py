@@ -5,7 +5,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from astra.compatibility.enums import ReportStatus
@@ -132,6 +132,28 @@ async def list_compatibility_reports(
     return list(result.scalars().all())
 
 
+async def mark_report_synastry_ready(
+    session: AsyncSession,
+    report: CompatibilityReport,
+    astro_context: dict,
+) -> None:
+    report.status = ReportStatus.SYNASTRY_READY
+    report.astro_context = astro_context
+    report.failure_reason = None
+    await session.flush()
+
+
+async def mark_report_text_ready(
+    session: AsyncSession,
+    report: CompatibilityReport,
+    llm_output: dict,
+) -> None:
+    report.status = ReportStatus.TEXT_READY
+    report.llm_output = llm_output
+    report.failure_reason = None
+    await session.flush()
+
+
 async def mark_report_generating(session: AsyncSession, report: CompatibilityReport) -> None:
     report.status = ReportStatus.GENERATING
     await session.flush()
@@ -166,3 +188,11 @@ async def mark_report_failed(
 async def mark_report_sent(session: AsyncSession, report: CompatibilityReport) -> None:
     report.sent_at = datetime.now(timezone.utc)
     await session.flush()
+
+
+async def delete_compatibility_report(session: AsyncSession, report_id: uuid.UUID) -> bool:
+    result = await session.execute(
+        delete(CompatibilityReport).where(CompatibilityReport.id == report_id),
+    )
+    await session.flush()
+    return (result.rowcount or 0) > 0

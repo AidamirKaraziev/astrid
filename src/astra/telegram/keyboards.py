@@ -21,6 +21,11 @@ from astra.telegram.button_texts import (
     CB_COMPAT_CONTEXT_PREFIX,
     CB_COMPAT_MODE_PREFIX,
     CB_COMPAT_REPORT_PREFIX,
+    CB_COMPAT_REPORT_PDF_PREFIX,
+    CB_COMPAT_REPORTS_LIST,
+    CB_COMPAT_DELETE_PREFIX,
+    CB_COMPAT_DELETE_CONFIRM_PREFIX,
+    CB_COMPAT_DELETE_CANCEL_PREFIX,
     CB_PRODUCT_ASK_STARS,
     CB_PROFILE_REPORTS,
 )
@@ -149,11 +154,53 @@ def compatibility_confirm_keyboard() -> InlineKeyboardMarkup:
 
 def compatibility_reports_keyboard(report_buttons: list[tuple[str, str]]) -> InlineKeyboardMarkup:
     rows = [
-        [InlineKeyboardButton(text=label, callback_data=f"{CB_COMPAT_REPORT_PREFIX}{report_id}")]
+        [InlineKeyboardButton(text=label[:60], callback_data=f"{CB_COMPAT_REPORT_PREFIX}{report_id}")]
         for label, report_id in report_buttons
     ]
     rows.append([InlineKeyboardButton(text="◀️ Назад", callback_data="profile:back")])
     return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def compatibility_report_card_keyboard(report_id: str) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="📄 Получить PDF",
+                    callback_data=f"{CB_COMPAT_REPORT_PDF_PREFIX}{report_id}",
+                ),
+            ],
+            [
+                InlineKeyboardButton(
+                    text="🗑 Удалить",
+                    callback_data=f"{CB_COMPAT_DELETE_PREFIX}{report_id}",
+                ),
+            ],
+            [
+                InlineKeyboardButton(
+                    text="◀️ К списку",
+                    callback_data=CB_COMPAT_REPORTS_LIST,
+                ),
+            ],
+        ],
+    )
+
+
+def compatibility_delete_confirm_keyboard(report_id: str) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="✅ Удалить",
+                    callback_data=f"{CB_COMPAT_DELETE_CONFIRM_PREFIX}{report_id}",
+                ),
+                InlineKeyboardButton(
+                    text="❌ Отмена",
+                    callback_data=f"{CB_COMPAT_DELETE_CANCEL_PREFIX}{report_id}",
+                ),
+            ],
+        ],
+    )
 
 
 def profile_gender_inline_keyboard() -> InlineKeyboardMarkup:

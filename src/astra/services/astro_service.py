@@ -4,8 +4,8 @@ from uuid import UUID
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from astra.astro.calculator import build_natal_chart
-from astra.astro.crud import upsert_natal_chart
-from astra.astro.schemas import AstroContext, NatalChartData
+from astra.astro.crud import chart_data_from_row, get_natal_chart, upsert_natal_chart
+from astra.astro.schemas import AstroContext, NatalChartData, TransitAspect
 from astra.astro.transits import build_daily_context
 from astra.core.config import Settings, get_settings
 from astra.core.prediction_errors import LlmGenerationError
@@ -14,6 +14,7 @@ from astra.llm.prompts.astrid import QuestionArchetype, pick_question_archetype
 from astra.places import crud as places_crud
 from astra.predictions import crud as predictions_crud
 from astra.predictions.models import Prediction
+from astra.predictions.status import PredictionStatus
 from astra.users import crud as users_crud
 from astra.users.models import Profile, User
 
@@ -97,6 +98,77 @@ def build_prediction_astro_context(
     return payload
 
 
+def astro_context_from_stored(payload: dict) -> AstroContext:
+    data = {key: value for key, value in payload.items() if key != "question_archetype_id"}
+    return AstroContext(
+        date=date.fromisoformat(data["date"]),
+        accuracy_tier=data["accuracy_tier"],
+        natal=data["natal"],
+        transits=[TransitAspect.model_validate(item) for item in data["transits"]],
+        moon_phase=data.get("moon_phase"),
+    )
+
+
+async def load_natal_chart_data(session: AsyncSession, user_id: UUID) -> NatalChartData:
+    row = await get_natal_chart(session, user_id)
+    if row is None:
+        raise LlmGenerationError("missing_natal_chart")
+    return chart_data_from_row(row)
+
+
+async def build_and_store_daily_context(
+    session: AsyncSession,
+    user: User,
+    profile: Profile,
+    target: date,
+) -> Prediction:
+    chart = await load_natal_chart_data(session, user.id)
+    ctx = build_daily_context(profile, chart, target)
+    archetype = pick_question_archetype(user.id, target)
+    payload = build_prediction_astro_context(ctx, archetype)
+    return await predictions_crud.upsert_context_draft(
+        session,
+        user_id=user.id,
+        prediction_date=target,
+        astro_context=payload,
+    )
+
+
+async def generate_prediction_text_only(
+    session: AsyncSession,
+    user: User,
+    profile: Profile,
+    target: date,
+    settings: Settings | None = None,
+) -> Prediction:
+    cfg = settings or get_settings()
+    if not cfg.ollama_enabled:
+        raise LlmGenerationError("disabled")
+
+    prediction = await predictions_crud.get_prediction_for_date(session, user.id, target)
+    if prediction is None or prediction.astro_context is None:
+        raise LlmGenerationError("missing_context")
+
+    chart = await load_natal_chart_data(session, user.id)
+    ctx = astro_context_from_stored(prediction.astro_context)
+    archetype = pick_question_archetype(user.id, target)
+    body, failure_reason = await llm_generate_body(
+        ctx,
+        profile,
+        chart,
+        cfg,
+        archetype=archetype,
+    )
+    if not body:
+        raise LlmGenerationError(failure_reason or "empty_response")
+    return await predictions_crud.update_prediction(
+        session,
+        prediction,
+        text=body,
+        status=PredictionStatus.TEXT_READY,
+    )
+
+
 async def generate_prediction_body(
     session: AsyncSession,
     user: User,
@@ -136,6 +208,7 @@ async def create_or_update_prediction(
             existing,
             text=body,
             astro_context=astro_context,
+            status=PredictionStatus.TEXT_READY,
         )
     return await predictions_crud.create_prediction(
         session,
@@ -143,6 +216,7 @@ async def create_or_update_prediction(
         prediction_date=target,
         text=body,
         astro_context=astro_context,
+        status=PredictionStatus.TEXT_READY,
     )
 
 
