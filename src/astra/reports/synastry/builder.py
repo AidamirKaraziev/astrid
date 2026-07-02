@@ -42,6 +42,27 @@ from astra.reports.synastry.theme import (
 )
 from astra.reports.synastry.types import AspectData, PersonData, SynastryReportData
 
+_COVER_TRACK = colors.HexColor("#252538")
+_COVER_BLOCK_H = 448.0
+_COVER_METER_BAR_OFFSET = 108.0
+_COVER_GAP_METER_TO_BIRTH = 28.0
+_COVER_GAP_BIRTH_TO_READ = 20.0
+
+
+def _overall_compatibility(report: SynastryReportData) -> float:
+    if not report.metrics:
+        return 0.0
+    return sum(m.value for m in report.metrics) / len(report.metrics)
+
+
+def _format_birth_line(subtitle: str) -> str:
+    parts = [p.strip() for p in subtitle.split("·")]
+    if len(parts) >= 3:
+        return f"{parts[0]} · {parts[1]} · {parts[2]}"
+    if len(parts) == 2:
+        return f"{parts[0]} · {parts[1]}"
+    return subtitle
+
 
 class SynastryPdfBuilder:
     def __init__(
@@ -588,19 +609,68 @@ class SynastryPdfBuilder:
             iy = self._draw_text_block(item, MARGIN + 26, iy, text_w, size=TYPE["body"]) - GAP["xs"]
         return bottom - GAP["sm"]
 
+    def _draw_cover_zone_divider(self, y: float) -> None:
+        self.c.saveState()
+        self.c.setStrokeColor(GOLD_DIM)
+        self.c.setStrokeAlpha(0.2)
+        self.c.setLineWidth(0.5)
+        self.c.line(MARGIN + 24, y, W - MARGIN - 24, y)
+        self.c.restoreState()
+
+    def _draw_compat_glowing_bar(self, x: float, y: float, width: float, height: float, pct: float) -> None:
+        r = height / 2
+        self.c.setFillColor(_COVER_TRACK)
+        self.c.roundRect(x, y, width, height, r, fill=1, stroke=0)
+        fill_w = max(height, width * pct)
+        if pct <= 0:
+            return
+
+        end_x = x + fill_w
+        mid_y = y + height / 2
+        self._draw_radial_glow(end_x, mid_y, height * 4.2, GOLD, intensity="section")
+        self._draw_radial_glow(end_x, mid_y, height * 2.0, GOLD_LIGHT, intensity="finale")
+        self.c.setFillColor(GOLD)
+        self.c.roundRect(x, y, fill_w, height, r, fill=1, stroke=0)
+        self.c.setFillColor(GOLD_LIGHT)
+        self.c.setFillAlpha(0.48)
+        self.c.roundRect(x, y + height * 0.18, fill_w, height * 0.38, height * 0.1, fill=1, stroke=0)
+        self.c.setFillAlpha(1)
+        self.c.setFillColor(GOLD_LIGHT)
+        self.c.circle(end_x, mid_y, height * 0.58, fill=1, stroke=0)
+
+    def _draw_compat_meter_labels(self, bar_x: float, bar_y: float, bar_w: float, bar_h: float) -> None:
+        self.c.setFillColor(MUTED)
+        self.c.setFont(FONT, 9)
+        self.c.drawCentredString(W / 2, bar_y + bar_h + 14, "общая совместимость")
+        self.c.setFillColor(GOLD_DIM)
+        self.c.setFont(FONT, 8)
+        self.c.drawString(bar_x, bar_y - 11, "0")
+        self.c.drawRightString(bar_x + bar_w, bar_y - 11, "100")
+
+    def _draw_compat_hero_pct(self, cx: float, cy: float, pct_label: int, *, size: int = 34) -> None:
+        num_w = self.c.stringWidth(str(pct_label), FONT_BOLD, size)
+        pct_w = self.c.stringWidth("%", FONT_BOLD, 13)
+        x0 = cx - (num_w + pct_w + 2) / 2
+        self.c.setFillColor(GOLD_LIGHT)
+        self.c.setFont(FONT_BOLD, size)
+        self.c.drawString(x0, cy, str(pct_label))
+        self.c.setFillColor(GOLD)
+        self.c.setFont(FONT_BOLD, 13)
+        self.c.drawString(x0 + num_w + 2, cy + size * 0.28, "%")
+
     # --- pages ---
 
     def _page_cover(self) -> None:
         self._new_page("cover", "Обложка")
         self._draw_bg(vibe="cover")
-        self._draw_radial_glow(W / 2, H * 0.48, 160, GOLD, intensity="section")
 
-        block_h = 340
-        top = H - MARGIN - 50
+        block_h = _COVER_BLOCK_H
+        top = H - MARGIN - 48
         bottom = top - block_h
+        self._draw_radial_glow(W / 2, H * 0.46, 150, GOLD, intensity="section")
         self._draw_card_bg(bottom, block_h, accent=GOLD, glow="section")
 
-        cy = bottom + block_h * 0.55
+        cy = bottom + block_h * 0.60
         self.c.saveState()
         self.c.setStrokeColor(GOLD_LIGHT)
         self.c.setStrokeAlpha(0.5)
@@ -611,11 +681,15 @@ class SynastryPdfBuilder:
         self.c.setLineWidth(0.3)
         self.c.circle(W / 2, cy, 96, fill=0, stroke=1)
 
+        self.c.setFillColor(GOLD_LIGHT)
+        self.c.setFont(FONT_BOLD, TYPE["display"])
+        self.c.drawCentredString(W / 2, cy + 108, "Синастрия")
+        self.c.setFillColor(MUTED)
+        self.c.setFont(FONT, TYPE["body"])
+        self.c.drawCentredString(W / 2, cy + 86, "Совместимость пары")
+
         avatar_y = cy + 8
-        for dx, person in [
-            (-48, self._report.person_a),
-            (48, self._report.person_b),
-        ]:
+        for dx, person in [(-48, self._report.person_a), (48, self._report.person_b)]:
             cx = W / 2 + dx
             accent = person.accent
             self._draw_radial_glow(cx, avatar_y, 38, accent, intensity="card")
@@ -635,19 +709,31 @@ class SynastryPdfBuilder:
         self.c.setFont(FONT_BOLD, 14)
         self.c.drawCentredString(W / 2, avatar_y - 2, "×")
 
-        self.c.setFillColor(GOLD_LIGHT)
-        self.c.setFont(FONT_BOLD, TYPE["display"])
-        self.c.drawCentredString(W / 2, cy + 108, "Синастрия")
-        self.c.setFillColor(MUTED)
-        self.c.setFont(FONT, TYPE["body"])
-        self.c.drawCentredString(W / 2, cy + 86, "Совместимость пары")
-        self.c.setFont(FONT, TYPE["caption"])
-        self.c.drawCentredString(W / 2, cy - 58, self._report.person_a.subtitle)
-        self.c.drawCentredString(W / 2, cy - 74, self._report.person_b.subtitle)
+        compat = _overall_compatibility(self._report)
+        pct_label = int(round(compat * 100))
+        bar_w = CONTENT_W - 56
+        bar_x = MARGIN + 28
+        bar_h = 7.0
+        bar_y = bottom + _COVER_METER_BAR_OFFSET
 
+        names_bottom = cy + 8 - 40 - 11
+        self._draw_cover_zone_divider(names_bottom - 20)
+
+        self._draw_compat_hero_pct(W / 2, bar_y + 40, pct_label)
+        self._draw_compat_meter_labels(bar_x, bar_y, bar_w, bar_h)
+        self._draw_compat_glowing_bar(bar_x, bar_y, bar_w, bar_h, compat)
+
+        y_a = bar_y - _COVER_GAP_METER_TO_BIRTH
+        y_b = y_a - 16
+        self.c.setFont(FONT, TYPE["caption"])
+        self.c.setFillColor(MUTED)
+        self.c.drawCentredString(W / 2, y_a, _format_birth_line(self._report.person_a.subtitle))
+        self.c.drawCentredString(W / 2, y_b, _format_birth_line(self._report.person_b.subtitle))
+
+        read_y = bar_y - _COVER_GAP_METER_TO_BIRTH - _COVER_GAP_BIRTH_TO_READ - 32
         self.c.setFillColor(GOLD)
         self.c.setFont(FONT, TYPE["caption"])
-        self.c.drawCentredString(W / 2, bottom + 16, f"✦  {self._report.read_time_label}  ✦")
+        self.c.drawCentredString(W / 2, read_y, f"✦  {self._report.read_time_label}  ✦")
 
         self._draw_footer()
 

@@ -23,7 +23,7 @@ def build_sample_report() -> SynastryReportData:
     """Готовый отчёт для локальной генерации PDF без Kerykeion."""
     person_a = PersonData(
         name="Айдамир",
-        subtitle="14.02.1998 · Армавир",
+        subtitle="14.02.1998 · 14:30 · Армавир",
         accent=ACCENT_BLUE,
         planets=(
             ("sun", "Водолей"),
@@ -38,7 +38,7 @@ def build_sample_report() -> SynastryReportData:
     )
     person_b = PersonData(
         name="Анжела",
-        subtitle="02.12.2001 · Старовеличковская",
+        subtitle="02.12.2001 · 09:15 · Старовеличковская",
         accent=ACCENT_PURPLE,
         planets=(
             ("sun", "Стрелец"),

@@ -41,7 +41,10 @@ _ZONE_COLORS = {
 
 def _format_subtitle(person: CompatibilityPersonInput) -> str:
     d = person.birth_date
-    return f"{d.day:02d}.{d.month:02d}.{d.year} · {person.birth_place}"
+    date_s = f"{d.day:02d}.{d.month:02d}.{d.year}"
+    if person.birth_time:
+        return f"{date_s} · {person.birth_time} · {person.birth_place}"
+    return f"{date_s} · {person.birth_place}"
 
 
 def _person_data(person: CompatibilityPersonInput, *, accent) -> PersonData:  # noqa: ANN001
