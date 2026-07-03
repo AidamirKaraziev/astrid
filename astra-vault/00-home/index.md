@@ -1,6 +1,6 @@
 ---
 tags: [home, index]
-date: 2026-06-26
+date: 2026-07-03
 ---
 
 # Astra — карта знаний
@@ -68,6 +68,7 @@ date: 2026-06-26
 - [[конфликт хендлеров текста кнопки геолокации с поиском города]]
 - [[mihomo показывает COMPATIBLE когда config type http вместо file]]
 - [[RabbitMQ send раньше commit generate и отсутствие socksio]]
+- [[после рефакторинга забытые импорты date и dispatch_task]]
 
 ### Бизнес (`knowledge/business/`)
 
@@ -87,6 +88,7 @@ date: 2026-06-26
 - [[2026-06-15 UX меню бота платные продукты Menu Button]]
 - [[2026-06-26 PDF синастрия рефакторинг и план совместимости]]
 - [[2026-07-02 staged progress pipelines и диагностика LLM совместимости]]
+- [[2026-07-03 caption tldr PDF и фиксы импортов worker бота]]
 - [[2026-06-12 промпт Astrid v2 gemma4 e2b]]
 - [[2026-06-12 имя в начале прогноза Astrid]]
 
