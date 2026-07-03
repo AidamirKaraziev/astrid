@@ -2,20 +2,19 @@
 
 from __future__ import annotations
 
-import logging
-
 import httpx
 
 from astra.core.config import Settings, get_settings
+from astra.core.observability import Event, get_logger
 
-logger = logging.getLogger(__name__)
+log = get_logger(__name__)
 
 
 async def warmup_ollama_model(settings: Settings | None = None) -> None:
     """Загрузить модель в RAM до первого пользовательского запроса."""
     cfg = settings or get_settings()
     if not cfg.ollama_enabled:
-        logger.info("Ollama warmup skipped: OLLAMA_ENABLED=false")
+        log.info(Event.OLLAMA_WARMUP_SKIPPED, reason="disabled")
         return
 
     url = f"{cfg.ollama_base_url.rstrip('/')}/api/chat"
@@ -32,11 +31,11 @@ async def warmup_ollama_model(settings: Settings | None = None) -> None:
             response = await client.post(url, json=payload)
             response.raise_for_status()
     except Exception:
-        logger.exception(
-            "Ollama warmup failed for model %s at %s",
-            cfg.ollama_model,
-            cfg.ollama_base_url,
+        log.exception(
+            Event.OLLAMA_WARMUP_FAILED,
+            model=cfg.ollama_model,
+            base_url=cfg.ollama_base_url,
         )
         return
 
-    logger.info("Ollama warmup OK: model=%s", cfg.ollama_model)
+    log.info(Event.OLLAMA_WARMUP_OK, model=cfg.ollama_model)

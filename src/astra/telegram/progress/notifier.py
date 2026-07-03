@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-import logging
 from datetime import date
 from uuid import UUID
 
 from astra.core.config import Settings
+from astra.core.observability import Event, get_logger
 from astra.telegram.progress.api import (
     delete_message,
     send_chat_action_typing,
@@ -28,7 +28,7 @@ from astra.telegram.progress.store import (
     set_progress_message_id,
 )
 
-logger = logging.getLogger(__name__)
+log = get_logger(__name__)
 
 
 async def advance_progress(
@@ -50,11 +50,11 @@ async def advance_progress(
 
     message_id = await send_html_message(chat_id, text, settings=settings)
     if message_id is None:
-        logger.warning(
-            "progress message not sent chat=%s user=%s job=%s",
-            chat_id,
-            user_id,
-            job_key,
+        log.warning(
+            Event.TELEGRAM_PROGRESS_NOTIFY_FAILED,
+            chat_id=chat_id,
+            user_id=user_id,
+            job_key=job_key,
         )
         return None
 

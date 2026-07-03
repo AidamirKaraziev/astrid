@@ -2,16 +2,15 @@
 
 from __future__ import annotations
 
-import logging
-
 from aiogram.fsm.context import FSMContext
 from aiogram.types import Message
 
+from astra.core.observability import Event, get_logger
 from astra.services.prediction_delivery_service import enqueue_first_prediction_after_registration
 from astra.telegram.keyboards import main_menu_keyboard
 from astra.users.models import User
 
-logger = logging.getLogger(__name__)
+log = get_logger(__name__)
 
 REGISTRATION_COMPLETE_TEXT = (
     "Поздравляю! Регистрация завершена ♥️\n\n"
@@ -27,4 +26,4 @@ async def run_greeting_phase(message: Message, state: FSMContext, user: User) ->
     )
     await state.clear()
     await enqueue_first_prediction_after_registration(user.id)
-    logger.info("greeting phase completed for user %s", user.id)
+    log.info(Event.GREETING_COMPLETED, user_id=user.id)

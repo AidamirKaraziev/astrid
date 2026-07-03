@@ -2,14 +2,14 @@
 
 from __future__ import annotations
 
-import logging
 from uuid import UUID
 
 from redis.asyncio import Redis
 
 from astra.core.config import get_settings
+from astra.core.observability import Event, get_logger
 
-logger = logging.getLogger(__name__)
+log = get_logger(__name__)
 
 _PROGRESS_TTL_SEC = 2700
 _KEY_PREFIX = "astra:progress"
@@ -62,4 +62,4 @@ async def clear_progress_message_id(user_id: UUID, job_key: str) -> int | None:
         return int(raw)
     finally:
         await client.aclose()
-        logger.debug("cleared progress key user=%s job=%s", user_id, job_key)
+        log.debug(Event.REDIS_PROGRESS_CLEARED, user_id=user_id, job_key=job_key)

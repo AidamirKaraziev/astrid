@@ -2,15 +2,15 @@
 
 from __future__ import annotations
 
-import logging
 from datetime import date
 from uuid import UUID
 
 from redis.asyncio import Redis
 
 from astra.core.config import get_settings
+from astra.core.observability import Event, get_logger
 
-logger = logging.getLogger(__name__)
+log = get_logger(__name__)
 
 _PENDING_TTL_SEC = 2700
 _KEY_PREFIX = "astra:prediction:pending"
@@ -53,4 +53,8 @@ async def clear_prediction_pending(user_id: UUID, prediction_date: date) -> None
         await client.delete(_pending_key(user_id, prediction_date))
     finally:
         await client.aclose()
-        logger.debug("cleared prediction pending %s %s", user_id, prediction_date)
+        log.debug(
+            Event.REDIS_PREDICTION_PENDING_CLEARED,
+            user_id=user_id,
+            prediction_date=str(prediction_date),
+        )

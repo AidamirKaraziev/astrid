@@ -2,14 +2,14 @@
 
 from __future__ import annotations
 
-import logging
 from abc import ABC, abstractmethod
 
 import httpx
 
+from astra.core.observability import Event, get_logger
 from astra.llm.types import CompletionRequest, CompletionResult
 
-logger = logging.getLogger(__name__)
+log = get_logger(__name__)
 
 
 class BaseLlmProvider(ABC):
@@ -48,24 +48,29 @@ class BaseLlmProvider(ABC):
 
     @staticmethod
     def map_http_error(exc: Exception, *, log_label: str) -> str:
+        provider = log_label
         if isinstance(exc, httpx.TimeoutException):
-            logger.warning("%s request timed out", log_label)
+            log.warning(Event.LLM_HTTP_ERROR, provider=provider, reason="timeout")
             return "timeout"
         if isinstance(exc, httpx.ConnectError):
-            logger.warning("%s connection failed", log_label)
+            log.warning(Event.LLM_HTTP_ERROR, provider=provider, reason="connection")
             return "connection"
         if isinstance(exc, httpx.HTTPStatusError):
             response = exc.response
             detail = BaseLlmProvider._http_error_detail(response)
             if detail:
-                logger.warning(
-                    "%s HTTP error %s: %s",
-                    log_label,
-                    response.status_code,
-                    detail,
+                log.warning(
+                    Event.LLM_HTTP_ERROR,
+                    provider=provider,
+                    status_code=response.status_code,
+                    reason=detail,
                 )
                 return f"http_{response.status_code}:{detail}"
-            logger.warning("%s HTTP error: %s", log_label, response.status_code)
+            log.warning(
+                Event.LLM_HTTP_ERROR,
+                provider=provider,
+                status_code=response.status_code,
+            )
             return f"http_{response.status_code}"
-        logger.exception("%s request failed", log_label)
+        log.exception(Event.LLM_HTTP_ERROR, provider=provider, reason="request_error")
         return "request_error"

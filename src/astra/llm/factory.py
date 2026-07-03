@@ -10,49 +10,54 @@ from astra.llm.api.openai import OpenAIProvider
 from astra.llm.api.openrouter import OpenRouterProvider
 from astra.llm.base import BaseLlmProvider
 from astra.llm.local.ollama import OllamaProvider
+from astra.llm.tracing_provider import TracingLlmProvider
 
 _KNOWN_PROVIDERS = frozenset({"ollama", "grok", "gemini", "openrouter", "openai", "deepseek"})
 
 
-def get_llm_provider(name: str, settings: Settings | None = None) -> BaseLlmProvider:
-    """Вернуть провайдер по имени."""
+def _wrap(provider: BaseLlmProvider, *, purpose: str = "unknown") -> BaseLlmProvider:
+    return TracingLlmProvider(provider, purpose=purpose)
+
+
+def get_llm_provider(name: str, settings: Settings | None = None, *, purpose: str = "unknown") -> BaseLlmProvider:
+    """Вернуть провайдер по имени (с tracing-обёрткой)."""
     provider = name.strip().lower()
     if provider not in _KNOWN_PROVIDERS:
         raise ValueError(f"Unknown LLM provider: {name}")
 
     cfg = settings or get_settings()
     if provider == "ollama":
-        return OllamaProvider(cfg)
+        return _wrap(OllamaProvider(cfg), purpose=purpose)
     if provider == "grok":
-        return GrokProvider(cfg)
+        return _wrap(GrokProvider(cfg), purpose=purpose)
     if provider == "gemini":
-        return GeminiProvider(cfg)
+        return _wrap(GeminiProvider(cfg), purpose=purpose)
     if provider == "openai":
-        return OpenAIProvider(cfg)
+        return _wrap(OpenAIProvider(cfg), purpose=purpose)
     if provider == "deepseek":
-        return DeepSeekProvider(cfg)
-    return OpenRouterProvider(cfg)
+        return _wrap(DeepSeekProvider(cfg), purpose=purpose)
+    return _wrap(OpenRouterProvider(cfg), purpose=purpose)
 
 
-def get_ollama_provider(settings: Settings | None = None) -> OllamaProvider:
-    return OllamaProvider(settings or get_settings())
+def get_ollama_provider(settings: Settings | None = None) -> BaseLlmProvider:
+    return _wrap(OllamaProvider(settings or get_settings()), purpose="daily_prediction")
 
 
-def get_grok_provider(settings: Settings | None = None) -> GrokProvider:
-    return GrokProvider(settings or get_settings())
+def get_grok_provider(settings: Settings | None = None) -> BaseLlmProvider:
+    return _wrap(GrokProvider(settings or get_settings()), purpose="grok")
 
 
-def get_gemini_provider(settings: Settings | None = None) -> GeminiProvider:
-    return GeminiProvider(settings or get_settings())
+def get_gemini_provider(settings: Settings | None = None) -> BaseLlmProvider:
+    return _wrap(GeminiProvider(settings or get_settings()), purpose="gemini")
 
 
-def get_openrouter_provider(settings: Settings | None = None) -> OpenRouterProvider:
-    return OpenRouterProvider(settings or get_settings())
+def get_openrouter_provider(settings: Settings | None = None) -> BaseLlmProvider:
+    return _wrap(OpenRouterProvider(settings or get_settings()), purpose="openrouter")
 
 
-def get_openai_provider(settings: Settings | None = None) -> OpenAIProvider:
-    return OpenAIProvider(settings or get_settings())
+def get_openai_provider(settings: Settings | None = None) -> BaseLlmProvider:
+    return _wrap(OpenAIProvider(settings or get_settings()), purpose="openai")
 
 
-def get_deepseek_provider(settings: Settings | None = None) -> DeepSeekProvider:
-    return DeepSeekProvider(settings or get_settings())
+def get_deepseek_provider(settings: Settings | None = None) -> BaseLlmProvider:
+    return _wrap(DeepSeekProvider(settings or get_settings()), purpose="compatibility")

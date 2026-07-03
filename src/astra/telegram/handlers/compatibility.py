@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
-import logging
 from datetime import date, datetime
 from uuid import UUID
+
+from astra.core.observability import Event, get_logger
 
 from aiogram import F, Router
 from aiogram.filters import StateFilter
@@ -71,7 +72,7 @@ from astra.telegram.utils import parse_birth_date, parse_birth_time
 from astra.users import crud as users_crud
 from astra.users.gender import GENDER_FEMALE, GENDER_MALE
 
-logger = logging.getLogger(__name__)
+log = get_logger(__name__)
 
 router = Router(name="compatibility")
 
@@ -372,7 +373,7 @@ async def cb_compat_confirm(
         await session.commit()
         outcome = await request_compatibility_report(session, report.id)
     except Exception:
-        logger.exception("Failed to create compatibility report")
+        log.exception(Event.COMPATIBILITY_REPORT_CREATE_FAILED)
         await callback.message.answer(
             "Не получилось создать разбор. Попробуй позже.",
             reply_markup=main_menu_keyboard(),

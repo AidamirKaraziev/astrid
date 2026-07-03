@@ -2,9 +2,7 @@
 
 from __future__ import annotations
 
-import logging
-
-from astra.astro.schemas import AstroContext, NatalChartData
+from astra.core.observability import Event, get_logger
 from astra.core.config import Settings, get_settings
 from astra.llm.base import BaseLlmProvider
 from astra.llm.types import ChatMessage, CompletionRequest
@@ -17,7 +15,7 @@ from astra.llm.prompts.astrid import (
 )
 from astra.users.models import Profile
 
-logger = logging.getLogger(__name__)
+log = get_logger(__name__)
 
 _ASTRID_TEMPERATURE = 0.76
 _ASTRID_NUM_PREDICT = 340
@@ -84,11 +82,11 @@ async def generate_astrid_body(
 
     validation_error = validate_prediction_output(cleaned, display_name)
     if validation_error:
-        logger.warning(
-            "Astrid output failed validation via %s: %s (archetype=%s)",
-            provider.name,
-            validation_error,
-            archetype.id if archetype is not None else "auto",
+        log.warning(
+            Event.LLM_VALIDATION_FAILED,
+            provider=provider.name,
+            reason=validation_error,
+            archetype=archetype.id if archetype is not None else "auto",
         )
         return None, validation_error
 

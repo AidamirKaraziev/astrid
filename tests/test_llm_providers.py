@@ -19,6 +19,7 @@ from astra.llm.factory import (
     get_openrouter_provider,
 )
 from astra.llm.local.ollama import OllamaProvider
+from astra.llm.tracing_provider import TracingLlmProvider
 from astra.llm.types import ChatMessage, CompletionRequest
 
 
@@ -102,18 +103,20 @@ def test_get_llm_provider_unknown_raises() -> None:
 
 
 def test_get_llm_provider_returns_typed_instances() -> None:
-    assert isinstance(get_ollama_provider(), OllamaProvider)
-    assert isinstance(get_grok_provider(), GrokProvider)
-    assert isinstance(get_gemini_provider(), GeminiProvider)
-    assert isinstance(get_openrouter_provider(), OpenRouterProvider)
-    assert isinstance(get_openai_provider(), OpenAIProvider)
-    assert isinstance(get_deepseek_provider(), DeepSeekProvider)
-    assert isinstance(get_llm_provider("ollama"), OllamaProvider)
-    assert isinstance(get_llm_provider("grok"), GrokProvider)
-    assert isinstance(get_llm_provider("gemini"), GeminiProvider)
-    assert isinstance(get_llm_provider("openrouter"), OpenRouterProvider)
-    assert isinstance(get_llm_provider("openai"), OpenAIProvider)
-    assert isinstance(get_llm_provider("deepseek"), DeepSeekProvider)
+    assert isinstance(get_ollama_provider(), TracingLlmProvider)
+    assert isinstance(get_grok_provider(), TracingLlmProvider)
+    assert isinstance(get_gemini_provider(), TracingLlmProvider)
+    assert isinstance(get_openrouter_provider(), TracingLlmProvider)
+    assert isinstance(get_openai_provider(), TracingLlmProvider)
+    assert isinstance(get_deepseek_provider(), TracingLlmProvider)
+    assert isinstance(get_llm_provider("ollama"), TracingLlmProvider)
+    assert isinstance(get_llm_provider("grok"), TracingLlmProvider)
+    assert isinstance(get_llm_provider("gemini"), TracingLlmProvider)
+    assert isinstance(get_llm_provider("openrouter"), TracingLlmProvider)
+    assert isinstance(get_llm_provider("openai"), TracingLlmProvider)
+    assert isinstance(get_llm_provider("deepseek"), TracingLlmProvider)
+    assert isinstance(get_ollama_provider()._inner, OllamaProvider)
+    assert isinstance(get_deepseek_provider()._inner, DeepSeekProvider)
 
 
 def test_grok_provider_is_configured() -> None:

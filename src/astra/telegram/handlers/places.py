@@ -1,6 +1,5 @@
 """Выбор населённого пункта: поиск → список → онбординг или профиль."""
 
-import logging
 from uuid import UUID
 
 from aiogram import F, Router
@@ -12,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from astra.places import crud as places_crud
 from astra.places.geonames_import import ensure_places_catalog
 from astra.places.getters import get_place_read
+from astra.core.observability import Event, get_logger
 from astra.db.session import get_session_factory
 from astra.services.greeting_service import run_greeting_phase
 from astra.services.onboarding_service import parse_registration_fsm, run_registration_phase
@@ -20,7 +20,7 @@ from astra.telegram.states import CompatibilityStates, OnboardingStates, Profile
 from astra.users import crud as users_crud
 from astra.telegram.keyboards_places import places_pick_keyboard
 
-logger = logging.getLogger(__name__)
+log = get_logger(__name__)
 
 router = Router(name="places")
 
@@ -153,12 +153,11 @@ async def place_text_search(
 
 @router.message(StateFilter(*PLACE_STATES))
 async def place_step_fallback(message: Message, state: FSMContext) -> None:
-    logger.warning(
-        "Unhandled place step: user=%s state=%s content_type=%s text=%r",
-        message.from_user.id if message.from_user else None,
-        await state.get_state(),
-        message.content_type,
-        message.text,
+    log.warning(
+        Event.PLACES_SEARCH_EMPTY,
+        user_id=message.from_user.id if message.from_user else None,
+        state=await state.get_state(),
+        content_type=message.content_type,
     )
     await message.answer(
         "Введи <b>название города</b> текстом в поле ввода.",

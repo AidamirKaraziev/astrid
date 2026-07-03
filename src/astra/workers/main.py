@@ -1,22 +1,15 @@
 import asyncio
-import logging
 
 from astra.core.config import get_settings
+from astra.core.observability import configure_observability
 from astra.core.sentry import init_sentry
 from astra.workers.consumer import run_consumer
 
 
-def _configure_logging(level: str) -> None:
-    logging.basicConfig(
-        level=getattr(logging, level.upper(), logging.INFO),
-        format="%(asctime)s %(levelname)s [%(name)s] %(message)s",
-    )
-
-
 def run() -> None:
     settings = get_settings()
+    configure_observability(settings)
     init_sentry(settings)
-    _configure_logging(settings.log_level)
     asyncio.run(run_consumer(settings))
 
 

@@ -1,5 +1,4 @@
 import json
-import logging
 from datetime import date
 from uuid import UUID
 
@@ -7,6 +6,8 @@ import aio_pika
 import aiormq
 
 from astra.core.config import Settings, get_settings
+from astra.core.observability import Event, ensure_correlation_id, get_correlation_id, get_logger
+from astra.core.observability.tracing import inject_trace_context
 from astra.messaging.queues import (
     EXCHANGE_NAME,
     QUEUE_ASTRO,
@@ -25,11 +26,22 @@ from astra.messaging.queues import (
 )
 from astra.messaging.schemas import TaskMessage, TaskType
 
-logger = logging.getLogger(__name__)
+log = get_logger(__name__)
+
+_CORRELATION_HEADER = "x-correlation-id"
 
 _connection: aio_pika.RobustConnection | None = None
 _channel: aio_pika.Channel | None = None
 _exchange: aio_pika.Exchange | None = None
+
+
+def _task_message(**kwargs) -> TaskMessage:
+    correlation_id = (
+        kwargs.pop("correlation_id", None)
+        or get_correlation_id()
+        or ensure_correlation_id("task")
+    )
+    return TaskMessage(correlation_id=correlation_id, **kwargs)
 
 
 async def _ensure_topology(channel: aio_pika.Channel) -> aio_pika.Exchange:
@@ -94,9 +106,16 @@ async def _publish(
     settings: Settings | None = None,
 ) -> None:
     cfg = settings or get_settings()
+    if not message.correlation_id:
+        message = message.model_copy(
+            update={"correlation_id": get_correlation_id() or ensure_correlation_id("task")},
+        )
     body = message.model_dump_json().encode("utf-8")
+    headers: dict[str, str] = {_CORRELATION_HEADER: message.correlation_id or ""}
+    inject_trace_context(headers)
     payload = aio_pika.Message(
         body=body,
+        headers=headers,
         delivery_mode=aio_pika.DeliveryMode.PERSISTENT,
         content_type="application/json",
     )
@@ -104,11 +123,18 @@ async def _publish(
         _, exchange = await _get_channel(cfg)
         try:
             await exchange.publish(payload, routing_key=routing_key)
-            logger.debug("Published %s for user %s", message.type, message.user_id)
+            log.info(
+                Event.TASK_PUBLISHED,
+                task_type=str(message.type),
+                routing_key=routing_key,
+                user_id=message.user_id,
+                report_id=message.report_id,
+                correlation_id=message.correlation_id,
+            )
             return
         except aiormq.exceptions.ChannelInvalidStateError:
             if attempt == 0:
-                logger.warning("RabbitMQ channel closed, reconnecting and retrying publish")
+                log.warning(Event.RABBITMQ_RECONNECT, routing_key=routing_key)
                 await close_publisher()
                 continue
             raise
@@ -121,7 +147,7 @@ async def publish_natal_chart(
 ) -> None:
     await _publish(
         ROUTING_NATAL_CHART,
-        TaskMessage(
+        _task_message(
             type=TaskType.NATAL_CHART_GENERATE,
             user_id=user_id,
             prediction_date=prediction_date,
@@ -137,7 +163,7 @@ async def publish_daily_context_build(
 ) -> None:
     await _publish(
         ROUTING_DAILY_CONTEXT_BUILD,
-        TaskMessage(
+        _task_message(
             type=TaskType.DAILY_CONTEXT_BUILD,
             user_id=user_id,
             prediction_date=prediction_date,
@@ -153,7 +179,7 @@ async def publish_prediction_generate(
 ) -> None:
     await _publish(
         ROUTING_PREDICTION_GENERATE,
-        TaskMessage(
+        _task_message(
             type=TaskType.PREDICTION_GENERATE,
             user_id=user_id,
             prediction_date=prediction_date,
@@ -169,7 +195,7 @@ async def publish_prediction_send(
 ) -> None:
     await _publish(
         ROUTING_PREDICTION_SEND,
-        TaskMessage(
+        _task_message(
             type=TaskType.PREDICTION_SEND,
             user_id=user_id,
             prediction_date=prediction_date,
@@ -184,7 +210,7 @@ async def publish_synastry_build(
 ) -> None:
     await _publish(
         ROUTING_SYNASTRY_BUILD,
-        TaskMessage(type=TaskType.SYNASTRY_BUILD, report_id=report_id),
+        _task_message(type=TaskType.SYNASTRY_BUILD, report_id=report_id),
         settings,
     )
 
@@ -195,7 +221,7 @@ async def publish_compatibility_generate(
 ) -> None:
     await _publish(
         ROUTING_COMPATIBILITY_GENERATE,
-        TaskMessage(type=TaskType.COMPATIBILITY_GENERATE, report_id=report_id),
+        _task_message(type=TaskType.COMPATIBILITY_GENERATE, report_id=report_id),
         settings,
     )
 
@@ -206,7 +232,7 @@ async def publish_pdf_generate(
 ) -> None:
     await _publish(
         ROUTING_PDF_GENERATE,
-        TaskMessage(type=TaskType.PDF_GENERATE, report_id=report_id),
+        _task_message(type=TaskType.PDF_GENERATE, report_id=report_id),
         settings,
     )
 
@@ -217,7 +243,7 @@ async def publish_compatibility_send(
 ) -> None:
     await _publish(
         ROUTING_COMPATIBILITY_SEND,
-        TaskMessage(type=TaskType.COMPATIBILITY_SEND, report_id=report_id),
+        _task_message(type=TaskType.COMPATIBILITY_SEND, report_id=report_id),
         settings,
     )
 

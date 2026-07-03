@@ -3,13 +3,13 @@
 from __future__ import annotations
 
 import asyncio
-import logging
 import time
 from datetime import date
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from astra.core.config import Settings, get_settings
+from astra.core.observability import Event, get_logger
 from astra.core.prediction_errors import LlmGenerationError, report_prediction_generation_failure
 from astra.predictions import crud as predictions_crud
 from astra.predictions.models import Prediction
@@ -22,7 +22,7 @@ from astra.services.prediction_delayed_notify import (
 from astra.services.prediction_pending import clear_prediction_pending
 from astra.users.models import Profile, User
 
-logger = logging.getLogger(__name__)
+log = get_logger(__name__)
 
 PREDICTION_DELAYED_NOTIFY_SEC = 120
 PREDICTION_MAX_ATTEMPTS = 15
@@ -74,11 +74,11 @@ async def generate_daily_prediction_resilient(
                 settings=cfg,
             )
             if attempt > 1:
-                logger.info(
-                    "prediction generated after %s attempts for user %s date %s",
-                    attempt,
-                    user.id,
-                    target,
+                log.info(
+                    Event.PREDICTION_GENERATED,
+                    user_id=user.id,
+                    prediction_date=str(target),
+                    attempts=attempt,
                 )
             return prediction
         except LlmGenerationError as exc:
@@ -94,25 +94,25 @@ async def generate_daily_prediction_resilient(
                 final=is_final,
             )
             if is_final:
-                logger.error(
-                    "prediction generation failed after %s attempts for user %s date %s: %s",
-                    attempt,
-                    user.id,
-                    target,
-                    exc,
+                log.error(
+                    Event.PREDICTION_GENERATION_FAILED,
+                    user_id=user.id,
+                    prediction_date=str(target),
+                    attempts=attempt,
+                    reason=last_reason,
                 )
                 await send_final_failure_notification(user.telegram_id)
                 await _mark_prediction_failed(session, user.id, target)
                 await clear_prediction_pending(user.id, target)
                 return None
 
-            logger.warning(
-                "prediction attempt %s failed for user %s date %s: %s; retry in %ss",
-                attempt,
-                user.id,
-                target,
-                exc,
-                _backoff_seconds(attempt),
+            log.warning(
+                Event.PREDICTION_RETRY,
+                user_id=user.id,
+                prediction_date=str(target),
+                attempt=attempt,
+                reason=last_reason,
+                backoff_sec=_backoff_seconds(attempt),
             )
             await asyncio.sleep(_backoff_seconds(attempt))
 

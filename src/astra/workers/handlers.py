@@ -1,10 +1,10 @@
 import asyncio
-import logging
 from datetime import date, datetime
 from zoneinfo import ZoneInfo
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from astra.core.observability import Event, get_logger
 from astra.messaging.publisher import (
     publish_compatibility_generate,
     publish_compatibility_send,
@@ -42,7 +42,7 @@ from astra.users import crud as users_crud
 from astra.users.models import Profile
 from astra.workers.telegram_send import send_prediction_to_telegram
 
-logger = logging.getLogger(__name__)
+log = get_logger(__name__)
 
 _SEND_LOOKUP_RETRIES = 5
 _SEND_LOOKUP_DELAY_SEC = 0.1
@@ -63,7 +63,7 @@ async def handle_natal_chart_generate(session: AsyncSession, task: TaskMessage) 
         return
     user = await users_crud.get_user_by_id(session, task.user_id)
     if user is None or user.profile is None:
-        logger.warning("Skip natal chart: user or profile missing %s", task.user_id)
+        log.warning(Event.TASK_SKIPPED, reason="profile_missing", user_id=task.user_id)
         return
 
     target = _target_date(task, user.profile)
@@ -77,7 +77,7 @@ async def handle_natal_chart_generate(session: AsyncSession, task: TaskMessage) 
         PredictionStage.NATAL_DONE,
     )
     await publish_daily_context_build(user.id, target)
-    logger.info("Natal chart stored for user %s date %s", task.user_id, target)
+    log.info(Event.PREDICTION_NATAL_STORED, user_id=task.user_id, prediction_date=str(target))
 
 
 async def handle_daily_context_build(session: AsyncSession, task: TaskMessage) -> None:
@@ -85,7 +85,7 @@ async def handle_daily_context_build(session: AsyncSession, task: TaskMessage) -
         return
     user = await users_crud.get_user_by_id(session, task.user_id)
     if user is None or user.profile is None:
-        logger.warning("Skip daily context: user or profile missing %s", task.user_id)
+        log.warning(Event.TASK_SKIPPED, reason="profile_missing", user_id=task.user_id)
         return
 
     target = _target_date(task, user.profile)
@@ -99,7 +99,7 @@ async def handle_daily_context_build(session: AsyncSession, task: TaskMessage) -
         PredictionStage.CONTEXT_DONE,
     )
     await publish_prediction_generate(user.id, target)
-    logger.info("Daily context stored for user %s date %s", task.user_id, target)
+    log.info(Event.PREDICTION_CONTEXT_STORED, user_id=task.user_id, prediction_date=str(target))
 
 
 async def handle_prediction_generate(session: AsyncSession, task: TaskMessage) -> None:
@@ -107,7 +107,7 @@ async def handle_prediction_generate(session: AsyncSession, task: TaskMessage) -
         return
     user = await users_crud.get_user_by_id(session, task.user_id)
     if user is None or user.profile is None:
-        logger.warning("Skip prediction generate: user or profile missing %s", task.user_id)
+        log.warning(Event.TASK_SKIPPED, reason="profile_missing", user_id=task.user_id)
         return
 
     target = _target_date(task, user.profile)
@@ -119,21 +119,21 @@ async def handle_prediction_generate(session: AsyncSession, task: TaskMessage) -
         target=target,
     )
     if prediction is None:
-        logger.warning(
-            "Prediction generation abandoned for user %s date %s",
-            task.user_id,
-            target,
+        log.warning(
+            Event.PREDICTION_ABANDONED,
+            user_id=task.user_id,
+            prediction_date=str(target),
         )
         return
 
     await session.commit()
     await publish_prediction_send(user.id, target)
-    logger.info("Prediction generated for user %s date %s", task.user_id, target)
+    log.info(Event.PREDICTION_GENERATED, user_id=task.user_id, prediction_date=str(target))
 
 
 async def handle_prediction_send(session: AsyncSession, task: TaskMessage) -> None:
     if task.prediction_date is None or task.user_id is None:
-        logger.warning("Skip send: no prediction_date for %s", task.user_id)
+        log.warning(Event.TASK_SKIPPED, reason="missing_prediction_date", user_id=task.user_id)
         return
 
     user = await users_crud.get_user_by_id(session, task.user_id)
@@ -153,11 +153,12 @@ async def handle_prediction_send(session: AsyncSession, task: TaskMessage) -> No
             await asyncio.sleep(_SEND_LOOKUP_DELAY_SEC)
 
     if prediction is None or not prediction.text:
-        logger.warning(
-            "Prediction still missing for user %s date %s after %s retries, requeue send",
-            user.id,
-            task.prediction_date,
-            _SEND_LOOKUP_RETRIES,
+        log.warning(
+            Event.TASK_SKIPPED,
+            reason="prediction_not_ready",
+            user_id=user.id,
+            prediction_date=str(task.prediction_date),
+            retries=_SEND_LOOKUP_RETRIES,
         )
         raise PredictionNotReadyError("Prediction not ready yet")
 
@@ -172,7 +173,7 @@ async def handle_prediction_send(session: AsyncSession, task: TaskMessage) -> No
     await send_prediction_to_telegram(user.telegram_id, message)
     await mark_prediction_sent(session, prediction)
     await clear_prediction_pending(user.id, task.prediction_date)
-    logger.info("Prediction sent to telegram_id=%s", user.telegram_id)
+    log.info(Event.PREDICTION_SENT, telegram_id=user.telegram_id, user_id=user.id)
 
 
 async def handle_synastry_build(session: AsyncSession, task: TaskMessage) -> None:
@@ -194,12 +195,12 @@ async def handle_synastry_build(session: AsyncSession, task: TaskMessage) -> Non
         CompatibilityStage.SYNASTRY_DONE,
     )
     await publish_compatibility_generate(report.id)
-    logger.info("Synastry stored for compatibility report %s", task.report_id)
+    log.info(Event.COMPATIBILITY_SYNASTRY_STORED, report_id=task.report_id)
 
 
 async def handle_compatibility_generate(session: AsyncSession, task: TaskMessage) -> None:
     if task.report_id is None:
-        logger.warning("Skip compatibility LLM: no report_id")
+        log.warning(Event.TASK_SKIPPED, reason="missing_report_id")
         return
 
     from astra.compatibility import crud as compatibility_crud
@@ -212,7 +213,7 @@ async def handle_compatibility_generate(session: AsyncSession, task: TaskMessage
 
     report = await generate_compatibility_llm(session, task.report_id)
     if report is None:
-        logger.warning("Compatibility LLM abandoned for report %s", task.report_id)
+        log.warning(Event.COMPATIBILITY_LLM_ABANDONED, report_id=task.report_id)
         return
 
     user = await users_crud.get_user_by_id(session, report.owner_user_id)
@@ -227,27 +228,27 @@ async def handle_compatibility_generate(session: AsyncSession, task: TaskMessage
         CompatibilityStage.LLM_DONE,
     )
     await publish_pdf_generate(report.id)
-    logger.info("Compatibility LLM done for report %s", task.report_id)
+    log.info(Event.COMPATIBILITY_LLM_DONE, report_id=task.report_id)
 
 
 async def handle_pdf_generate(session: AsyncSession, task: TaskMessage) -> None:
     if task.report_id is None:
-        logger.warning("Skip PDF generate: no report_id")
+        log.warning(Event.TASK_SKIPPED, reason="missing_report_id")
         return
 
     report = await generate_compatibility_pdf(session, task.report_id)
     if report is None:
-        logger.warning("Compatibility PDF abandoned for report %s", task.report_id)
+        log.warning(Event.COMPATIBILITY_PDF_ABANDONED, report_id=task.report_id)
         return
 
     await session.commit()
     await publish_compatibility_send(report.id)
-    logger.info("Compatibility PDF ready for report %s", task.report_id)
+    log.info(Event.COMPATIBILITY_PDF_READY, report_id=task.report_id)
 
 
 async def handle_compatibility_send(session: AsyncSession, task: TaskMessage) -> None:
     if task.report_id is None:
-        logger.warning("Skip compatibility send: no report_id")
+        log.warning(Event.TASK_SKIPPED, reason="missing_report_id")
         return
 
     from astra.compatibility import crud as compatibility_crud
@@ -263,7 +264,7 @@ async def handle_compatibility_send(session: AsyncSession, task: TaskMessage) ->
 
     sent = await deliver_compatibility_report(session, task.report_id)
     if sent:
-        logger.info("Compatibility report sent %s", task.report_id)
+        log.info(Event.COMPATIBILITY_SENT, report_id=task.report_id)
 
 
 async def dispatch_task(session: AsyncSession, task: TaskMessage) -> None:
@@ -284,4 +285,4 @@ async def dispatch_task(session: AsyncSession, task: TaskMessage) -> None:
     elif task.type == TaskType.COMPATIBILITY_SEND:
         await handle_compatibility_send(session, task)
     else:
-        logger.warning("Unknown task type: %s", task.type)
+        log.warning(Event.TASK_SKIPPED, reason="unknown_task_type", task_type=str(task.type))

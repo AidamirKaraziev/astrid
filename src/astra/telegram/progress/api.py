@@ -2,15 +2,15 @@
 
 from __future__ import annotations
 
-import logging
 from typing import Any
 
 import httpx
 from aiogram.types import InlineKeyboardMarkup
 
 from astra.core.config import Settings, get_settings
+from astra.core.observability import Event, get_logger
 
-logger = logging.getLogger(__name__)
+log = get_logger(__name__)
 
 
 def _client_kwargs(settings: Settings, *, timeout: float = 30.0) -> dict[str, Any]:
@@ -73,7 +73,7 @@ async def delete_message(
             response.raise_for_status()
         return True
     except Exception:
-        logger.debug("deleteMessage failed chat=%s msg=%s", chat_id, message_id, exc_info=True)
+        log.debug(Event.TELEGRAM_API_FAILED, method="deleteMessage", chat_id=chat_id, message_id=message_id, exc_info=True)
         return False
 
 
@@ -90,4 +90,4 @@ async def send_chat_action_typing(
         async with httpx.AsyncClient(**_client_kwargs(cfg, timeout=10.0)) as client:
             await client.post(_api_url("sendChatAction", cfg), json=payload)
     except Exception:
-        logger.debug("sendChatAction failed chat=%s", chat_id, exc_info=True)
+        log.debug(Event.TELEGRAM_API_FAILED, method="sendChatAction", chat_id=chat_id, exc_info=True)

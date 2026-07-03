@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-import logging
 from datetime import date
 from uuid import UUID
 
+from astra.core.observability import Event, get_logger
 from astra.db.session import get_session_factory
 from astra.services.prediction_pending import (
     clear_prediction_pending,
@@ -14,7 +14,7 @@ from astra.services.prediction_pending import (
 from astra.services.prediction_pipeline import enqueue_prediction_pipeline
 from astra.users import crud as users_crud
 
-logger = logging.getLogger(__name__)
+log = get_logger(__name__)
 
 
 async def enqueue_first_prediction_after_registration(user_id: UUID) -> None:
@@ -23,7 +23,7 @@ async def enqueue_first_prediction_after_registration(user_id: UUID) -> None:
     session_factory = get_session_factory()
 
     if not await try_mark_prediction_pending(user_id, target):
-        logger.info("first prediction already pending for user %s", user_id)
+        log.info(Event.PREDICTION_DEDUP_HIT, user_id=user_id, prediction_date=str(target))
         return
 
     try:
@@ -34,4 +34,4 @@ async def enqueue_first_prediction_after_registration(user_id: UUID) -> None:
         await clear_prediction_pending(user_id, target)
         raise
 
-    logger.info("queued first prediction pipeline for user %s", user_id)
+    log.info(Event.PREDICTION_QUEUED, user_id=user_id, prediction_date=str(target))

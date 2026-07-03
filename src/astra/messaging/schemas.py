@@ -21,4 +21,5 @@ class TaskMessage(BaseModel):
     user_id: UUID | None = None
     report_id: UUID | None = None
     prediction_date: date | None = None
+    correlation_id: str | None = None
     retry: int = Field(default=0, ge=0)

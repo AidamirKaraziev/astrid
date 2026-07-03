@@ -1,4 +1,3 @@
-import logging
 from pathlib import Path
 from typing import Any
 
@@ -6,6 +5,7 @@ import httpx
 from aiogram.types import InlineKeyboardMarkup, ReplyKeyboardMarkup, ReplyKeyboardRemove
 
 from astra.core.config import Settings, get_settings
+from astra.core.observability import Event, get_logger
 from astra.telegram.keyboard_policy import (
     KeyboardZone,
     reply_keyboard_for_zone,
@@ -13,7 +13,7 @@ from astra.telegram.keyboard_policy import (
 )
 from astra.telegram.keyboards import prediction_followup_keyboard
 
-logger = logging.getLogger(__name__)
+log = get_logger(__name__)
 
 
 def _inline_keyboard_to_api_payload(markup: InlineKeyboardMarkup) -> dict[str, Any]:
@@ -67,7 +67,7 @@ async def send_telegram_html(
     async with httpx.AsyncClient(**client_kwargs) as client:
         response = await client.post(url, json=payload)
         response.raise_for_status()
-    logger.info("Sent Telegram message to %s", telegram_id)
+    log.info(Event.TELEGRAM_MESSAGE_SENT, telegram_id=telegram_id)
 
 
 async def send_compatibility_pdf(
@@ -96,7 +96,7 @@ async def send_compatibility_pdf(
                 files={"document": (filename, pdf_file, "application/pdf")},
             )
         response.raise_for_status()
-    logger.info("Sent compatibility PDF to %s", telegram_id)
+    log.info(Event.TELEGRAM_PDF_SENT, telegram_id=telegram_id, filename=filename)
 
 
 async def send_prediction_to_telegram(

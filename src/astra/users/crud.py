@@ -1,4 +1,7 @@
-import logging
+from astra.core.observability import Event, get_logger
+from astra.places import crud as places_crud
+from astra.users.gender import Gender
+from astra.users.models import Profile, User
 from datetime import date, datetime
 from uuid import UUID
 from zoneinfo import ZoneInfo
@@ -7,11 +10,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from astra.places import crud as places_crud
-from astra.users.gender import Gender
-from astra.users.models import Profile, User
-
-logger = logging.getLogger(__name__)
+log = get_logger(__name__)
 
 _ASTRO_PROFILE_FIELDS = ("birth_date", "birth_time", "birth_place", "birth_place_id")
 
@@ -114,11 +113,11 @@ async def _invalidate_today_predictions_if_astro_changed(
         today,
     )
     if deleted:
-        logger.info(
-            "Removed %s prediction(s) for user %s on %s after profile astro change",
-            deleted,
-            profile.user_id,
-            today,
+        log.info(
+            "prediction.invalidated_after_profile_change",
+            deleted=deleted,
+            user_id=profile.user_id,
+            prediction_date=str(today),
         )
 
 
@@ -146,4 +145,4 @@ async def _try_refresh_natal_chart(session: AsyncSession, profile: Profile) -> N
     try:
         await refresh_natal_chart_for_profile(session, profile)
     except Exception:
-        logger.exception("natal chart refresh failed for profile %s", profile.id)
+        log.exception(Event.NATAL_CHART_REFRESH_FAILED, profile_id=profile.id)

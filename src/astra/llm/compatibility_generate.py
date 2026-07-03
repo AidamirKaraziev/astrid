@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-import logging
 from collections.abc import Callable
 
 from astra.core.config import Settings, get_settings
+from astra.core.observability import Event, get_logger
 from astra.llm.base import BaseLlmProvider
 from astra.llm.prompts.compatibility import (
     CONTENT_SYSTEM_PROMPT,
@@ -22,7 +22,7 @@ from astra.llm.prompts.compatibility import (
 from astra.llm.schemas.compatibility import CompatibilityLlmOutput, CompatibilityPromptInput
 from astra.llm.types import ChatMessage, CompletionRequest
 
-logger = logging.getLogger(__name__)
+log = get_logger(__name__)
 
 _COMPATIBILITY_TEMPERATURE = 0.8
 _COMPATIBILITY_MAX_TOKENS = 8192
@@ -116,12 +116,12 @@ async def _complete_json_step(
         )
         if not result.text:
             last_error = result.reason or "empty_response"
-            logger.warning(
-                "Compatibility %s empty response via %s attempt %s: %s",
-                step_name,
-                provider.name,
-                attempt,
-                last_error,
+            log.warning(
+                Event.COMPATIBILITY_LLM_STEP_FAILED,
+                step=step_name,
+                provider=provider.name,
+                attempt=attempt,
+                reason=last_error,
             )
             continue
 
@@ -130,13 +130,12 @@ async def _complete_json_step(
             return parsed, ""
 
         last_error = error or "validation_error"
-        logger.warning(
-            "Compatibility %s failed via %s attempt %s: %s; raw=%s",
-            step_name,
-            provider.name,
-            attempt,
-            last_error,
-            result.text[:1500],
+        log.warning(
+            Event.COMPATIBILITY_LLM_STEP_FAILED,
+            step=step_name,
+            provider=provider.name,
+            attempt=attempt,
+            reason=last_error,
         )
         if not (last_error or "").startswith("json_invalid"):
             return None, last_error
@@ -198,5 +197,5 @@ async def generate_compatibility_output(
     try:
         return _assemble_from_pipeline(prompt_input, content, polish), ""
     except Exception as exc:
-        logger.exception("Compatibility assemble failed")
+        log.exception(Event.COMPATIBILITY_ASSEMBLE_FAILED, error_type=type(exc).__name__)
         return None, f"assemble: {exc}"

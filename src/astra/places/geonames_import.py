@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import logging
 import uuid
 import zipfile
 from dataclasses import dataclass
@@ -15,6 +14,7 @@ from sqlalchemy import func, select, text
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from astra.core.observability import Event, get_logger
 from astra.places.models import Place
 from astra.places.normalize import (
     build_display_name,
@@ -24,7 +24,7 @@ from astra.places.normalize import (
 )
 from astra.places.ru_admin1 import admin1_name_ru, load_admin1_english
 
-logger = logging.getLogger(__name__)
+log = get_logger(__name__)
 
 GEONAMES_RU_ZIP_URL = "https://download.geonames.org/export/dump/RU.zip"
 GEONAMES_ADMIN1_URL = "https://download.geonames.org/export/dump/admin1CodesASCII.txt"
@@ -110,7 +110,7 @@ def parse_ru_line(line: str, admin1_names: dict[str, str]) -> dict | None:
 
 async def _download_file(url: str, dest: Path) -> None:
     dest.parent.mkdir(parents=True, exist_ok=True)
-    logger.info("Downloading GeoNames file: %s → %s", url, dest)
+    log.info(Event.GEONAMES_DOWNLOAD, url=url, dest=str(dest))
     async with httpx.AsyncClient(timeout=DOWNLOAD_TIMEOUT, follow_redirects=True) as client:
         async with client.stream("GET", url) as response:
             response.raise_for_status()
@@ -130,7 +130,7 @@ async def ensure_geonames_data_files(data_dir: Path | None = None) -> Path:
         await _download_file(GEONAMES_RU_ZIP_URL, zip_path)
         with zipfile.ZipFile(zip_path) as archive:
             archive.extract("RU.txt", root)
-        logger.info("Extracted %s", ru_file)
+        log.info(Event.GEONAMES_EXTRACTED, file=str(ru_file))
 
     if not admin1_file.exists():
         await _download_file(GEONAMES_ADMIN1_URL, admin1_file)
@@ -181,7 +181,7 @@ async def import_places_from_file(
                     total += len(batch)
                     batch.clear()
                     if total % 20000 == 0:
-                        logger.info("GeoNames import progress: %s places", total)
+                        log.info(Event.GEONAMES_IMPORT_PROGRESS, places_count=total)
 
         if batch:
             stmt = insert(Place).values(batch)
@@ -190,11 +190,11 @@ async def import_places_from_file(
             await session.commit()
             total += len(batch)
 
-    logger.info(
-        "GeoNames import finished: imported=%s skipped=%s truncate=%s",
-        total,
-        skipped,
-        truncate,
+    log.info(
+        Event.GEONAMES_IMPORT_DONE,
+        imported=total,
+        skipped=skipped,
+        truncated=truncate,
     )
     return ImportResult(imported=total, skipped=skipped, truncated=truncate)
 
@@ -230,7 +230,7 @@ async def ensure_places_catalog(
                 truncate=False,
             )
         except Exception:
-            logger.exception("GeoNames auto-import failed")
+            log.exception(Event.GEONAMES_IMPORT_FAILED)
             return False
 
         async with session_factory() as session:

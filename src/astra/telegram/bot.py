@@ -1,42 +1,33 @@
-from typing import Any
-
-import logging
-
-from aiogram import BaseMiddleware, Bot, Dispatcher
+from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
 from aiogram.client.session.aiohttp import AiohttpSession
-from aiogram.types import ErrorEvent, TelegramObject, Update
 from aiogram.enums import ParseMode
 from aiogram.fsm.storage.base import BaseStorage
 from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.fsm.storage.redis import RedisStorage
+from aiogram.types import ErrorEvent
 from redis.asyncio import Redis
 
 from astra.core.config import Settings
+from astra.core.observability import get_logger
+from astra.core.observability.middleware.telegram import TelegramObservabilityMiddleware
 from astra.db.session import get_session_factory
 from astra.telegram.auto_keyboard_middleware import AutoKeyboardMiddleware
-from astra.telegram.handlers import catalog, commands, compatibility, menu, onboarding, places, start
 from astra.telegram.bot_menu import setup_bot_menu
+from astra.telegram.handlers import catalog, commands, compatibility, menu, onboarding, places, start
 from astra.telegram.middlewares import DbSessionMiddleware
 
-logger = logging.getLogger(__name__)
-
-
-class UpdateLoggingMiddleware(BaseMiddleware):
-    async def __call__(self, handler, event: TelegramObject, data: dict[str, Any]) -> Any:
-        if isinstance(event, Update):
-            logger.info("Telegram update id=%s type=%s", event.update_id, event.event_type)
-        return await handler(event, data)
+log = get_logger(__name__)
 
 
 def create_bot(settings: Settings) -> Bot:
     proxy = settings.telegram_proxy_url_effective
     if proxy:
         session = AiohttpSession(proxy=proxy)
-        logger.info("Telegram Bot API via proxy (USE_VPN=true)")
+        log.info("telegram.bot_api.proxy", use_vpn=True)
     else:
         session = AiohttpSession()
-        logger.info("Telegram Bot API direct (USE_VPN=false or TELEGRAM_PROXY_URL empty)")
+        log.info("telegram.bot_api.direct", use_vpn=False)
     return Bot(
         token=settings.telegram_bot_token,
         default=DefaultBotProperties(parse_mode=ParseMode.HTML),
@@ -47,19 +38,19 @@ def create_bot(settings: Settings) -> Bot:
 async def build_fsm_storage(settings: Settings) -> BaseStorage:
     """Redis для FSM; если недоступен — MemoryStorage (dev без docker)."""
     if settings.fsm_storage == "memory":
-        logger.info("FSM storage: MemoryStorage (configured)")
+        log.info("telegram.fsm.memory", configured=True)
         return MemoryStorage()
 
     try:
         redis = Redis.from_url(settings.redis_url, socket_connect_timeout=2)
         await redis.ping()
-        logger.info("FSM storage: Redis")
+        log.info("telegram.fsm.redis")
         return RedisStorage(redis=redis)
     except Exception as exc:
-        logger.warning(
-            "Redis недоступен (%s). FSM → MemoryStorage. "
-            "Для prod запустите: docker compose up -d redis",
-            exc,
+        log.warning(
+            "telegram.fsm.fallback_memory",
+            error_type=type(exc).__name__,
+            hint="docker compose up -d redis",
         )
         return MemoryStorage()
 
@@ -68,7 +59,7 @@ async def create_dispatcher(settings: Settings) -> Dispatcher:
     storage = await build_fsm_storage(settings)
     dp = Dispatcher(storage=storage)
 
-    dp.update.outer_middleware(UpdateLoggingMiddleware())
+    dp.update.outer_middleware(TelegramObservabilityMiddleware())
     dp.update.middleware(DbSessionMiddleware(get_session_factory()))
     dp.message.middleware(AutoKeyboardMiddleware())
     dp.callback_query.middleware(AutoKeyboardMiddleware())
@@ -77,7 +68,7 @@ async def create_dispatcher(settings: Settings) -> Dispatcher:
     async def on_error(event: ErrorEvent) -> None:
         from astra.core.sentry import capture_exception
 
-        logger.exception("Telegram handler error", exc_info=event.exception)
+        log.exception("telegram.handler.error", exc_info=event.exception)
         capture_exception(event.exception)
 
     dp.include_router(start.router)

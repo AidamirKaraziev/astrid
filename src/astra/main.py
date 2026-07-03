@@ -1,11 +1,13 @@
 import asyncio
-import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from astra.core.config import get_settings
+from astra.core.observability import Event, configure_observability, get_logger
+from astra.core.observability.middleware.http import HttpObservabilityMiddleware
+from astra.core.observability.tracing import instrument_fastapi_app, instrument_sqlalchemy_engine
 from astra.core.sentry import init_sentry
 from astra.db.session import get_session_factory, init_engine
 from astra.places.geonames_import import ensure_places_catalog
@@ -20,36 +22,29 @@ from astra.telegram.polling import run_polling_supervisor
 from astra.telegram.webhook import router as telegram_webhook_router
 from astra.users.routers import router as users_router
 
-logger = logging.getLogger(__name__)
-
-
-def _configure_logging(level: str) -> None:
-    logging.basicConfig(
-        level=getattr(logging, level.upper(), logging.INFO),
-        format="%(asctime)s %(levelname)s [%(name)s] %(message)s",
-    )
+log = get_logger(__name__)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     settings = get_settings()
-    _configure_logging(settings.log_level)
     init_engine(settings)
+    instrument_sqlalchemy_engine(settings)
 
     if settings.geonames_auto_import:
         try:
             ready = await ensure_places_catalog(get_session_factory())
             if ready:
-                logger.info("Places catalog is ready")
+                log.info("places.catalog.ready")
             else:
-                logger.warning("Places catalog is empty after auto-import attempt")
+                log.warning("places.catalog.empty")
         except Exception:
-            logger.exception("Places catalog auto-import failed on startup")
+            log.exception("places.catalog.import_failed")
 
     if not settings.telegram_bot_token:
-        logger.error(
-            "TELEGRAM_BOT_TOKEN пуст — бот не получит сообщения. "
-            "Проверьте .env на сервере.",
+        log.error(
+            "telegram.bot_token.missing",
+            hint="check .env TELEGRAM_BOT_TOKEN on server",
         )
 
     bot = create_bot(settings)
@@ -59,15 +54,15 @@ async def lifespan(app: FastAPI):
         try:
             await configure_telegram_bot(bot)
         except Exception:
-            logger.exception("Failed to configure Telegram bot menu")
+            log.exception("telegram.bot_menu.configure_failed")
 
     try:
         await verify_rabbitmq(settings)
-        logger.info("RabbitMQ topology verified")
+        log.info("rabbitmq.topology.verified")
     except Exception:
-        logger.exception(
-            "RabbitMQ недоступен — фоновые задачи (предсказания, совместимость) не будут работать. "
-            "Запустите: docker compose up -d rabbitmq worker",
+        log.exception(
+            "rabbitmq.unavailable",
+            hint="docker compose up -d rabbitmq worker",
         )
 
     app.state.bot = bot
@@ -87,14 +82,14 @@ async def lifespan(app: FastAPI):
             run_polling_supervisor(dp, bot),
             name="telegram_polling",
         )
-        logger.info("Telegram polling supervisor started")
+        log.info(Event.APP_STARTED, component="telegram_polling")
     elif settings.telegram_webhook_url:
         await bot.delete_webhook(drop_pending_updates=False)
         await bot.set_webhook(
             url=settings.telegram_webhook_url,
             secret_token=settings.telegram_webhook_secret,
         )
-        logger.info("Telegram webhook registered: %s", settings.telegram_webhook_url)
+        log.info("telegram.webhook.registered", url=settings.telegram_webhook_url)
 
     yield
 
@@ -116,6 +111,7 @@ async def lifespan(app: FastAPI):
 
 def create_app(*, with_lifespan: bool = True) -> FastAPI:
     settings = get_settings()
+    configure_observability(settings)
     init_sentry(settings)
     app = FastAPI(
         title="Astra API",
@@ -130,6 +126,7 @@ def create_app(*, with_lifespan: bool = True) -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+    app.add_middleware(HttpObservabilityMiddleware)
 
     @app.get("/health", tags=["system"])
     async def health() -> dict[str, str]:
@@ -140,6 +137,7 @@ def create_app(*, with_lifespan: bool = True) -> FastAPI:
     app.include_router(points_router, prefix="/v1")
     app.include_router(referrals_router, prefix="/v1")
     app.include_router(telegram_webhook_router, prefix="/v1")
+    instrument_fastapi_app(settings, app)
     return app
 
 
@@ -151,7 +149,7 @@ def run() -> None:
 
     settings = get_settings()
     uvicorn.run(
-        "astra.main:app",
+        app="astra.main:app",
         host="0.0.0.0",
         port=8000,
         reload=settings.is_development,

@@ -185,8 +185,12 @@
   },
   "active": "9f4845838f010fec",
   "lastOpenFiles": [
-    "knowledge/decisions/Split Contract LLM и Pydantic для совместимости.md",
+    "knowledge/decisions/OpenTelemetry traces Sentry export Astra.md",
+    "knowledge/decisions/PII политика логирования Astra.md",
+    "knowledge/decisions/correlation_id propagation через RabbitMQ и Telegram.md",
+    "knowledge/decisions/structured logging structlog и event taxonomy Astra.md",
     "sessions/2026-07-02 staged progress pipelines и диагностика LLM совместимости.md",
+    "knowledge/decisions/Split Contract LLM и Pydantic для совместимости.md",
     "knowledge/decisions/MVP совместимость FSM история PDF DeepSeek.md",
     "00-home/обо мне.md",
     "00-home/index.md",

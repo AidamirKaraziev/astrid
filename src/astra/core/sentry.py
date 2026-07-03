@@ -12,10 +12,12 @@ from sentry_sdk.integrations.httpx import HttpxIntegration
 from sentry_sdk.integrations.logging import LoggingIntegration
 from sentry_sdk.integrations.starlette import StarletteIntegration
 
+from astra.core.observability import Event, get_logger
+
 if TYPE_CHECKING:
     from astra.core.config import Settings
 
-logger = logging.getLogger(__name__)
+log = get_logger(__name__)
 
 _INITIALIZED = False
 
@@ -45,10 +47,10 @@ def init_sentry(settings: Settings) -> None:
     if _INITIALIZED or sentry_sdk.is_initialized():
         return
     if not settings.sentry_enabled:
-        logger.debug("Sentry disabled (SENTRY_ENABLED=false)")
+        log.debug(Event.SENTRY_DISABLED, reason="flag_false")
         return
     if not settings.sentry_dsn:
-        logger.debug("Sentry skipped: SENTRY_DSN is empty")
+        log.debug(Event.SENTRY_DISABLED, reason="empty_dsn")
         return
 
     service = settings.sentry_service.strip().lower() or "api"
@@ -66,10 +68,10 @@ def init_sentry(settings: Settings) -> None:
     )
     sentry_sdk.set_tag("service", service)
     _INITIALIZED = True
-    logger.info(
-        "Sentry enabled (environment=%s, service=%s)",
-        settings.sentry_environment,
-        service,
+    log.info(
+        Event.SENTRY_ENABLED,
+        environment=settings.sentry_environment,
+        service=service,
     )
 
 

@@ -2,16 +2,16 @@
 
 from __future__ import annotations
 
-import logging
 from datetime import date
 from uuid import UUID
 
 from redis.asyncio import Redis
 
 from astra.core.config import get_settings
+from astra.core.observability import Event, get_logger
 from astra.workers.telegram_send import send_telegram_html
 
-logger = logging.getLogger(__name__)
+log = get_logger(__name__)
 
 PREDICTION_DELAYED_NOTIFY_TEXT = (
     "Чуть дольше обычного ✨\n"
@@ -57,16 +57,18 @@ async def maybe_send_delayed_notification(
     try:
         await send_telegram_html(telegram_id, PREDICTION_DELAYED_NOTIFY_TEXT)
     except Exception:
-        logger.exception(
-            "failed to send delayed prediction notice to telegram_id=%s",
-            telegram_id,
+        log.exception(
+            Event.PREDICTION_DELAYED_NOTIFY,
+            telegram_id=telegram_id,
+            status="send_failed",
         )
         return False
 
-    logger.info(
-        "sent delayed prediction notice user=%s date=%s",
-        user_id,
-        prediction_date,
+    log.info(
+        Event.PREDICTION_DELAYED_NOTIFY,
+        user_id=user_id,
+        prediction_date=str(prediction_date),
+        status="sent",
     )
     return True
 
@@ -75,7 +77,8 @@ async def send_final_failure_notification(telegram_id: int) -> None:
     try:
         await send_telegram_html(telegram_id, PREDICTION_FINAL_FAILURE_TEXT)
     except Exception:
-        logger.exception(
-            "failed to send final failure notice to telegram_id=%s",
-            telegram_id,
+        log.exception(
+            Event.PREDICTION_FINAL_FAILURE_NOTIFY,
+            telegram_id=telegram_id,
+            status="send_failed",
         )

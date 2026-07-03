@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import logging
 import uuid
 from dataclasses import dataclass
 from datetime import date, datetime, time
@@ -33,6 +32,7 @@ from astra.compatibility.enums import (
 )
 from astra.compatibility.models import CompatibilityReport, NatalProfile
 from astra.core.config import Settings, get_settings
+from astra.core.observability import Event, get_logger
 from astra.llm.compatibility_generate import generate_compatibility_output
 from astra.llm.factory import get_deepseek_provider
 from astra.llm.schemas.compatibility import (
@@ -55,7 +55,7 @@ from astra.services.compatibility_pipeline import (
     resume_compatibility_pipeline,
 )
 
-logger = logging.getLogger(__name__)
+log = get_logger(__name__)
 
 
 class CompatibilityRequestStatus(StrEnum):
@@ -159,6 +159,36 @@ def build_report_title(
     return f"{person_a_name} × {person_b_name} · {ctx}"
 
 
+_TELEGRAM_DOCUMENT_CAPTION_MAX = 1024
+
+
+def format_compatibility_pdf_caption(report: CompatibilityReport) -> str:
+    """Caption к PDF: краткий итог LLM + заголовок пары."""
+    footer = f"💕 {report.title}"
+    tldr = _report_tldr(report)
+    if not tldr:
+        return footer
+    caption = f"{tldr}\n\n{footer}"
+    if len(caption) <= _TELEGRAM_DOCUMENT_CAPTION_MAX:
+        return caption
+    ellipsis = "…"
+    budget = _TELEGRAM_DOCUMENT_CAPTION_MAX - len(f"\n\n{footer}") - len(ellipsis)
+    if budget < 1:
+        return footer[:_TELEGRAM_DOCUMENT_CAPTION_MAX]
+    return f"{tldr[:budget].rstrip()}{ellipsis}\n\n{footer}"
+
+
+def _report_tldr(report: CompatibilityReport) -> str | None:
+    if not report.llm_output:
+        return None
+    try:
+        tldr = CompatibilityLlmOutput.model_validate(report.llm_output).tldr.strip()
+    except Exception:
+        raw = report.llm_output.get("tldr")
+        tldr = raw.strip() if isinstance(raw, str) else ""
+    return tldr or None
+
+
 def pdf_filename(report: CompatibilityReport) -> str:
     return build_pdf_download_filename_from_report(report)
 
@@ -259,7 +289,7 @@ async def build_and_store_synastry(
 ) -> CompatibilityReport | None:
     report = await compatibility_crud.get_compatibility_report(session, report_id)
     if report is None:
-        logger.warning("Compatibility report missing: %s", report_id)
+        log.warning(Event.COMPATIBILITY_REPORT_MISSING, report_id=report_id)
         return None
     if report.status in {
         ReportStatus.SYNASTRY_READY,
@@ -285,7 +315,7 @@ async def generate_compatibility_llm(
     settings = get_settings()
     report = await compatibility_crud.get_compatibility_report(session, report_id)
     if report is None:
-        logger.warning("Compatibility report missing: %s", report_id)
+        log.warning(Event.COMPATIBILITY_REPORT_MISSING, report_id=report_id)
         return None
     if report.status in {ReportStatus.TEXT_READY, ReportStatus.READY} and report.llm_output:
         return report
@@ -299,10 +329,10 @@ async def generate_compatibility_llm(
         prompt_input = await build_prompt_input_from_report(session, report)
         output, failure = await generate_compatibility_output(prompt_input, deepseek, settings)
         if output is None:
-            logger.error(
-                "Compatibility LLM failed report=%s reason=%s",
-                report_id,
-                failure,
+            log.error(
+                Event.COMPATIBILITY_LLM_FAILED,
+                report_id=report_id,
+                reason=failure,
             )
             await compatibility_crud.mark_report_failed(session, report, failure or "llm_failed")
             user = await users_crud.get_user_by_id(session, report.owner_user_id)
@@ -316,7 +346,7 @@ async def generate_compatibility_llm(
         await compatibility_crud.mark_report_text_ready(session, report, output.model_dump())
         return report
     except Exception as exc:
-        logger.exception("Compatibility LLM failed %s", report_id)
+        log.exception(Event.COMPATIBILITY_LLM_FAILED, report_id=report_id)
         await compatibility_crud.mark_report_failed(session, report, str(exc))
         return None
 
@@ -328,7 +358,7 @@ async def generate_compatibility_pdf(
     settings = get_settings()
     report = await compatibility_crud.get_compatibility_report(session, report_id)
     if report is None:
-        logger.warning("Compatibility report missing: %s", report_id)
+        log.warning(Event.COMPATIBILITY_REPORT_MISSING, report_id=report_id)
         return None
     if report.status == ReportStatus.READY and report.pdf_path:
         return report
@@ -351,7 +381,7 @@ async def generate_compatibility_pdf(
         )
         return report
     except Exception as exc:
-        logger.exception("Compatibility PDF failed %s", report_id)
+        log.exception(Event.COMPATIBILITY_PDF_FAILED, report_id=report_id)
         await compatibility_crud.mark_report_failed(session, report, str(exc))
         return None
 
@@ -559,7 +589,7 @@ async def deliver_compatibility_report(
     await send_compatibility_pdf(
         user.telegram_id,
         pdf_path,
-        caption=f"💕 {report.title}",
+        caption=format_compatibility_pdf_caption(report),
     )
     await compatibility_crud.mark_report_sent(session, report)
     return True

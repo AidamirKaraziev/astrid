@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-import logging
-from datetime import date
+from astra.core.observability import Event, get_logger
+from datetime import date, datetime
 from uuid import UUID
 
 from pydantic import BaseModel, Field, ValidationError
@@ -16,7 +16,7 @@ from astra.users import crud as users_crud
 from astra.users.gender import Gender, normalize_gender
 from astra.users.models import Profile, User
 
-logger = logging.getLogger(__name__)
+log = get_logger(__name__)
 
 DEFAULT_CITY_LABEL = "не указан"
 DEFAULT_TIMEZONE = "Europe/Moscow"
@@ -154,12 +154,12 @@ async def finalize_onboarding(session: AsyncSession, user: User) -> None:
     try:
         await complete_referral_rewards(session, user)
     except Exception:
-        logger.exception("referral rewards failed for user %s", user.id)
+        log.exception(Event.ONBOARDING_REFERRAL_REWARD_FAILED, user_id=user.id)
 
     try:
         await referrals_crud.get_or_create_referral_code(session, user.id)
     except Exception:
-        logger.exception("referral code failed for user %s", user.id)
+        log.exception(Event.ONBOARDING_REFERRAL_CODE_FAILED, user_id=user.id)
 
 
 async def complete_registration(
@@ -186,5 +186,5 @@ def parse_registration_fsm(data: dict[str, object]) -> OnboardingRegistrationDat
     try:
         return OnboardingRegistrationData.from_fsm(data)
     except (ValidationError, ValueError, TypeError) as exc:
-        logger.warning("invalid onboarding FSM data: %s data_keys=%s", exc, list(data.keys()))
+        log.warning(Event.ONBOARDING_INVALID_DATA, error=str(exc), data_keys=list(data.keys()))
         return None

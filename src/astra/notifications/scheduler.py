@@ -1,5 +1,4 @@
 import asyncio
-import logging
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
@@ -8,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from astra.core.config import Settings, get_settings
+from astra.core.observability import Event, get_logger
 from astra.services.prediction_pending import (
     clear_prediction_pending,
     try_mark_prediction_pending,
@@ -19,7 +19,7 @@ from astra.services.prediction_pipeline import (
 from astra.predictions.models import Prediction
 from astra.users.models import User
 
-logger = logging.getLogger(__name__)
+log = get_logger(__name__)
 
 
 def _is_notification_due(
@@ -121,7 +121,7 @@ async def notification_worker(
                 )
                 await session.commit()
                 if count:
-                    logger.info("Enqueued %s scheduled predictions", count)
+                    log.info(Event.SCHEDULER_ENQUEUED, count=count)
         except Exception:
-            logger.exception("Notification worker iteration failed")
+            log.exception(Event.SCHEDULER_ITERATION_FAILED)
         await asyncio.sleep(interval_seconds)
