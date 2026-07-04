@@ -37,6 +37,6 @@ RELATIONSHIP_LABELS: dict[RelationshipContext, str] = {
 }
 
 PAIR_MODE_LABELS: dict[PairMode, str] = {
-    PairMode.ME_PARTNER: "Я + он/она",
-    PairMode.TWO_PEOPLE: "Он + она",
+    PairMode.ME_PARTNER: "Моя совместимость",
+    PairMode.TWO_PEOPLE: "Другая пара",
 }

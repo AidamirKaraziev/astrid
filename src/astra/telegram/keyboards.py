@@ -1,6 +1,7 @@
 from aiogram.enums import ButtonStyle
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, KeyboardButton, ReplyKeyboardMarkup
 
+from astra.compatibility.enums import PAIR_MODE_LABELS, PairMode
 from astra.telegram.button_texts import (
     BTN_ASK_STARS,
     BTN_BACK_MENU,
@@ -136,8 +137,14 @@ def compatibility_context_keyboard() -> InlineKeyboardMarkup:
 def compatibility_pair_mode_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text="Я + он/она", callback_data=f"{CB_COMPAT_MODE_PREFIX}me_partner")],
-            [InlineKeyboardButton(text="Он + она", callback_data=f"{CB_COMPAT_MODE_PREFIX}two_people")],
+            [InlineKeyboardButton(
+                text="💞 " + PAIR_MODE_LABELS[PairMode.ME_PARTNER],
+                callback_data=f"{CB_COMPAT_MODE_PREFIX}me_partner",
+            )],
+            [InlineKeyboardButton(
+                text="🫂 " + PAIR_MODE_LABELS[PairMode.TWO_PEOPLE],
+                callback_data=f"{CB_COMPAT_MODE_PREFIX}two_people",
+            )],
             [InlineKeyboardButton(text="◀️ Назад", callback_data=f"{CB_COMPAT_CONTEXT_PREFIX}back")],
         ],
     )
