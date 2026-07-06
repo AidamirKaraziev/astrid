@@ -19,6 +19,9 @@ from astra.messaging.queues import (
     ROUTING_COMPATIBILITY_SEND,
     ROUTING_DAILY_CONTEXT_BUILD,
     ROUTING_NATAL_CHART,
+    ROUTING_NATAL_GENERATE,
+    ROUTING_NATAL_PDF_GENERATE,
+    ROUTING_NATAL_SEND,
     ROUTING_PDF_GENERATE,
     ROUTING_PREDICTION_GENERATE,
     ROUTING_PREDICTION_SEND,
@@ -59,6 +62,9 @@ async def _ensure_topology(channel: aio_pika.Channel) -> aio_pika.Exchange:
         (QUEUE_NOTIFICATIONS, ROUTING_COMPATIBILITY_SEND),
         (QUEUE_COMPATIBILITY, ROUTING_COMPATIBILITY_GENERATE),
         (QUEUE_REPORTS, ROUTING_PDF_GENERATE),
+        (QUEUE_COMPATIBILITY, ROUTING_NATAL_GENERATE),
+        (QUEUE_REPORTS, ROUTING_NATAL_PDF_GENERATE),
+        (QUEUE_NOTIFICATIONS, ROUTING_NATAL_SEND),
     )
     for queue_name, routing_key in bindings:
         queue = await channel.declare_queue(queue_name, durable=True)
@@ -147,6 +153,9 @@ async def publish_natal_chart(
 ) -> None:
     await _publish(
         ROUTING_NATAL_CHART,
+    ROUTING_NATAL_GENERATE,
+    ROUTING_NATAL_PDF_GENERATE,
+    ROUTING_NATAL_SEND,
         _task_message(
             type=TaskType.NATAL_CHART_GENERATE,
             user_id=user_id,
@@ -244,6 +253,39 @@ async def publish_compatibility_send(
     await _publish(
         ROUTING_COMPATIBILITY_SEND,
         _task_message(type=TaskType.COMPATIBILITY_SEND, report_id=report_id),
+        settings,
+    )
+
+
+async def publish_natal_generate(
+    report_id: UUID,
+    settings: Settings | None = None,
+) -> None:
+    await _publish(
+        ROUTING_NATAL_GENERATE,
+        _task_message(type=TaskType.NATAL_GENERATE, report_id=report_id),
+        settings,
+    )
+
+
+async def publish_natal_pdf_generate(
+    report_id: UUID,
+    settings: Settings | None = None,
+) -> None:
+    await _publish(
+        ROUTING_NATAL_PDF_GENERATE,
+        _task_message(type=TaskType.NATAL_PDF_GENERATE, report_id=report_id),
+        settings,
+    )
+
+
+async def publish_natal_send(
+    report_id: UUID,
+    settings: Settings | None = None,
+) -> None:
+    await _publish(
+        ROUTING_NATAL_SEND,
+        _task_message(type=TaskType.NATAL_SEND, report_id=report_id),
         settings,
     )
 

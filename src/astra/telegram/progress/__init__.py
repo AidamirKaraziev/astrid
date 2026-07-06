@@ -2,6 +2,7 @@
 
 from astra.telegram.progress.messages import (
     compatibility_stage_text,
+    natal_stage_text,
     prediction_stage_text,
 )
 from astra.telegram.progress.notifier import (
@@ -9,12 +10,15 @@ from astra.telegram.progress.notifier import (
     clear_progress,
     current_progress_message_id,
     notify_compatibility_stage,
+    notify_natal_stage,
     notify_prediction_stage,
 )
 from astra.telegram.progress.stages import (
     CompatibilityStage,
+    NatalStage,
     PredictionStage,
     compatibility_job_key,
+    natal_job_key,
     prediction_job_key,
 )
 from astra.telegram.progress.store import (
@@ -26,15 +30,19 @@ from astra.telegram.progress.store import (
 
 __all__ = [
     "CompatibilityStage",
+    "NatalStage",
     "PredictionStage",
     "advance_progress",
     "clear_progress",
     "clear_progress_message_id",
     "compatibility_job_key",
     "compatibility_stage_text",
+    "natal_job_key",
+    "natal_stage_text",
     "current_progress_message_id",
     "get_progress_message_id",
     "notify_compatibility_stage",
+    "notify_natal_stage",
     "notify_prediction_stage",
     "prediction_job_key",
     "prediction_stage_text",

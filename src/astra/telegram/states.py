@@ -25,3 +25,8 @@ class CompatibilityStates(StatesGroup):
     collect_birth_time = State()
     birth_place_query = State()
     confirm = State()
+
+
+class NatalStates(StatesGroup):
+    collect_birth_time = State()
+    confirm = State()

@@ -14,12 +14,15 @@ from astra.telegram.progress.api import (
 )
 from astra.telegram.progress.messages import (
     compatibility_stage_text,
+    natal_stage_text,
     prediction_stage_text,
 )
 from astra.telegram.progress.stages import (
     CompatibilityStage,
+    NatalStage,
     PredictionStage,
     compatibility_job_key,
+    natal_job_key,
     prediction_job_key,
 )
 from astra.telegram.progress.store import (
@@ -107,6 +110,27 @@ async def notify_compatibility_stage(
 ) -> int | None:
     job_key = compatibility_job_key(report_id)
     text = compatibility_stage_text(stage)
+    return await advance_progress(
+        chat_id,
+        user_id,
+        job_key,
+        text,
+        with_typing=with_typing,
+        settings=settings,
+    )
+
+
+async def notify_natal_stage(
+    chat_id: int,
+    user_id: UUID,
+    report_id: UUID,
+    stage: NatalStage,
+    *,
+    with_typing: bool = True,
+    settings: Settings | None = None,
+) -> int | None:
+    job_key = natal_job_key(report_id)
+    text = natal_stage_text(stage)
     return await advance_progress(
         chat_id,
         user_id,

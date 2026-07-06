@@ -19,9 +19,18 @@ class CompatibilityStage(StrEnum):
     LLM_DONE = "llm_done"
 
 
+class NatalStage(StrEnum):
+    STARTED = "started"
+    LLM_DONE = "llm_done"
+
+
 def prediction_job_key(target: date) -> str:
     return f"prediction:{target.isoformat()}"
 
 
 def compatibility_job_key(report_id: UUID) -> str:
     return f"compatibility:{report_id}"
+
+
+def natal_job_key(report_id: UUID) -> str:
+    return f"natal:{report_id}"

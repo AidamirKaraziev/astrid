@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from astra.telegram.progress.stages import CompatibilityStage, PredictionStage
+from astra.telegram.progress.stages import CompatibilityStage, NatalStage, PredictionStage
 
 _PREDICTION_TEXTS: dict[PredictionStage, str] = {
     PredictionStage.STARTED: (
@@ -31,6 +31,21 @@ _COMPATIBILITY_TEXTS: dict[CompatibilityStage, str] = {
         "Оформляю красивый отчёт."
     ),
 }
+
+
+_NATAL_TEXTS: dict[NatalStage, str] = {
+    NatalStage.STARTED: (
+        "Начинаю разбирать твою натальную карту — сверяю положение планет ✨"
+    ),
+    NatalStage.LLM_DONE: (
+        "Разбор готов ✨\n"
+        "Оформляю красивый отчёт с колесом карты."
+    ),
+}
+
+
+def natal_stage_text(stage: NatalStage) -> str:
+    return _NATAL_TEXTS[stage]
 
 
 def prediction_stage_text(stage: PredictionStage) -> str:

@@ -53,6 +53,11 @@ class User(Base, TimestampMixin):
         back_populates="owner",
         cascade="all, delete-orphan",
     )
+    natal_reports: Mapped[list["NatalReport"]] = relationship(  # noqa: F821
+        "NatalReport",
+        back_populates="owner",
+        cascade="all, delete-orphan",
+    )
 
 
 class Profile(Base, TimestampMixin):

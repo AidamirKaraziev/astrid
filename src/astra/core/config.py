@@ -101,6 +101,9 @@ class Settings(BaseSettings):
     # PDF совместимости на volume (Docker: /data/compatibility)
     compatibility_pdf_dir: str = "data/compatibility_pdfs"
 
+    # PDF разбора натала на volume (Docker: /data/natal)
+    natal_pdf_dir: str = "data/natal_pdfs"
+
     # Sentry — ошибки и (опционально) трейсы; стенд: local | dev | prod
     sentry_dsn: str | None = None
     sentry_enabled: bool = True

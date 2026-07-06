@@ -14,6 +14,9 @@ class TaskType(StrEnum):
     COMPATIBILITY_GENERATE = "compatibility.generate"
     PDF_GENERATE = "pdf.generate"
     COMPATIBILITY_SEND = "compatibility.send"
+    NATAL_GENERATE = "natal_report.generate"
+    NATAL_PDF_GENERATE = "natal_report.pdf"
+    NATAL_SEND = "natal_report.send"
 
 
 class TaskMessage(BaseModel):

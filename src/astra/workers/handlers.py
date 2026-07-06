@@ -9,6 +9,8 @@ from astra.messaging.publisher import (
     publish_compatibility_generate,
     publish_compatibility_send,
     publish_daily_context_build,
+    publish_natal_pdf_generate,
+    publish_natal_send,
     publish_pdf_generate,
     publish_prediction_generate,
     publish_prediction_send,
@@ -18,6 +20,11 @@ from astra.predictions import crud as predictions_crud
 from astra.services.astro_service import (
     build_and_store_daily_context,
     compute_and_store_natal_chart,
+)
+from astra.services.natal_report_service import (
+    deliver_natal_report,
+    generate_natal_llm,
+    generate_natal_report_pdf,
 )
 from astra.services.compatibility_service import (
     build_and_store_synastry,
@@ -31,10 +38,13 @@ from astra.services.prediction_service import format_prediction_for_user, mark_p
 from astra.telegram.progress.api import send_chat_action_typing
 from astra.telegram.progress import (
     CompatibilityStage,
+    NatalStage,
     PredictionStage,
     clear_progress,
     compatibility_job_key,
+    natal_job_key,
     notify_compatibility_stage,
+    notify_natal_stage,
     notify_prediction_stage,
     prediction_job_key,
 )
@@ -267,6 +277,69 @@ async def handle_compatibility_send(session: AsyncSession, task: TaskMessage) ->
         log.info(Event.COMPATIBILITY_SENT, report_id=task.report_id)
 
 
+async def handle_natal_generate(session: AsyncSession, task: TaskMessage) -> None:
+    if task.report_id is None:
+        log.warning(Event.TASK_SKIPPED, reason="missing_report_id")
+        return
+
+    from astra.natal_report import crud as natal_crud
+
+    draft = await natal_crud.get_natal_report(session, task.report_id)
+    if draft is not None:
+        user = await users_crud.get_user_by_id(session, draft.owner_user_id)
+        if user is not None:
+            await send_chat_action_typing(user.telegram_id)
+
+    report = await generate_natal_llm(session, task.report_id)
+    if report is None:
+        log.warning(Event.NATAL_REPORT_LLM_FAILED, report_id=task.report_id, reason="abandoned")
+        return
+
+    user = await users_crud.get_user_by_id(session, report.owner_user_id)
+    if user is None:
+        return
+
+    await session.commit()
+    await notify_natal_stage(user.telegram_id, user.id, report.id, NatalStage.LLM_DONE)
+    await publish_natal_pdf_generate(report.id)
+    log.info(Event.NATAL_REPORT_LLM_DONE, report_id=task.report_id)
+
+
+async def handle_natal_pdf_generate(session: AsyncSession, task: TaskMessage) -> None:
+    if task.report_id is None:
+        log.warning(Event.TASK_SKIPPED, reason="missing_report_id")
+        return
+
+    report = await generate_natal_report_pdf(session, task.report_id)
+    if report is None:
+        log.warning(Event.NATAL_REPORT_PDF_FAILED, report_id=task.report_id, reason="abandoned")
+        return
+
+    await session.commit()
+    await publish_natal_send(report.id)
+    log.info(Event.NATAL_REPORT_PDF_READY, report_id=task.report_id)
+
+
+async def handle_natal_send(session: AsyncSession, task: TaskMessage) -> None:
+    if task.report_id is None:
+        log.warning(Event.TASK_SKIPPED, reason="missing_report_id")
+        return
+
+    from astra.natal_report import crud as natal_crud
+
+    report = await natal_crud.get_natal_report(session, task.report_id)
+    if report is None:
+        return
+
+    user = await users_crud.get_user_by_id(session, report.owner_user_id)
+    if user is not None and report.sent_at is None:
+        await clear_progress(user.telegram_id, user.id, natal_job_key(report.id))
+
+    sent = await deliver_natal_report(session, task.report_id)
+    if sent:
+        log.info(Event.NATAL_REPORT_SENT, report_id=task.report_id)
+
+
 async def dispatch_task(session: AsyncSession, task: TaskMessage) -> None:
     if task.type == TaskType.NATAL_CHART_GENERATE:
         await handle_natal_chart_generate(session, task)
@@ -284,5 +357,11 @@ async def dispatch_task(session: AsyncSession, task: TaskMessage) -> None:
         await handle_pdf_generate(session, task)
     elif task.type == TaskType.COMPATIBILITY_SEND:
         await handle_compatibility_send(session, task)
+    elif task.type == TaskType.NATAL_GENERATE:
+        await handle_natal_generate(session, task)
+    elif task.type == TaskType.NATAL_PDF_GENERATE:
+        await handle_natal_pdf_generate(session, task)
+    elif task.type == TaskType.NATAL_SEND:
+        await handle_natal_send(session, task)
     else:
         log.warning(Event.TASK_SKIPPED, reason="unknown_task_type", task_type=str(task.type))
