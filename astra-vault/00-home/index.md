@@ -58,6 +58,7 @@ date: 2026-07-03
 - [[имена заметок это утверждения а не категории]]
 - [[карточка профиля A2 сокращение названий GeoNames]]
 - [[reply-меню Telegram обновляется через AutoKeyboardMiddleware]]
+- [[кэш file_id вместо повторной заливки медиа в Telegram]]
 
 ### Интеграции (`knowledge/integrations/`)
 
@@ -69,6 +70,7 @@ date: 2026-07-03
 - [[mihomo показывает COMPATIBLE когда config type http вместо file]]
 - [[RabbitMQ send раньше commit generate и отсутствие socksio]]
 - [[после рефакторинга забытые импорты date и dispatch_task]]
+- [[удаление пользователя из БД не проверено перед тестом is_new_user]]
 
 ### Бизнес (`knowledge/business/`)
 
@@ -89,6 +91,7 @@ date: 2026-07-03
 - [[2026-06-26 PDF синастрия рефакторинг и план совместимости]]
 - [[2026-07-02 staged progress pipelines и диагностика LLM совместимости]]
 - [[2026-07-03 caption tldr PDF и фиксы импортов worker бота]]
+- [[2026-07-06 приветственное видео Astrid для новых пользователей]]
 - [[2026-06-12 промпт Astrid v2 gemma4 e2b]]
 - [[2026-06-12 имя в начале прогноза Astrid]]
 

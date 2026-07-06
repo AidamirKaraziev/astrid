@@ -1,9 +1,13 @@
+from pathlib import Path
+
 from aiogram import F, Router
 from aiogram.filters import Command, CommandObject
 from aiogram.fsm.context import FSMContext
-from aiogram.types import Message
+from aiogram.types import FSInputFile, Message
+from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from astra.core.config import get_settings
 from astra.referrals import crud as referrals_crud
 from astra.services.onboarding_service import sync_user_from_telegram
 from astra.services.points_service import register_daily_activity
@@ -20,6 +24,25 @@ from astra.users import crud as users_crud
 
 router = Router(name="start")
 
+WELCOME_VIDEO_PATH = Path(__file__).resolve().parent.parent / "static" / "welcome.mp4"
+_WELCOME_VIDEO_FILE_ID_KEY = "astra:telegram:welcome_video_file_id"
+
+
+async def _get_cached_welcome_video_file_id() -> str | None:
+    client = Redis.from_url(get_settings().redis_url, decode_responses=True)
+    try:
+        return await client.get(_WELCOME_VIDEO_FILE_ID_KEY)
+    finally:
+        await client.aclose()
+
+
+async def _cache_welcome_video_file_id(file_id: str) -> None:
+    client = Redis.from_url(get_settings().redis_url, decode_responses=True)
+    try:
+        await client.set(_WELCOME_VIDEO_FILE_ID_KEY, file_id)
+    finally:
+        await client.aclose()
+
 
 @router.message(Command("start", "menu"))
 async def cmd_start(
@@ -33,6 +56,7 @@ async def cmd_start(
 
     tg = message.from_user
     user = await users_crud.get_user_by_telegram_id(session, tg.id)
+    is_new_user = user is None
     if user is None:
         user = await users_crud.create_user(
             session,
@@ -72,13 +96,28 @@ async def cmd_start(
         keyboard=[[KeyboardButton(text="Привет, Астрид 🫶🏻")]],  # TODO проверить на андроиде цвет
         resize_keyboard=True,
     )
-    await message.answer(
+    welcome_text = (
         "✨ <b>Добро пожаловать в Astra</b>\n\n"
         "Магическая поддержка каждый день — мягко, без навязчивости.\n"
-        "Персональные предсказания, которые помогают лучше чувствовать свой путь.",
-        parse_mode="HTML",
-        reply_markup=begin_kb,
+        "Персональные предсказания, которые помогают лучше чувствовать свой путь."
     )
+    if is_new_user and WELCOME_VIDEO_PATH.exists():
+        cached_file_id = await _get_cached_welcome_video_file_id()
+        video = cached_file_id or FSInputFile(WELCOME_VIDEO_PATH)
+        sent = await message.answer_video(
+            video,
+            caption=welcome_text,
+            parse_mode="HTML",
+            reply_markup=begin_kb,
+        )
+        if not cached_file_id and sent.video is not None:
+            await _cache_welcome_video_file_id(sent.video.file_id)
+    else:
+        await message.answer(
+            welcome_text,
+            parse_mode="HTML",
+            reply_markup=begin_kb,
+        )
 
 
 @router.message(F.text == "Привет, Астрид 🫶🏻")

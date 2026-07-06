@@ -11,14 +11,17 @@
             "id": "9f4845838f010fec",
             "type": "leaf",
             "state": {
-              "type": "markdown",
+              "type": "canvas",
               "state": {
-                "file": "00-home/index.md",
-                "mode": "source",
-                "source": false
+                "file": "план по проекту.canvas",
+                "viewState": {
+                  "x": 1749.6420011345083,
+                  "y": -1866.5377245727168,
+                  "zoom": -0.5459026973446229
+                }
               },
-              "icon": "lucide-file",
-              "title": "index"
+              "icon": "lucide-layout-dashboard",
+              "title": "план по проекту"
             }
           }
         ]
@@ -185,6 +188,14 @@
   },
   "active": "9f4845838f010fec",
   "lastOpenFiles": [
+    "knowledge/debugging/удаление пользователя из БД не проверено перед тестом is_new_user.md",
+    "knowledge/patterns/кэш file_id вместо повторной заливки медиа в Telegram.md",
+    "sessions/2026-07-06 приветственное видео Astrid для новых пользователей.md",
+    "knowledge/business/портфель монетизации Astra.md",
+    "план по проекту.canvas",
+    "knowledge/decisions/дедупликация ежедневного предсказания через Redis pending ключ.md",
+    "knowledge/business/продукт Astra telegram предсказания RU аудитория.md",
+    "00-home/index.md",
     "knowledge/debugging/после рефакторинга забытые импорты date и dispatch_task.md",
     "sessions/2026-07-03 caption tldr PDF и фиксы импортов worker бота.md",
     "knowledge/decisions/structured logging structlog и event taxonomy Astra.md",
@@ -195,8 +206,6 @@
     "knowledge/decisions/Split Contract LLM и Pydantic для совместимости.md",
     "knowledge/decisions/MVP совместимость FSM история PDF DeepSeek.md",
     "00-home/обо мне.md",
-    "00-home/index.md",
-    "knowledge/business/портфель монетизации Astra.md",
     "knowledge/business/оценка идей монетизации Astra 2026-06-13.md",
     "sessions/2026-06-12 имя в начале прогноза Astrid.md",
     "knowledge/patterns/промпт Astrid v2 — 4 предложения gemma4 e2b.md",
