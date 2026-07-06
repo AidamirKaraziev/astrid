@@ -106,7 +106,7 @@ async def create_natal_report_for_user(
 
     snapshot = {
         "name": profile.display_name,
-        "gender": profile.gender.value if profile.gender else None,
+        "gender": profile.gender,  # Gender = Literal[str], не enum
         "birth_date": profile.birth_date.isoformat(),
         "birth_time": profile.birth_time.isoformat() if profile.birth_time else None,
         "birth_place": profile.birth_place,

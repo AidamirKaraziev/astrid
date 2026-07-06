@@ -239,3 +239,43 @@ async def test_generate_pdf_from_jsonb_snapshots(tmp_path) -> None:
 
     pdf = Path(marked["pdf_path"])
     assert pdf.is_file() and pdf.stat().st_size > 10_000
+
+
+@pytest.mark.asyncio
+async def test_create_natal_report_with_gender_str(tmp_path) -> None:
+    """Регрессия: Gender — Literal[str], а не enum; .value падал с AttributeError."""
+    pytest.importorskip("kerykeion")
+    from datetime import date, datetime
+
+    from astra.services.natal_report_service import create_natal_report_for_user
+
+    profile = MagicMock()
+    profile.display_name = "Айдамир"
+    profile.gender = "мужчина"  # str, не enum
+    profile.birth_date = date(1990, 6, 15)
+    profile.birth_time = datetime(1990, 6, 15, 14, 30)
+    profile.birth_place = "Москва"
+    profile.birth_place_id = None
+    profile.timezone = "Europe/Moscow"
+    user = MagicMock()
+    user.id = uuid4()
+    user.profile = profile
+    session = AsyncMock()
+
+    created = {}
+
+    async def _create(sess, **kwargs):
+        created.update(kwargs)
+        row = MagicMock()
+        row.id = uuid4()
+        return row
+
+    with patch(
+        "astra.services.natal_report_service.natal_crud.create_natal_report",
+        new=_create,
+    ):
+        report = await create_natal_report_for_user(session, user)
+
+    assert report is not None
+    assert created["subject_snapshot"]["gender"] == "мужчина"
+    assert created["chart_data"]["has_time"] is True
