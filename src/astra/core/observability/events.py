@@ -60,6 +60,18 @@ class Event(StrEnum):
     COMPATIBILITY_PDF_FAILED = "compatibility.pdf_failed"
     COMPATIBILITY_NOTIFY_FAILED = "compatibility.notify_failed"
 
+    # Natal report pipeline
+    NATAL_REPORT_CREATED = "natal_report.created"
+    NATAL_REPORT_LLM_DONE = "natal_report.llm_done"
+    NATAL_REPORT_LLM_STEP_FAILED = "natal_report.llm_step_failed"
+    NATAL_REPORT_ASSEMBLE_FAILED = "natal_report.assemble_failed"
+    NATAL_REPORT_LLM_FAILED = "natal_report.llm_failed"
+    NATAL_REPORT_PDF_READY = "natal_report.pdf_ready"
+    NATAL_REPORT_PDF_FAILED = "natal_report.pdf_failed"
+    NATAL_REPORT_SENT = "natal_report.sent"
+    NATAL_REPORT_MISSING = "natal_report.missing"
+    NATAL_REPORT_NOTIFY_FAILED = "natal_report.notify_failed"
+
     # Onboarding / user
     ONBOARDING_INVALID_DATA = "onboarding.invalid_data"
     ONBOARDING_REFERRAL_REWARD_FAILED = "onboarding.referral_reward_failed"
