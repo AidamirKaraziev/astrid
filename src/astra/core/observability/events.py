@@ -60,6 +60,11 @@ class Event(StrEnum):
     COMPATIBILITY_PDF_FAILED = "compatibility.pdf_failed"
     COMPATIBILITY_NOTIFY_FAILED = "compatibility.notify_failed"
 
+    # Tarot
+    TAROT_CARD_DRAWN = "tarot.card_drawn"
+    TAROT_LIMIT_HIT = "tarot.limit_hit"
+    TAROT_INTERPRET_FAILED = "tarot.interpret_failed"
+
     # Natal report pipeline
     NATAL_REPORT_CREATED = "natal_report.created"
     NATAL_REPORT_LLM_DONE = "natal_report.llm_done"
