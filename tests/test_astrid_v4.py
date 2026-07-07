@@ -100,7 +100,7 @@ class TestCompassFormat:
         "Что скажешь, если не бояться ответа?\n\n"
         "Марс в трине к Асценденту — про смелость быть собой. "
         "Луна в Овне подогревает споры.\n\n"
-        "До обеда скажи то, что откладывал."
+        "Настоять на своём — или сберечь то, что между вами."
     )
 
     def _prediction(self, ctx: DailyContextV2 | None, text: str) -> SimpleNamespace:
@@ -110,17 +110,15 @@ class TestCompassFormat:
         )
 
     def test_compass_html_assembled(self):
+        from astra.services.prediction_service import TAROT_BRIDGE_TEXT
+
         html = format_compass_message(self._prediction(_ctx(), self._BODY))
         assert html is not None
         assert html.startswith("🌙 <b>7 июля · Луна в Овне, последняя четверть</b>")
         assert "<i>Что скажешь, если не бояться ответа?</i>" in html
-        assert "🌱 <b>Сфера дня:</b> ты сам" in html
-        assert html.strip().endswith("→ <b>Один шаг:</b> До обеда скажи то, что откладывал.")
-
-    def test_no_time_omits_sphere(self):
-        html = format_compass_message(self._prediction(_ctx(has_time=False), self._BODY))
-        assert html is not None
-        assert "Сфера дня" not in html
+        assert "⚖️ <b>Конфликт дня:</b> Настоять на своём — или сберечь" in html
+        assert html.strip().endswith(TAROT_BRIDGE_TEXT)
+        assert "Сфера дня" not in html  # сфера ушла из сообщения v4.1
 
     def test_v1_context_returns_none(self):
         assert format_compass_message(self._prediction(None, self._BODY)) is None

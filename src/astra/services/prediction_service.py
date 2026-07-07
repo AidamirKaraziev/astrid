@@ -67,8 +67,11 @@ def _split_v4_blocks(text: str) -> tuple[str, str, str] | None:
     return blocks[0], blocks[1], " ".join(blocks[2:])
 
 
+TAROT_BRIDGE_TEXT = "Я знаю, как звучит твоя карта. Но на такой развилке я бы спросила колоду."
+
+
 def format_compass_message(prediction: Prediction) -> str | None:
-    """HTML «Компаса дня» из контекста v2 + трёх блоков LLM; None — не v2."""
+    """HTML прогноза v4.1: шапка, вопрос, прогноз-спор, конфликт дня, мостик к картам."""
     ctx = prediction.astro_context or {}
     if ctx.get("schema_version") != 2:
         return None
@@ -76,7 +79,7 @@ def format_compass_message(prediction: Prediction) -> str | None:
     blocks = _split_v4_blocks(body)
     if blocks is None:
         return None
-    question, forecast, step = blocks
+    question, forecast, conflict_line = blocks
 
     target = date.fromisoformat(str(ctx["date"]))
     header = f"{target.day} {_RU_MONTHS_GENITIVE[target.month - 1]}"
@@ -95,14 +98,11 @@ def format_compass_message(prediction: Prediction) -> str | None:
         f"<i>{_escape_html(question)}</i>",
         "",
         _escape_html(forecast),
+        "",
+        f"⚖️ <b>Конфликт дня:</b> {_escape_html(conflict_line)}",
+        "",
+        TAROT_BRIDGE_TEXT,
     ]
-
-    sphere = ctx.get("sphere_of_day")
-    if sphere and sphere.get("label"):
-        emoji = _SPHERE_EMOJI.get(int(sphere.get("house") or 0), "✨")
-        lines += ["", f"{emoji} <b>Сфера дня:</b> {_escape_html(str(sphere['label']))}"]
-
-    lines += ["", f"→ <b>Один шаг:</b> {_escape_html(step)}"]
     return "\n".join(lines)
 
 

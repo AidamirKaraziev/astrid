@@ -83,6 +83,8 @@ async def generate_daily_body_v4(
         return None, "sanitize_empty"
 
     validation_error = validate_prediction_output(cleaned, "", require_name=False)
+    if validation_error is None:
+        validation_error = _validate_conflict_line(cleaned)
     if validation_error:
         log.warning(
             Event.LLM_VALIDATION_FAILED,
@@ -93,3 +95,16 @@ async def generate_daily_body_v4(
         return None, validation_error
 
     return cleaned, ""
+
+
+def _validate_conflict_line(cleaned: str) -> str | None:
+    """Третий блок — развилка «A — или B»: обязательное «или», не вопрос."""
+    blocks = [b.strip() for b in cleaned.split("\n\n") if b.strip()]
+    if len(blocks) < 3:
+        return "invalid_structure"
+    conflict_line = blocks[-1]
+    if "или" not in conflict_line.lower():
+        return "conflict_line_no_or"
+    if conflict_line.endswith("?"):
+        return "conflict_line_is_question"
+    return None

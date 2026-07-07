@@ -134,3 +134,66 @@ class TestNoTimeDegradation:
         # без времени всё равно есть главный транзит и Луна — контекст не пустой
         assert ctx.moon is not None and ctx.moon.sign
         assert ctx.moon.phase is not None
+
+
+class TestConflictDetection:
+    def _transit(self, planet_key, planet, aspect, point_key, point):
+        from astra.astro.daily_context import DailyTransit
+
+        return DailyTransit(
+            transit_planet=planet, transit_planet_key=planet_key,
+            aspect=aspect, natal_point=point, natal_point_key=point_key,
+            natal_sign="Овен", natal_house=None, orb_deg=1.0, tightness=0.3,
+        )
+
+    def test_moon_opposite_polarity_wins(self):
+        from astra.astro.daily_context import MoonContext, detect_day_conflict
+
+        main = self._transit("Mars", "Марс", "трин", "Ascendant", "Асцендент")
+        moon = MoonContext(
+            sign="Овен",
+            aspects=[self._transit("Moon", "Луна", "квадрат", "Sun", "Солнце")],
+        )
+        conflict = detect_day_conflict(main, moon, [], [])
+        assert conflict is not None
+        assert conflict.kind == "transit_vs_moon"
+        assert "Марс трин Асцендент" in conflict.side_a
+        assert "гармония" in conflict.side_a
+        assert "напряжение" in conflict.side_b
+
+    def test_fallback_to_background(self):
+        from astra.astro.daily_context import MoonContext, detect_day_conflict
+
+        main = self._transit("Mars", "Марс", "трин", "Sun", "Солнце")
+        bg = self._transit("Saturn", "Сатурн", "квадрат", "Neptune", "Нептун")
+        conflict = detect_day_conflict(main, MoonContext(sign="Овен"), [bg], [])
+        assert conflict is not None and conflict.kind == "transit_vs_background"
+
+    def test_tone_fallback_always_gives_conflict(self):
+        from astra.astro.daily_context import MoonContext, detect_day_conflict
+
+        main = self._transit("Venus", "Венера", "трин", "Sun", "Солнце")
+        conflict = detect_day_conflict(main, MoonContext(sign="Козерог", natal_house=4), [], [])
+        assert conflict is not None and conflict.kind == "tone"
+        assert "Луна в Козерог" in conflict.side_b
+
+    def test_no_main_no_conflict(self):
+        from astra.astro.daily_context import MoonContext, detect_day_conflict
+
+        assert detect_day_conflict(None, MoonContext(sign="Овен"), [], []) is None
+
+    def test_real_chart_has_conflict(self):
+        pytest.importorskip("kerykeion")
+        from datetime import datetime
+
+        from astra.astro.calculator import build_full_natal_chart
+        from astra.astro.daily_context import build_daily_context_v2
+
+        chart = build_full_natal_chart(
+            name="Тест", birth_date=date(1990, 6, 15),
+            birth_time=datetime(1990, 6, 15, 14, 30),
+            lat=55.7558, lon=37.6176, timezone="Europe/Moscow",
+        )
+        ctx = build_daily_context_v2(chart, date(2026, 7, 7), accuracy_tier=100)
+        assert ctx.conflict is not None
+        assert ctx.conflict.side_a and ctx.conflict.side_b

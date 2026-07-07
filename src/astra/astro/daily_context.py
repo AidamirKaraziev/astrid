@@ -111,6 +111,23 @@ class SphereOfDay(BaseModel):
     label: str
 
 
+ASPECT_POLARITY: dict[str, str] = {
+    "трин": "гармония",
+    "секстиль": "гармония",
+    "квадрат": "напряжение",
+    "оппозиция": "напряжение",
+    "соединение": "обострение",
+}
+
+
+class DayConflict(BaseModel):
+    """Два реально противоречащих слоя неба — сердце прогноза v4.1."""
+
+    kind: str  # transit_vs_moon | transit_vs_background | transit_vs_natal | tone
+    side_a: str  # астро-описание, напр. «Марс трин Асцендент (гармония, орб 0.37°)»
+    side_b: str
+
+
 class DailyContextV2(BaseModel):
     schema_version: int = 2
     date: date_type
@@ -122,6 +139,7 @@ class DailyContextV2(BaseModel):
     moon: MoonContext | None = None
     activated_natal_aspects: list[ActivatedNatalAspect] = Field(default_factory=list)
     sphere_of_day: SphereOfDay | None = None
+    conflict: DayConflict | None = None
     question_archetype_id: str | None = None
 
 
@@ -280,6 +298,62 @@ def _activated_aspects(
     return activated[:_MAX_ACTIVATED]
 
 
+def _transit_desc(t: DailyTransit) -> str:
+    polarity = ASPECT_POLARITY.get(t.aspect, "")
+    tail = f", {polarity}" if polarity else ""
+    return f"{t.transit_planet} {t.aspect} {t.natal_point} (орб {t.orb_deg}°{tail})"
+
+
+def detect_day_conflict(
+    main: DailyTransit | None,
+    moon_ctx: MoonContext | None,
+    background: list[DailyTransit],
+    activated: list[ActivatedNatalAspect],
+) -> DayConflict | None:
+    """Найти пару противоречащих слоёв: полярность или разные точки натала."""
+    if main is None:
+        return None
+    main_polarity = ASPECT_POLARITY.get(main.aspect, "")
+
+    if moon_ctx is not None:
+        for moon_aspect in moon_ctx.aspects:
+            different_polarity = ASPECT_POLARITY.get(moon_aspect.aspect, "") != main_polarity
+            different_point = moon_aspect.natal_point_key != main.natal_point_key
+            if different_polarity or different_point:
+                return DayConflict(
+                    kind="transit_vs_moon",
+                    side_a=_transit_desc(main),
+                    side_b=_transit_desc(moon_aspect),
+                )
+
+    for bg in background:
+        if ASPECT_POLARITY.get(bg.aspect, "") != main_polarity:
+            return DayConflict(
+                kind="transit_vs_background",
+                side_a=_transit_desc(main),
+                side_b=_transit_desc(bg),
+            )
+
+    for natal in activated:
+        if ASPECT_POLARITY.get(natal.aspect, "") != main_polarity:
+            return DayConflict(
+                kind="transit_vs_natal",
+                side_a=_transit_desc(main),
+                side_b=f"натальная связка {natal.p1} {natal.aspect} {natal.p2}",
+            )
+
+    if moon_ctx is not None:
+        moon_side = f"Луна в {moon_ctx.sign}"
+        if moon_ctx.natal_house is not None:
+            moon_side += f" в {moon_ctx.natal_house} доме"
+        return DayConflict(
+            kind="tone",
+            side_a=_transit_desc(main),
+            side_b=f"{moon_side} — эмоциональный фон дня",
+        )
+    return None
+
+
 def build_daily_context_v2(
     chart: FullNatalChart,
     target: date_type,
@@ -353,5 +427,6 @@ def build_daily_context_v2(
         moon=moon_ctx,
         activated_natal_aspects=activated,
         sphere_of_day=sphere,
+        conflict=detect_day_conflict(main, moon_ctx, background, activated),
         question_archetype_id=question_archetype_id,
     )

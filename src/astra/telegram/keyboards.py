@@ -221,15 +221,25 @@ def profile_gender_inline_keyboard() -> InlineKeyboardMarkup:
     )
 
 
+CB_TAROT_DAILY = "tarot:daily"
+BTN_TAROT_DAILY = "🎴 Спросить карты"
+
+
 def prediction_followup_keyboard() -> InlineKeyboardMarkup:
-    """CTA под ежедневным предсказанием."""
+    """CTA под ежедневным предсказанием: карты отвечают на конфликт дня."""
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [
                 InlineKeyboardButton(
+                    text=BTN_TAROT_DAILY,
+                    callback_data=CB_TAROT_DAILY,
+                    style=ButtonStyle.PRIMARY,
+                ),
+            ],
+            [
+                InlineKeyboardButton(
                     text=BTN_ASK_STARS,
                     callback_data=CB_PRODUCT_ASK_STARS,
-                    style=ButtonStyle.PRIMARY,
                 ),
             ],
         ],
