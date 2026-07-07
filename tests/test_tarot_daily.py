@@ -179,3 +179,25 @@ class TestRevealFormat:
         html = format_tarot_reveal(_CHARIOT, _INTERPRETATION, repeated=True)
         assert "Колода уже ответила тебе сегодня" in html
         assert "путает нити" in html
+
+
+class TestNormalize:
+    def test_single_paragraph_splits_last_sentence_as_step(self):
+        from astra.llm.prompts.tarot_daily import normalize_tarot_blocks
+
+        merged = (
+            "Звезда не выбирает стороны, потому что обе гармоничны. "
+            "Марс даёт телу энергию, а Луна требует завершения. "
+            "Сейчас важнее ясность, чем победа. "
+            "До 23:00 запиши одну фразу о своих чувствах."
+        )
+        normalized = normalize_tarot_blocks(merged)
+        blocks = normalized.split("\n\n")
+        assert len(blocks) == 2
+        assert blocks[1].startswith("До 23:00")
+        assert validate_tarot_output(normalized) is None
+
+    def test_two_blocks_untouched(self):
+        from astra.llm.prompts.tarot_daily import normalize_tarot_blocks
+
+        assert normalize_tarot_blocks(_INTERPRETATION) == _INTERPRETATION

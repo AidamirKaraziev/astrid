@@ -15,6 +15,7 @@ from astra.llm.prompts.astrid import sanitize_prediction_output
 from astra.llm.prompts.tarot_daily import (
     TAROT_SYSTEM_PROMPT,
     build_tarot_user_message,
+    normalize_tarot_blocks,
     validate_tarot_output,
 )
 from astra.llm.types import ChatMessage, CompletionRequest
@@ -47,31 +48,38 @@ def _conflict_text_from_context(astro_context: dict) -> str | None:
     return None
 
 
+_GENERATE_ATTEMPTS = 2
+
+
 async def _generate_interpretation(
     card: TarotCard,
     astro_context: dict,
     settings: Settings,
 ) -> tuple[str | None, str]:
     provider = get_daily_provider(settings)
-    result = await provider.complete(
-        CompletionRequest(
-            messages=(
-                ChatMessage("system", TAROT_SYSTEM_PROMPT),
-                ChatMessage("user", build_tarot_user_message(card, astro_context)),
-            ),
-            temperature=_TAROT_TEMPERATURE,
-            max_tokens=_TAROT_MAX_TOKENS,
-            timeout_seconds=settings.deepseek_timeout_seconds,
-            extra={"thinking_disabled": True} if provider.name == "deepseek" else {},
+    request = CompletionRequest(
+        messages=(
+            ChatMessage("system", TAROT_SYSTEM_PROMPT),
+            ChatMessage("user", build_tarot_user_message(card, astro_context)),
         ),
+        temperature=_TAROT_TEMPERATURE,
+        max_tokens=_TAROT_MAX_TOKENS,
+        timeout_seconds=settings.deepseek_timeout_seconds,
+        extra={"thinking_disabled": True} if provider.name == "deepseek" else {},
     )
-    if not result.text:
-        return None, result.reason or "empty_response"
-    cleaned = sanitize_prediction_output(result.text) or result.text.strip()
-    validation_error = validate_tarot_output(cleaned)
-    if validation_error:
-        return None, validation_error
-    return cleaned, ""
+    last_error = "unknown"
+    for _ in range(_GENERATE_ATTEMPTS):
+        result = await provider.complete(request)
+        if not result.text:
+            last_error = result.reason or "empty_response"
+            continue
+        cleaned = sanitize_prediction_output(result.text) or result.text.strip()
+        cleaned = normalize_tarot_blocks(cleaned)
+        validation_error = validate_tarot_output(cleaned)
+        if validation_error is None:
+            return cleaned, ""
+        last_error = validation_error
+    return None, last_error
 
 
 async def reveal_daily_card(

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 from textwrap import dedent
 
 from astra.tarot.deck import TarotCard
@@ -26,13 +27,21 @@ TAROT_SYSTEM_PROMPT = dedent(
     5. Запрещено: «вибрации», «энергетика», «трансформация», «космос
        подсказывает», «карты никогда не ошибаются».
 
-    Формат ответа (строго, два блока через пустую строку):
+    Формат ответа — СТРОГО два блока, разделённые ПУСТОЙ СТРОКОЙ:
 
     [интерпретация — 3–5 предложений: что карта говорит о развилке
     и как это связано с сегодняшним небом]
 
     [один шаг — одно предложение, конкретное действие сегодня;
     если в данных есть тайминг Луны — используй его]
+
+    Пример структуры ответа:
+
+    Колесница не выбирает сторону — она про то, чтобы держать обе лошади
+    в одних руках. Твой Марс даёт силу сказать прямо, а Луна проверяет,
+    сможешь ли ты сделать это без нажима. Карта говорит: веди, не дави.
+
+    До 16:00 скажи главное спокойно и один раз — потом просто слушай.
 
     Язык: только русский (кириллица). Без иероглифов и эмодзи.
     """,
@@ -91,6 +100,22 @@ def build_tarot_user_message(card: TarotCard, astro_context: dict) -> str:
         "Прочитай выпавшую карту как ответ на конфликт дня.\n\n"
         f"{json.dumps(payload, ensure_ascii=False, indent=2)}"
     )
+
+
+_SENTENCE_SPLIT = re.compile(r"(?<=[.!?…])\s+")
+
+
+def normalize_tarot_blocks(text: str) -> str:
+    """Если модель слепила всё в один абзац — отделить последнее предложение как шаг."""
+    blocks = [b.strip() for b in text.split("\n\n") if b.strip()]
+    if len(blocks) >= 2:
+        return text.strip()
+    if not blocks:
+        return ""
+    sentences = [s.strip() for s in _SENTENCE_SPLIT.split(blocks[0]) if s.strip()]
+    if len(sentences) < 3:
+        return text.strip()
+    return " ".join(sentences[:-1]) + "\n\n" + sentences[-1]
 
 
 def validate_tarot_output(text: str) -> str | None:
