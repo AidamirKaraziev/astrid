@@ -3,12 +3,14 @@ from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from astra.astro.calculator import build_natal_chart
+from astra.astro.calculator import build_full_natal_chart, build_natal_chart
 from astra.astro.crud import chart_data_from_row, get_natal_chart, upsert_natal_chart
 from astra.astro.schemas import AstroContext, NatalChartData, TransitAspect
+from astra.astro.daily_context import DailyContextV2, build_daily_context_v2
 from astra.astro.transits import build_daily_context
 from astra.core.config import Settings, get_settings
 from astra.core.prediction_errors import LlmGenerationError
+from astra.llm.daily_llm import daily_provider_enabled, generate_daily_body_v4
 from astra.llm.ollama import generate_prediction_body as llm_generate_body
 from astra.llm.prompts.astrid import QuestionArchetype, pick_question_archetype
 from astra.places import crud as places_crud
@@ -116,6 +118,23 @@ async def load_natal_chart_data(session: AsyncSession, user_id: UUID) -> NatalCh
     return chart_data_from_row(row)
 
 
+async def build_full_chart_for_user(
+    session: AsyncSession,
+    user: User,
+    profile: Profile,
+):
+    """FullNatalChart по профилю (координаты из места рождения)."""
+    lat, lon, tz = await _birth_coordinates(session, profile)
+    return build_full_natal_chart(
+        name=profile.display_name,
+        birth_date=profile.birth_date,
+        birth_time=profile.birth_time,
+        lat=lat,
+        lon=lon,
+        timezone=tz,
+    )
+
+
 async def build_and_store_daily_context(
     session: AsyncSession,
     user: User,
@@ -123,14 +142,19 @@ async def build_and_store_daily_context(
     target: date,
 ) -> Prediction:
     chart = await load_natal_chart_data(session, user.id)
-    ctx = build_daily_context(profile, chart, target)
+    full_chart = await build_full_chart_for_user(session, user, profile)
     archetype = pick_question_archetype(user.id, target)
-    payload = build_prediction_astro_context(ctx, archetype)
+    ctx = build_daily_context_v2(
+        full_chart,
+        target,
+        accuracy_tier=chart.accuracy_tier,
+        question_archetype_id=archetype.id,
+    )
     return await predictions_crud.upsert_context_draft(
         session,
         user_id=user.id,
         prediction_date=target,
-        astro_context=payload,
+        astro_context=ctx.model_dump(mode="json"),
     )
 
 
@@ -142,23 +166,31 @@ async def generate_prediction_text_only(
     settings: Settings | None = None,
 ) -> Prediction:
     cfg = settings or get_settings()
-    if not cfg.ollama_enabled:
-        raise LlmGenerationError("disabled")
 
     prediction = await predictions_crud.get_prediction_for_date(session, user.id, target)
     if prediction is None or prediction.astro_context is None:
         raise LlmGenerationError("missing_context")
 
-    chart = await load_natal_chart_data(session, user.id)
-    ctx = astro_context_from_stored(prediction.astro_context)
-    archetype = pick_question_archetype(user.id, target)
-    body, failure_reason = await llm_generate_body(
-        ctx,
-        profile,
-        chart,
-        cfg,
-        archetype=archetype,
-    )
+    stored = prediction.astro_context
+    if stored.get("schema_version") == 2:
+        if not daily_provider_enabled(cfg):
+            raise LlmGenerationError("disabled")
+        ctx_v2 = DailyContextV2.model_validate(stored)
+        body, failure_reason = await generate_daily_body_v4(ctx_v2, cfg)
+    else:
+        # legacy-контекст v1 (черновики до раската v4)
+        if not cfg.ollama_enabled:
+            raise LlmGenerationError("disabled")
+        chart = await load_natal_chart_data(session, user.id)
+        ctx = astro_context_from_stored(stored)
+        archetype = pick_question_archetype(user.id, target)
+        body, failure_reason = await llm_generate_body(
+            ctx,
+            profile,
+            chart,
+            cfg,
+            archetype=archetype,
+        )
     if not body:
         raise LlmGenerationError(failure_reason or "empty_response")
     return await predictions_crud.update_prediction(

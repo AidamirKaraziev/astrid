@@ -45,12 +45,76 @@ def format_prediction_message(
     return body.strip()
 
 
+_RU_MONTHS_GENITIVE = (
+    "января", "февраля", "марта", "апреля", "мая", "июня",
+    "июля", "августа", "сентября", "октября", "ноября", "декабря",
+)
+
+_SPHERE_EMOJI: dict[int, str] = {
+    1: "🌱", 2: "💰", 3: "💬", 4: "🏠", 5: "🎨", 6: "🩺",
+    7: "🤝", 8: "🔑", 9: "🧭", 10: "💼", 11: "🌐", 12: "🌊",
+}
+
+
+def _escape_html(text: str) -> str:
+    return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+
+def _split_v4_blocks(text: str) -> tuple[str, str, str] | None:
+    blocks = [b.strip() for b in text.split("\n\n") if b.strip()]
+    if len(blocks) < 3:
+        return None
+    return blocks[0], blocks[1], " ".join(blocks[2:])
+
+
+def format_compass_message(prediction: Prediction) -> str | None:
+    """HTML «Компаса дня» из контекста v2 + трёх блоков LLM; None — не v2."""
+    ctx = prediction.astro_context or {}
+    if ctx.get("schema_version") != 2:
+        return None
+    body = (prediction.text or "").strip()
+    blocks = _split_v4_blocks(body)
+    if blocks is None:
+        return None
+    question, forecast, step = blocks
+
+    target = date.fromisoformat(str(ctx["date"]))
+    header = f"{target.day} {_RU_MONTHS_GENITIVE[target.month - 1]}"
+    moon = ctx.get("moon") or {}
+    if moon.get("sign"):
+        from astra.astro.constants import SIGN_RU_PREPOSITIONAL
+
+        sign = SIGN_RU_PREPOSITIONAL.get(str(moon["sign"]), str(moon["sign"]))
+        header += f" · Луна в {sign}"
+        if moon.get("phase"):
+            header += f", {moon['phase']}"
+
+    lines = [
+        f"🌙 <b>{_escape_html(header)}</b>",
+        "",
+        f"<i>{_escape_html(question)}</i>",
+        "",
+        _escape_html(forecast),
+    ]
+
+    sphere = ctx.get("sphere_of_day")
+    if sphere and sphere.get("label"):
+        emoji = _SPHERE_EMOJI.get(int(sphere.get("house") or 0), "✨")
+        lines += ["", f"{emoji} <b>Сфера дня:</b> {_escape_html(str(sphere['label']))}"]
+
+    lines += ["", f"→ <b>Один шаг:</b> {_escape_html(step)}"]
+    return "\n".join(lines)
+
+
 def format_prediction_for_user(
     prediction: Prediction,
     user: User,
     profile: Profile,
 ) -> str:
     del user, profile
+    compass = format_compass_message(prediction)
+    if compass is not None:
+        return compass
     return (prediction.text or "").strip()
 
 

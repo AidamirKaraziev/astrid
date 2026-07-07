@@ -55,6 +55,9 @@ class Settings(BaseSettings):
     ollama_enabled: bool = True
     ollama_timeout_seconds: float = 300.0
 
+    # Провайдер ежедневных предсказаний: deepseek | ollama
+    daily_llm_provider: str = "deepseek"
+
     # xAI Grok — платные продукты (совместимость и др.)
     grok_enabled: bool = False
     xai_api_key: str = ""

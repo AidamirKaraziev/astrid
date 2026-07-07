@@ -259,8 +259,16 @@ def sanitize_prediction_output(raw: str) -> str:
     return _assemble_blocks(question, body, advice)
 
 
-def validate_prediction_output(text: str, display_name: str) -> str | None:
-    """Проверить v3-прогноз; вернуть reason для retry или None если ок."""
+def validate_prediction_output(
+    text: str,
+    display_name: str,
+    *,
+    require_name: bool = True,
+) -> str | None:
+    """Проверить прогноз; вернуть reason для retry или None если ок.
+
+    require_name=False — режим v4: имя в шапке сообщения, не в тексте.
+    """
     cleaned = text.strip()
     if not cleaned:
         return "sanitize_empty"
@@ -282,7 +290,7 @@ def validate_prediction_output(text: str, display_name: str) -> str | None:
     if not (MIN_QUESTION_LEN <= len(question) <= MAX_QUESTION_LEN):
         return "question_length"
 
-    if not _body_starts_with_name(body, display_name):
+    if require_name and not _body_starts_with_name(body, display_name):
         return "missing_name"
 
     body_sentences = _split_sentences(body)
