@@ -135,13 +135,31 @@ async def build_full_chart_for_user(
     )
 
 
+def _zodiac_context_payload(chart: NatalChartData, target: date) -> dict:
+    """Лёгкий контекст общего тарифа: только знак Солнца."""
+    return {
+        "schema_version": "zodiac",
+        "date": target.isoformat(),
+        "sign": chart.sun_sign,
+        "accuracy_tier": chart.accuracy_tier,
+    }
+
+
 async def build_and_store_daily_context(
     session: AsyncSession,
     user: User,
     profile: Profile,
     target: date,
 ) -> Prediction:
+    cfg = get_settings()
     chart = await load_natal_chart_data(session, user.id)
+    if not cfg.personal_predictions_enabled:
+        return await predictions_crud.upsert_context_draft(
+            session,
+            user_id=user.id,
+            prediction_date=target,
+            astro_context=_zodiac_context_payload(chart, target),
+        )
     full_chart = await build_full_chart_for_user(session, user, profile)
     archetype = pick_question_archetype(user.id, target)
     ctx = build_daily_context_v2(
@@ -172,6 +190,22 @@ async def generate_prediction_text_only(
         raise LlmGenerationError("missing_context")
 
     stored = prediction.astro_context
+    if stored.get("schema_version") == "zodiac":
+        from astra.predictions.zodiac_daily import get_or_generate_zodiac_daily
+
+        sign = str(stored.get("sign") or "")
+        row = await get_or_generate_zodiac_daily(session, sign, target, cfg)
+        if row is None:
+            raise LlmGenerationError("zodiac_generation_failed")
+        payload = dict(stored)
+        payload["moon_note"] = row.moon_note
+        prediction.astro_context = payload
+        return await predictions_crud.update_prediction(
+            session,
+            prediction,
+            text=row.text,
+            status=PredictionStatus.TEXT_READY,
+        )
     if stored.get("schema_version") == 2:
         if not daily_provider_enabled(cfg):
             raise LlmGenerationError("disabled")

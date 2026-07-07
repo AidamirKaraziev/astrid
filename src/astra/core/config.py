@@ -58,6 +58,9 @@ class Settings(BaseSettings):
     # Провайдер ежедневных предсказаний: deepseek | ollama
     daily_llm_provider: str = "deepseek"
 
+    # true — всем персональные предсказания; false — общий гороскоп по знаку
+    personal_predictions_enabled: bool = True
+
     # xAI Grok — платные продукты (совместимость и др.)
     grok_enabled: bool = False
     xai_api_key: str = ""

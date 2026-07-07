@@ -106,12 +106,45 @@ def format_compass_message(prediction: Prediction) -> str | None:
     return "\n".join(lines)
 
 
+def format_zodiac_daily_message(prediction: Prediction) -> str | None:
+    """HTML общего гороскопа по знаку (тариф без персональных); None — не zodiac."""
+    ctx = prediction.astro_context or {}
+    if ctx.get("schema_version") != "zodiac":
+        return None
+    body = (prediction.text or "").strip()
+    if not body:
+        return None
+
+    from astra.predictions.zodiac_daily import ZODIAC_CTA
+
+    target = date.fromisoformat(str(ctx["date"]))
+    header = f"{target.day} {_RU_MONTHS_GENITIVE[target.month - 1]} · {ctx.get('sign', '')}"
+    if ctx.get("moon_note"):
+        header += f" · {ctx['moon_note']}"
+
+    blocks = _split_v4_blocks(body)
+    if blocks is not None:
+        question, forecast, step = blocks
+        body_html = (
+            f"<i>{_escape_html(question)}</i>\n\n"
+            f"{_escape_html(forecast)}\n\n"
+            f"→ <b>Один шаг:</b> {_escape_html(step)}"
+        )
+    else:
+        body_html = _escape_html(body)
+
+    return f"🌙 <b>{_escape_html(header)}</b>\n\n{body_html}\n\n{ZODIAC_CTA}"
+
+
 def format_prediction_for_user(
     prediction: Prediction,
     user: User,
     profile: Profile,
 ) -> str:
     del user, profile
+    zodiac = format_zodiac_daily_message(prediction)
+    if zodiac is not None:
+        return zodiac
     compass = format_compass_message(prediction)
     if compass is not None:
         return compass
