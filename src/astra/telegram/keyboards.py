@@ -1,7 +1,7 @@
 from aiogram.enums import ButtonStyle
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, KeyboardButton, ReplyKeyboardMarkup
 
-from astra.compatibility.enums import PAIR_MODE_LABELS, PairMode
+from astra.compatibility.enums import PAIR_MODE_EMOJI, PAIR_MODE_LABELS, PairMode, RelationshipContext
 from astra.telegram.button_texts import (
     BTN_ASK_STARS,
     BTN_BACK_MENU,
@@ -126,7 +126,7 @@ def profile_menu_keyboard() -> InlineKeyboardMarkup:
 def compatibility_context_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text="💑 Отношения", callback_data=f"{CB_COMPAT_CONTEXT_PREFIX}love")],
+            [InlineKeyboardButton(text="💑 Любовь", callback_data=f"{CB_COMPAT_CONTEXT_PREFIX}love")],
             [InlineKeyboardButton(text="💼 Работа", callback_data=f"{CB_COMPAT_CONTEXT_PREFIX}work")],
             [InlineKeyboardButton(text="🤝 Дружба", callback_data=f"{CB_COMPAT_CONTEXT_PREFIX}friendship")],
             [InlineKeyboardButton(text="◀️ В меню", callback_data="menu:home")],
@@ -134,15 +134,16 @@ def compatibility_context_keyboard() -> InlineKeyboardMarkup:
     )
 
 
-def compatibility_pair_mode_keyboard() -> InlineKeyboardMarkup:
+def compatibility_pair_mode_keyboard(context: RelationshipContext) -> InlineKeyboardMarkup:
+    emoji = PAIR_MODE_EMOJI[context]
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [InlineKeyboardButton(
-                text="💞 " + PAIR_MODE_LABELS[PairMode.ME_PARTNER],
+                text=f"{emoji[PairMode.ME_PARTNER]} {PAIR_MODE_LABELS[PairMode.ME_PARTNER]}",
                 callback_data=f"{CB_COMPAT_MODE_PREFIX}me_partner",
             )],
             [InlineKeyboardButton(
-                text="🫂 " + PAIR_MODE_LABELS[PairMode.TWO_PEOPLE],
+                text=f"{emoji[PairMode.TWO_PEOPLE]} {PAIR_MODE_LABELS[PairMode.TWO_PEOPLE]}",
                 callback_data=f"{CB_COMPAT_MODE_PREFIX}two_people",
             )],
             [InlineKeyboardButton(text="◀️ Назад", callback_data=f"{CB_COMPAT_CONTEXT_PREFIX}back")],

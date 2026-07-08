@@ -15,9 +15,9 @@
               "state": {
                 "file": "план по проекту.canvas",
                 "viewState": {
-                  "x": -380.7769442838056,
-                  "y": -868.84105400265,
-                  "zoom": -1.3857296690344876
+                  "x": -448.57130821880503,
+                  "y": -115.28931800437346,
+                  "zoom": -0.7137282072085469
                 }
               },
               "icon": "lucide-layout-dashboard",
@@ -81,7 +81,8 @@
       }
     ],
     "direction": "horizontal",
-    "width": 300
+    "width": 200,
+    "collapsed": true
   },
   "right": {
     "id": "e72978c238ccc726",

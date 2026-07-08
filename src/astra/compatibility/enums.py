@@ -40,3 +40,19 @@ PAIR_MODE_LABELS: dict[PairMode, str] = {
     PairMode.ME_PARTNER: "Моя совместимость",
     PairMode.TWO_PEOPLE: "Другая пара",
 }
+
+# Эмодзи кнопок шага «Кто участвует в разборе?» зависят от выбранного контекста.
+PAIR_MODE_EMOJI: dict[RelationshipContext, dict[PairMode, str]] = {
+    RelationshipContext.LOVE: {
+        PairMode.ME_PARTNER: "💞",
+        PairMode.TWO_PEOPLE: "👥",
+    },
+    RelationshipContext.WORK: {
+        PairMode.ME_PARTNER: "👤",
+        PairMode.TWO_PEOPLE: "👥",
+    },
+    RelationshipContext.FRIENDSHIP: {
+        PairMode.ME_PARTNER: "🧍‍♀️",
+        PairMode.TWO_PEOPLE: "👭",
+    },
+}

@@ -133,7 +133,7 @@ async def cb_choose_context(callback: CallbackQuery, state: FSMContext) -> None:
     await state.set_state(CompatibilityStates.choose_pair_mode)
     await callback.message.edit_text(
         "Кто участвует в разборе?",
-        reply_markup=compatibility_pair_mode_keyboard(),
+        reply_markup=compatibility_pair_mode_keyboard(RelationshipContext(value)),
     )
     await callback.answer()
 
