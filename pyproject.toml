@@ -29,9 +29,6 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-pdf = [
-    "reportlab>=4.2.0",
-]
 dev = [
     "aiosqlite>=0.20.0",
     "fakeredis>=2.26.0",

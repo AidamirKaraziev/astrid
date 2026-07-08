@@ -30,5 +30,15 @@ data/geonames/RU.txt
 data/geonames/RU.zip
 data/geonames/admin1CodesASCII.txt
 
+# Не используется в образе (Dockerfile копирует выборочно, но контекст меньше)
+docs
+artifacts
+задачи.txt
+natal_pdf.py
+synastry_pdf.py
+skills-lock.json
+CLAUDE.md
+.claude
+
 # Прочее
 RU.zip

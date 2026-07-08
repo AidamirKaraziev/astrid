@@ -3,7 +3,7 @@
 BTN_PREDICTION_TODAY = "🔮 Предсказание на сегодня"
 BTN_PROFILE = "✨ Обо мне"
 BTN_INVITE = "🎁 Пригласить друга"
-BTN_BACK_MENU = "◀️ В меню"
+BTN_BACK_MENU = "🔙 В меню"
 
 BTN_COMPATIBILITY = "💕 Совместимость"
 BTN_ASK_STARS = "🌟 Спросить звёзды"

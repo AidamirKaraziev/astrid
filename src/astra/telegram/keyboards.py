@@ -129,7 +129,7 @@ def compatibility_context_keyboard() -> InlineKeyboardMarkup:
             [InlineKeyboardButton(text="💑 Любовь", callback_data=f"{CB_COMPAT_CONTEXT_PREFIX}love")],
             [InlineKeyboardButton(text="💼 Работа", callback_data=f"{CB_COMPAT_CONTEXT_PREFIX}work")],
             [InlineKeyboardButton(text="🤝 Дружба", callback_data=f"{CB_COMPAT_CONTEXT_PREFIX}friendship")],
-            [InlineKeyboardButton(text="◀️ В меню", callback_data="menu:home")],
+            [InlineKeyboardButton(text="🔙 В меню", callback_data="menu:home")],
         ],
     )
 

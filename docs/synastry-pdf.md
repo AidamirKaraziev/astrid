@@ -21,15 +21,15 @@ src/astra/reports/synastry/
 ## Зависимости
 
 ```bash
-uv sync --extra pdf
+uv sync
 ```
 
-`reportlab` — optional extra `pdf` в `pyproject.toml`.
+`reportlab` — основная зависимость в `pyproject.toml`, ставится обычным `uv sync`.
 
 ## Быстрый старт
 
 ```bash
-uv run --extra pdf python scripts/generate_synastry_pdf.py
+uv run python scripts/generate_synastry_pdf.py
 ```
 
 Выход по умолчанию: `docs/output/synastry_aidamir_angela.pdf`.
@@ -37,7 +37,7 @@ uv run --extra pdf python scripts/generate_synastry_pdf.py
 Свой путь и бот:
 
 ```bash
-uv run --extra pdf python scripts/generate_synastry_pdf.py \
+uv run python scripts/generate_synastry_pdf.py \
   -o docs/output/my_synastry.pdf \
   --bot-username astrology_aid_dev_bot
 ```
@@ -88,7 +88,7 @@ CTA-ссылка: `https://t.me/{TELEGRAM_BOT_USERNAME}` из `.env` или `ast
 ## Тесты
 
 ```bash
-uv run --extra pdf pytest tests/test_synastry_pdf.py -v
+uv run pytest tests/test_synastry_pdf.py -v
 ```
 
 ## Дальше
