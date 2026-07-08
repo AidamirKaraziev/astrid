@@ -7,7 +7,7 @@ from astra.users.getters import calculate_profile_accuracy
 from astra.users.models import Profile
 
 
-def _sun_sign(birth_date: date) -> str:
+def sun_sign_ru(birth_date: date) -> str:
     d = (birth_date.month, birth_date.day)
     signs = [
         ((3, 21), (4, 19), "Овен"),
@@ -27,6 +27,9 @@ def _sun_sign(birth_date: date) -> str:
         if start <= d <= end:
             return name
     return "Козерог"
+
+
+_sun_sign = sun_sign_ru  # обратная совместимость
 
 
 def build_natal_chart(

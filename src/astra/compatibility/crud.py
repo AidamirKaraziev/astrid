@@ -22,19 +22,29 @@ async def get_natal_profile_by_id(
     return result.scalar_one_or_none()
 
 
-async def find_natal_profile_by_label(
+def normalize_profile_label(label: str) -> str:
+    """Ключ идентичности имени: без регистра, кромок и лишних пробелов."""
+    return " ".join(label.strip().lower().split())
+
+
+async def find_natal_profile_by_identity(
     session: AsyncSession,
     owner_user_id: uuid.UUID,
     label: str,
+    birth_date,
 ) -> NatalProfile | None:
-    normalized = label.strip()
+    """Тот же человек = нормализованное имя + дата рождения (защита от дублей)."""
+    target = normalize_profile_label(label)
     result = await session.execute(
         select(NatalProfile).where(
             NatalProfile.owner_user_id == owner_user_id,
-            NatalProfile.label == normalized,
+            NatalProfile.birth_date == birth_date,
         ),
     )
-    return result.scalar_one_or_none()
+    for row in result.scalars().all():
+        if normalize_profile_label(row.label) == target:
+            return row
+    return None
 
 
 async def list_natal_profiles(
@@ -95,7 +105,12 @@ async def upsert_natal_profile(
     timezone: str,
     chart_data: dict | None = None,
 ) -> NatalProfile:
-    existing = await find_natal_profile_by_label(session, owner_user_id, label)
+    existing = await find_natal_profile_by_identity(
+        session,
+        owner_user_id,
+        label,
+        birth_date,
+    )
     if existing is None:
         row = NatalProfile(
             owner_user_id=owner_user_id,

@@ -250,10 +250,11 @@ async def save_people_name(message: Message, state: FSMContext, session: AsyncSe
     if len(name) < 2:
         await message.answer("Введи имя (минимум 2 символа).")
         return
-    duplicate = await compatibility_crud.find_natal_profile_by_label(
+    duplicate = await compatibility_crud.find_natal_profile_by_identity(
         session,
         profile.owner_user_id,
         name,
+        profile.birth_date,
     )
     if duplicate is not None and duplicate.id != profile.id:
         await message.answer(

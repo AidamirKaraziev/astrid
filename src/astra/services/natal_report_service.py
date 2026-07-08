@@ -79,25 +79,46 @@ def person_subtitle(
     return " · ".join(parts)
 
 
-async def create_natal_report_for_user(
-    session: AsyncSession,
-    user: User,
-) -> NatalReport:
-    """Создать отчёт: полная карта и фичи считаются инлайн (<100 мс)."""
-    profile: Profile | None = user.profile
-    if profile is None:
-        msg = "profile required"
-        raise ValueError(msg)
+@dataclass(frozen=True, slots=True)
+class NatalSubject:
+    """Человек, для которого строится разбор: сам пользователь или сохранённый профиль."""
 
-    lat, lon, tz = await _coordinates(
-        session,
+    name: str
+    gender: str | None
+    birth_date: date
+    birth_time: datetime | None
+    birth_place: str | None
+    birth_place_id: uuid.UUID | None
+    timezone: str
+
+
+def _subject_from_profile(profile: Profile) -> NatalSubject:
+    return NatalSubject(
+        name=profile.display_name,
+        gender=profile.gender,
+        birth_date=profile.birth_date,
+        birth_time=profile.birth_time,
+        birth_place=profile.birth_place,
         birth_place_id=profile.birth_place_id,
         timezone=profile.timezone,
     )
+
+
+async def create_natal_report_for_subject(
+    session: AsyncSession,
+    user: User,
+    subject: NatalSubject,
+) -> NatalReport:
+    """Создать отчёт для произвольного субъекта: полная карта и фичи инлайн (<100 мс)."""
+    lat, lon, tz = await _coordinates(
+        session,
+        birth_place_id=subject.birth_place_id,
+        timezone=subject.timezone,
+    )
     chart = build_full_natal_chart(
-        name=profile.display_name,
-        birth_date=profile.birth_date,
-        birth_time=profile.birth_time,
+        name=subject.name,
+        birth_date=subject.birth_date,
+        birth_time=subject.birth_time,
         lat=lat,
         lon=lon,
         timezone=tz,
@@ -105,11 +126,11 @@ async def create_natal_report_for_user(
     features = build_chart_features(chart)
 
     snapshot = {
-        "name": profile.display_name,
-        "gender": profile.gender,  # Gender = Literal[str], не enum
-        "birth_date": profile.birth_date.isoformat(),
-        "birth_time": profile.birth_time.isoformat() if profile.birth_time else None,
-        "birth_place": profile.birth_place,
+        "name": subject.name,
+        "gender": subject.gender,  # Gender = Literal[str], не enum
+        "birth_date": subject.birth_date.isoformat(),
+        "birth_time": subject.birth_time.isoformat() if subject.birth_time else None,
+        "birth_place": subject.birth_place,
         "timezone": tz,
     }
 
@@ -119,10 +140,22 @@ async def create_natal_report_for_user(
         subject_snapshot=snapshot,
         chart_data=chart.model_dump(),
         features=features.model_dump(),
-        title=build_natal_title(profile.display_name),
+        title=build_natal_title(subject.name),
     )
     log.info(Event.NATAL_REPORT_CREATED, report_id=report.id, has_time=chart.has_time)
     return report
+
+
+async def create_natal_report_for_user(
+    session: AsyncSession,
+    user: User,
+) -> NatalReport:
+    """Разбор для самого пользователя (данные из профиля)."""
+    profile: Profile | None = user.profile
+    if profile is None:
+        msg = "profile required"
+        raise ValueError(msg)
+    return await create_natal_report_for_subject(session, user, _subject_from_profile(profile))
 
 
 def _prompt_input_from_report(report: NatalReport):

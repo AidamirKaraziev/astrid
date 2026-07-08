@@ -16,17 +16,34 @@ from astra.telegram.button_texts import (
 )
 
 
-def _profile_button_label(profile: NatalProfile) -> str:
-    return f"{profile.label} · {profile.birth_date.strftime('%d.%m.%Y')}"[:60]
+from astra.astro.simple import sun_sign_ru
+
+_GENDER_EMOJI = {"женщина": "👩", "мужчина": "👨"}
+_ZODIAC_GLYPH = {
+    "Овен": "♈", "Телец": "♉", "Близнецы": "♊", "Рак": "♋",
+    "Лев": "♌", "Дева": "♍", "Весы": "♎", "Скорпион": "♏",
+    "Стрелец": "♐", "Козерог": "♑", "Водолей": "♒", "Рыбы": "♓",
+}
 
 
-def person_pick_keyboard(profiles: list[NatalProfile]) -> InlineKeyboardMarkup:
-    """Пикер сохранённого человека внутри FSM-флоу (совместимость и будущие продукты)."""
+def profile_pick_label(profile: NatalProfile) -> str:
+    emoji = _GENDER_EMOJI.get(profile.gender or "", "👤")
+    glyph = _ZODIAC_GLYPH.get(sun_sign_ru(profile.birth_date), "")
+    date = profile.birth_date.strftime("%d.%m.%Y")
+    return f"{emoji} {profile.label} · {date} {glyph}".strip()[:60]
+
+
+def person_pick_keyboard(
+    profiles: list[NatalProfile],
+    *,
+    callback_prefix: str = CB_PERSON_PICK_PREFIX,
+) -> InlineKeyboardMarkup:
+    """Пикер сохранённого человека внутри FSM-флоу (совместимость, натал и будущие продукты)."""
     rows = [
         [
             InlineKeyboardButton(
-                text=_profile_button_label(profile),
-                callback_data=f"{CB_PERSON_PICK_PREFIX}{profile.id}",
+                text=profile_pick_label(profile),
+                callback_data=f"{callback_prefix}{profile.id}",
             ),
         ]
         for profile in profiles
@@ -38,7 +55,7 @@ def people_list_keyboard(profiles: list[NatalProfile]) -> InlineKeyboardMarkup:
     rows = [
         [
             InlineKeyboardButton(
-                text=_profile_button_label(profile),
+                text=profile_pick_label(profile),
                 callback_data=f"{CB_PEOPLE_CARD_PREFIX}{profile.id}",
             ),
         ]

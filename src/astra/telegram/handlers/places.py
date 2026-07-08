@@ -18,6 +18,7 @@ from astra.services.onboarding_service import parse_registration_fsm, run_regist
 from astra.telegram.keyboards import profile_menu_keyboard
 from astra.telegram.states import (
     CompatibilityStates,
+    NatalStates,
     OnboardingStates,
     PeopleStates,
     ProfileStates,
@@ -34,6 +35,7 @@ PLACE_STATES = (
     ProfileStates.edit_notification_place_query,
     CompatibilityStates.birth_place_query,
     PeopleStates.edit_birth_place_query,
+    NatalStates.new_birth_place_query,
 )
 
 SEARCH_HINT = (
@@ -64,6 +66,8 @@ def _context_key_for_state(state: str | None) -> str:
         return "compatibility"
     if state == PeopleStates.edit_birth_place_query.state:
         return "people"
+    if state == NatalStates.new_birth_place_query.state:
+        return "natal_new"
     return "notification"
 
 
@@ -106,6 +110,12 @@ async def start_people_birth_place_step(
     await state.set_state(PeopleStates.edit_birth_place_query)
     await state.update_data(place_context="people")
     await send_place_step_prompt(message, title=f"📍 Где родился(ась) {label}?")
+
+
+async def start_natal_new_birth_place_step(message: Message, state: FSMContext) -> None:
+    await state.set_state(NatalStates.new_birth_place_query)
+    await state.update_data(place_context="natal_new")
+    await send_place_step_prompt(message, title="📍 Где родился(ась) этот человек?")
 
 
 async def start_profile_notification_place_step(message: Message, state: FSMContext) -> None:
@@ -154,6 +164,8 @@ async def handle_place_query(
         await state.set_state(CompatibilityStates.birth_place_query)
     elif context_key == "people":
         await state.set_state(PeopleStates.edit_birth_place_query)
+    elif context_key == "natal_new":
+        await state.set_state(NatalStates.new_birth_place_query)
     elif current != ProfileStates.edit_notification_place_query.state:
         await state.set_state(ProfileStates.edit_notification_place_query)
     await message.answer(
@@ -305,6 +317,20 @@ async def _apply_place_selection(
         from astra.telegram.handlers.people import complete_people_birth_place
 
         await complete_people_birth_place(
+            message,
+            state,
+            session,
+            place_display=place.display_name,
+            place_id=place.id,
+            timezone=place.timezone,
+            actor_telegram_id=actor_telegram_id,
+        )
+        return
+
+    if current_state == NatalStates.new_birth_place_query.state:
+        from astra.telegram.handlers.natal import complete_natal_new_birth_place
+
+        await complete_natal_new_birth_place(
             message,
             state,
             session,

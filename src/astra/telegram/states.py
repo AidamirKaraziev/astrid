@@ -30,6 +30,12 @@ class CompatibilityStates(StatesGroup):
 class NatalStates(StatesGroup):
     collect_birth_time = State()
     confirm = State()
+    # Ввод нового человека для разбора натала
+    new_name = State()
+    new_gender = State()
+    new_birth_date = State()
+    new_birth_time = State()
+    new_birth_place_query = State()
 
 
 class PeopleStates(StatesGroup):

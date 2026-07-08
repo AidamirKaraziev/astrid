@@ -137,3 +137,52 @@ async def test_delete_natal_profile_scopes_by_owner() -> None:
     ok = await compatibility_crud.delete_natal_profile(session, uuid4(), uuid4())
     assert ok is True
     session.flush.assert_awaited_once()
+
+
+def test_normalize_profile_label_collapses_case_and_space() -> None:
+    n = compatibility_crud.normalize_profile_label
+    assert n("Анжела") == n("анжела") == n("  Анжела  ") == n("АНЖЕЛА")
+    # ник и транслит остаются разными — безопасно не сливаем
+    assert n("анж") != n("анжела")
+    assert n("Anzhela") != n("анжела")
+
+
+@pytest.mark.asyncio
+async def test_find_by_identity_matches_case_variant_same_date() -> None:
+    owner = uuid4()
+    existing = _profile(label="Анжела", birth_date=date(2001, 12, 2))
+    result = MagicMock()
+    result.scalars.return_value.all.return_value = [existing]
+    session = AsyncMock()
+    session.execute.return_value = result
+
+    found = await compatibility_crud.find_natal_profile_by_identity(
+        session, owner, "  анжела ", date(2001, 12, 2),
+    )
+    assert found is existing
+
+
+@pytest.mark.asyncio
+async def test_upsert_updates_case_variant_instead_of_duplicating() -> None:
+    owner = uuid4()
+    existing = _profile(label="Анжела", birth_date=date(2001, 12, 2), gender=None)
+    result = MagicMock()
+    result.scalars.return_value.all.return_value = [existing]
+    session = AsyncMock()
+    session.execute.return_value = result
+
+    row = await compatibility_crud.upsert_natal_profile(
+        session,
+        owner_user_id=owner,
+        label="анжела",
+        gender="женщина",
+        birth_date=date(2001, 12, 2),
+        birth_time=None,
+        birth_place="Москва",
+        birth_place_id=None,
+        timezone="Europe/Moscow",
+    )
+    # обновили существующий, а не создали новый
+    assert row is existing
+    assert existing.gender == "женщина"
+    session.add.assert_not_called()

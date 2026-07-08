@@ -19,6 +19,7 @@ from astra.telegram.button_texts import (
 from astra.telegram.keyboards import main_menu_keyboard, tarot_keyboard
 from astra.telegram.states import (
     CompatibilityStates,
+    NatalStates,
     OnboardingStates,
     PeopleStates,
     ProfileStates,
@@ -40,6 +41,11 @@ _KEYBOARD_SUPPRESSED_FSM_STATES: frozenset[str] = frozenset(
         PeopleStates.edit_birth_date.state,
         PeopleStates.edit_birth_time.state,
         PeopleStates.edit_birth_place_query.state,
+        NatalStates.new_name.state,
+        NatalStates.new_gender.state,
+        NatalStates.new_birth_date.state,
+        NatalStates.new_birth_time.state,
+        NatalStates.new_birth_place_query.state,
     },
 )
 
