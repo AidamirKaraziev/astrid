@@ -14,7 +14,7 @@ from astra.core.observability.middleware.telegram import TelegramObservabilityMi
 from astra.db.session import get_session_factory
 from astra.telegram.auto_keyboard_middleware import AutoKeyboardMiddleware
 from astra.telegram.bot_menu import setup_bot_menu
-from astra.telegram.handlers import catalog, commands, compatibility, menu, natal, onboarding, places, start, tarot_daily
+from astra.telegram.handlers import catalog, commands, compatibility, menu, natal, onboarding, people, places, start, tarot_daily
 from astra.telegram.middlewares import DbSessionMiddleware
 
 log = get_logger(__name__)
@@ -77,6 +77,7 @@ async def create_dispatcher(settings: Settings) -> Dispatcher:
     dp.include_router(onboarding.router)
     dp.include_router(menu.router)
     dp.include_router(compatibility.router)
+    dp.include_router(people.router)
     dp.include_router(natal.router)
     dp.include_router(tarot_daily.router)
     dp.include_router(catalog.router)

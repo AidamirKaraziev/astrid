@@ -46,3 +46,14 @@ CB_COMPAT_REPORTS_LIST = "compat:reports:list"
 CB_COMPAT_DELETE_PREFIX = "compat:del:"
 CB_COMPAT_DELETE_CONFIRM_PREFIX = "compat:del:yes:"
 CB_COMPAT_DELETE_CANCEL_PREFIX = "compat:del:no:"
+
+# Сохранённые натальные профили («Мои люди»)
+CB_PROFILE_PEOPLE = "profile:people"
+CB_PEOPLE_LIST = "people:list"
+CB_PEOPLE_CARD_PREFIX = "people:card:"
+CB_PEOPLE_EDIT_PREFIX = "people:edit:"  # people:edit:<field>:<id>
+CB_PEOPLE_DELETE_PREFIX = "people:del:"
+CB_PEOPLE_DELETE_CONFIRM_PREFIX = "people:del:yes:"
+CB_PEOPLE_DELETE_CANCEL_PREFIX = "people:del:no:"
+# Переиспользуемый пикер профиля в FSM-флоу (совместимость и будущие продукты)
+CB_PERSON_PICK_PREFIX = "person:pick:"

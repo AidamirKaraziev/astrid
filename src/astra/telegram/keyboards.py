@@ -28,6 +28,7 @@ from astra.telegram.button_texts import (
     CB_COMPAT_DELETE_CONFIRM_PREFIX,
     CB_COMPAT_DELETE_CANCEL_PREFIX,
     CB_PRODUCT_ASK_STARS,
+    CB_PROFILE_PEOPLE,
     CB_PROFILE_REPORTS,
 )
 
@@ -116,6 +117,12 @@ def profile_menu_keyboard() -> InlineKeyboardMarkup:
                 InlineKeyboardButton(
                     text="📚 Мои разборы",
                     callback_data=CB_PROFILE_REPORTS,
+                ),
+            ],
+            [
+                InlineKeyboardButton(
+                    text="👥 Мои люди",
+                    callback_data=CB_PROFILE_PEOPLE,
                 ),
             ],
             [InlineKeyboardButton(text="◀️ Назад", callback_data="menu:home")],

@@ -30,3 +30,12 @@ class CompatibilityStates(StatesGroup):
 class NatalStates(StatesGroup):
     collect_birth_time = State()
     confirm = State()
+
+
+class PeopleStates(StatesGroup):
+    """Редактирование сохранённого натального профиля («Мои люди»)."""
+
+    edit_name = State()
+    edit_birth_date = State()
+    edit_birth_time = State()
+    edit_birth_place_query = State()

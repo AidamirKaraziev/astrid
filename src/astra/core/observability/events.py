@@ -60,6 +60,11 @@ class Event(StrEnum):
     COMPATIBILITY_PDF_FAILED = "compatibility.pdf_failed"
     COMPATIBILITY_NOTIFY_FAILED = "compatibility.notify_failed"
 
+    # Сохранённые натальные профили («Мои люди»)
+    NATAL_PROFILE_UPDATED = "natal_profile.updated"
+    NATAL_PROFILE_DELETED = "natal_profile.deleted"
+    NATAL_PROFILE_PICKED = "natal_profile.picked"
+
     # Tarot
     TAROT_CARD_DRAWN = "tarot.card_drawn"
     TAROT_LIMIT_HIT = "tarot.limit_hit"

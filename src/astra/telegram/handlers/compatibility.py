@@ -48,6 +48,7 @@ from astra.telegram.button_texts import (
     CB_COMPAT_DELETE_PREFIX,
     CB_COMPAT_DELETE_CONFIRM_PREFIX,
     CB_COMPAT_DELETE_CANCEL_PREFIX,
+    CB_PERSON_PICK_PREFIX,
     CB_PROFILE_REPORTS,
     GENDER_REPLY_BUTTONS,
 )
@@ -67,6 +68,7 @@ from astra.telegram.keyboards import (
     profile_menu_keyboard,
     skip_keyboard,
 )
+from astra.telegram.keyboards_people import person_pick_keyboard
 from astra.telegram.states import CompatibilityStates
 from astra.telegram.utils import parse_birth_date, parse_birth_time
 from astra.users import crud as users_crud
@@ -138,9 +140,101 @@ async def cb_choose_context(callback: CallbackQuery, state: FSMContext) -> None:
     await callback.answer()
 
 
+_PROFILE_PICKER_LIMIT = 6
+
+
+async def _send_profile_picker(
+    message: Message,
+    state: FSMContext,
+    session: AsyncSession,
+    actor_telegram_id: int,
+) -> None:
+    """Показать сохранённые профили, если есть что подставить."""
+    user = await users_crud.get_user_by_telegram_id(session, actor_telegram_id)
+    if user is None:
+        return
+    profiles = await compatibility_crud.list_natal_profiles(
+        session,
+        user.id,
+        limit=_PROFILE_PICKER_LIMIT,
+    )
+    data = await state.get_data()
+    picked_a = data.get("person_a_picked_profile_id")
+    if picked_a:
+        profiles = [p for p in profiles if str(p.id) != str(picked_a)]
+    if not profiles:
+        return
+    await message.answer(
+        "Или выбери из сохранённых 👇",
+        reply_markup=person_pick_keyboard(profiles),
+    )
+
+
+async def _prompt_next_person_step(
+    message: Message,
+    state: FSMContext,
+    session: AsyncSession,
+    actor_telegram_id: int,
+) -> None:
+    """Спросить первое недостающее поле текущего человека или завершить сбор."""
+    data = await state.get_data()
+    collecting = data.get("collecting", COLLECTING_PERSON_B)
+    label = _person_label(collecting)
+    if f"{collecting}_gender" not in data:
+        await state.set_state(CompatibilityStates.collect_gender)
+        await message.answer(f"Пол {label}:", reply_markup=gender_keyboard())
+        return
+    if f"{collecting}_birth_date" not in data:
+        await state.set_state(CompatibilityStates.collect_birth_date)
+        await message.answer(
+            f"Дата рождения {label} (ДД.ММ.ГГГГ):",
+            reply_markup=ReplyKeyboardRemove(),
+        )
+        return
+    if f"{collecting}_birth_time" not in data:
+        await state.set_state(CompatibilityStates.collect_birth_time)
+        await message.answer(
+            f"Время рождения {label} (ЧЧ:ММ).\n"
+            "Если не знаешь — нажми «⏭ Пропустить».",
+            reply_markup=skip_keyboard(),
+        )
+        return
+    if f"{collecting}_birth_place" not in data:
+        await start_compatibility_birth_place_step(message, state, collecting=collecting)
+        return
+    await _finish_person_collection(message, state, session, actor_telegram_id)
+
+
+async def _finish_person_collection(
+    message: Message,
+    state: FSMContext,
+    session: AsyncSession,
+    actor_telegram_id: int,
+) -> None:
+    """Данные человека собраны: перейти ко второму человеку или к подтверждению."""
+    data = await state.get_data()
+    collecting = data.get("collecting", COLLECTING_PERSON_B)
+    pair_mode = data.get("pair_mode", PairMode.ME_PARTNER)
+    if pair_mode == PairMode.TWO_PEOPLE and collecting == COLLECTING_PERSON_A:
+        await state.update_data(collecting=COLLECTING_PERSON_B)
+        await state.set_state(CompatibilityStates.collect_name)
+        await message.answer(
+            "Теперь данные <b>второго человека</b>.\n\nКак его/её зовут?",
+            parse_mode="HTML",
+            reply_markup=ReplyKeyboardRemove(),
+        )
+        await _send_profile_picker(message, state, session, actor_telegram_id)
+        return
+    await _show_confirm(message, state)
+
+
 @router.callback_query(F.data.startswith(CB_COMPAT_MODE_PREFIX))
-async def cb_choose_pair_mode(callback: CallbackQuery, state: FSMContext) -> None:
-    if callback.message is None or callback.data is None:
+async def cb_choose_pair_mode(
+    callback: CallbackQuery,
+    state: FSMContext,
+    session: AsyncSession,
+) -> None:
+    if callback.message is None or callback.data is None or callback.from_user is None:
         await callback.answer()
         return
     value = callback.data.removeprefix(CB_COMPAT_MODE_PREFIX)
@@ -166,12 +260,72 @@ async def cb_choose_pair_mode(callback: CallbackQuery, state: FSMContext) -> Non
             parse_mode="HTML",
             reply_markup=ReplyKeyboardRemove(),
         )
+    await _send_profile_picker(callback.message, state, session, callback.from_user.id)
+    await callback.answer()
+
+
+@router.callback_query(
+    StateFilter(CompatibilityStates.collect_name),
+    F.data.startswith(CB_PERSON_PICK_PREFIX),
+)
+async def cb_pick_person_profile(
+    callback: CallbackQuery,
+    state: FSMContext,
+    session: AsyncSession,
+) -> None:
+    if callback.message is None or callback.data is None or callback.from_user is None:
+        await callback.answer()
+        return
+    user = await users_crud.get_user_by_telegram_id(session, callback.from_user.id)
+    if user is None:
+        await callback.answer("Сначала: /start", show_alert=True)
+        return
+    profile = await compatibility_crud.get_natal_profile_by_id(
+        session,
+        UUID(callback.data.removeprefix(CB_PERSON_PICK_PREFIX)),
+    )
+    if profile is None or profile.owner_user_id != user.id:
+        await callback.answer("Профиль не найден", show_alert=True)
+        return
+
+    data = await state.get_data()
+    collecting = data.get("collecting", COLLECTING_PERSON_B)
+    updates: dict[str, object] = {
+        f"{collecting}_name": profile.label,
+        f"{collecting}_birth_date": profile.birth_date.isoformat(),
+        f"{collecting}_birth_place": profile.birth_place,
+        f"{collecting}_birth_place_id": (
+            str(profile.birth_place_id) if profile.birth_place_id else None
+        ),
+        f"{collecting}_timezone": profile.timezone,
+    }
+    if profile.gender:
+        updates[f"{collecting}_gender"] = profile.gender
+    if profile.birth_time is not None:
+        birth_time = profile.birth_time
+        if birth_time.tzinfo is not None:
+            from zoneinfo import ZoneInfo
+
+            birth_time = birth_time.astimezone(ZoneInfo(profile.timezone)).replace(tzinfo=None)
+        updates[f"{collecting}_birth_time"] = birth_time.isoformat()
+    if collecting == COLLECTING_PERSON_A:
+        updates["person_a_picked_profile_id"] = str(profile.id)
+    await state.update_data(**updates)
+    log.info(Event.NATAL_PROFILE_PICKED, profile_id=str(profile.id))
+
+    await callback.message.answer(
+        f"Беру данные: <b>{profile.label}</b> ✨",
+        parse_mode="HTML",
+    )
+    await _prompt_next_person_step(callback.message, state, session, callback.from_user.id)
     await callback.answer()
 
 
 @router.message(CompatibilityStates.collect_name)
 async def collect_name(message: Message, state: FSMContext, session: AsyncSession) -> None:
     if await _require_user(message, session) is None:
+        return
+    if message.from_user is None:
         return
     name = (message.text or "").strip()
     if len(name) < 2:
@@ -180,31 +334,27 @@ async def collect_name(message: Message, state: FSMContext, session: AsyncSessio
     data = await state.get_data()
     collecting = data.get("collecting", COLLECTING_PERSON_B)
     await state.update_data(**{f"{collecting}_name": name})
-    await state.set_state(CompatibilityStates.collect_gender)
-    await message.answer(
-        f"Пол {_person_label(collecting)}:",
-        reply_markup=gender_keyboard(),
-    )
+    await _prompt_next_person_step(message, state, session, message.from_user.id)
 
 
 @router.message(CompatibilityStates.collect_gender, F.text.in_(GENDER_REPLY_BUTTONS))
 async def collect_gender(message: Message, state: FSMContext, session: AsyncSession) -> None:
     if await _require_user(message, session) is None:
         return
+    if message.from_user is None:
+        return
     data = await state.get_data()
     collecting = data.get("collecting", COLLECTING_PERSON_B)
     gender = GENDER_MALE if message.text == BTN_GENDER_MALE else GENDER_FEMALE
     await state.update_data(**{f"{collecting}_gender": gender})
-    await state.set_state(CompatibilityStates.collect_birth_date)
-    await message.answer(
-        f"Дата рождения {_person_label(collecting)} (ДД.ММ.ГГГГ):",
-        reply_markup=ReplyKeyboardRemove(),
-    )
+    await _prompt_next_person_step(message, state, session, message.from_user.id)
 
 
 @router.message(CompatibilityStates.collect_birth_date)
 async def collect_birth_date(message: Message, state: FSMContext, session: AsyncSession) -> None:
     if await _require_user(message, session) is None:
+        return
+    if message.from_user is None:
         return
     parsed = parse_birth_date(message.text or "")
     if parsed is None:
@@ -213,27 +363,26 @@ async def collect_birth_date(message: Message, state: FSMContext, session: Async
     data = await state.get_data()
     collecting = data.get("collecting", COLLECTING_PERSON_B)
     await state.update_data(**{f"{collecting}_birth_date": parsed.isoformat()})
-    await state.set_state(CompatibilityStates.collect_birth_time)
-    await message.answer(
-        f"Время рождения {_person_label(collecting)} (ЧЧ:ММ).\n"
-        "Если не знаешь — нажми «⏭ Пропустить».",
-        reply_markup=skip_keyboard(),
-    )
+    await _prompt_next_person_step(message, state, session, message.from_user.id)
 
 
 @router.message(CompatibilityStates.collect_birth_time, F.text == SKIP_TIME_TEXT)
 async def skip_birth_time(message: Message, state: FSMContext, session: AsyncSession) -> None:
     if await _require_user(message, session) is None:
         return
+    if message.from_user is None:
+        return
     data = await state.get_data()
     collecting = data.get("collecting", COLLECTING_PERSON_B)
     await state.update_data(**{f"{collecting}_birth_time": None})
-    await start_compatibility_birth_place_step(message, state, collecting=collecting)
+    await _prompt_next_person_step(message, state, session, message.from_user.id)
 
 
 @router.message(CompatibilityStates.collect_birth_time)
 async def collect_birth_time(message: Message, state: FSMContext, session: AsyncSession) -> None:
     if await _require_user(message, session) is None:
+        return
+    if message.from_user is None:
         return
     parsed = parse_birth_time(message.text or "")
     if parsed is None:
@@ -244,7 +393,7 @@ async def collect_birth_time(message: Message, state: FSMContext, session: Async
     birth_date = date.fromisoformat(str(data[f"{collecting}_birth_date"]))
     birth_dt = datetime.combine(birth_date, parsed)
     await state.update_data(**{f"{collecting}_birth_time": birth_dt.isoformat()})
-    await start_compatibility_birth_place_step(message, state, collecting=collecting)
+    await _prompt_next_person_step(message, state, session, message.from_user.id)
 
 
 @router.message(StateFilter(CompatibilityStates.birth_place_query), F.text)
@@ -305,6 +454,7 @@ async def complete_person_birth_place(
     place_display: str,
     place_id: UUID,
     timezone: str,
+    actor_telegram_id: int,
 ) -> None:
     data = await state.get_data()
     collecting = data.get("collecting", COLLECTING_PERSON_B)
@@ -315,19 +465,7 @@ async def complete_person_birth_place(
             f"{collecting}_timezone": timezone,
         },
     )
-
-    pair_mode = data.get("pair_mode", PairMode.ME_PARTNER)
-    if pair_mode == PairMode.TWO_PEOPLE and collecting == COLLECTING_PERSON_A:
-        await state.update_data(collecting=COLLECTING_PERSON_B)
-        await state.set_state(CompatibilityStates.collect_name)
-        await message.answer(
-            "Теперь данные <b>второго человека</b>.\n\nКак его/её зовут?",
-            parse_mode="HTML",
-            reply_markup=ReplyKeyboardRemove(),
-        )
-        return
-
-    await _show_confirm(message, state)
+    await _finish_person_collection(message, state, session, actor_telegram_id)
 
 
 @router.callback_query(F.data == CB_COMPAT_CANCEL)

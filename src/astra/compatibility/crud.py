@@ -37,6 +37,51 @@ async def find_natal_profile_by_label(
     return result.scalar_one_or_none()
 
 
+async def list_natal_profiles(
+    session: AsyncSession,
+    owner_user_id: uuid.UUID,
+    *,
+    limit: int = 30,
+) -> list[NatalProfile]:
+    result = await session.execute(
+        select(NatalProfile)
+        .where(NatalProfile.owner_user_id == owner_user_id)
+        .order_by(NatalProfile.updated_at.desc())
+        .limit(limit),
+    )
+    return list(result.scalars().all())
+
+
+async def update_natal_profile(
+    session: AsyncSession,
+    profile: NatalProfile,
+    **fields,
+) -> NatalProfile:
+    """Обновить поля профиля; при изменении данных рождения сбросить chart_data."""
+    chart_fields = {"birth_date", "birth_time", "birth_place", "birth_place_id", "timezone"}
+    for key, value in fields.items():
+        setattr(profile, key, value)
+    if chart_fields & fields.keys():
+        profile.chart_data = None
+    await session.flush()
+    return profile
+
+
+async def delete_natal_profile(
+    session: AsyncSession,
+    profile_id: uuid.UUID,
+    owner_user_id: uuid.UUID,
+) -> bool:
+    result = await session.execute(
+        delete(NatalProfile).where(
+            NatalProfile.id == profile_id,
+            NatalProfile.owner_user_id == owner_user_id,
+        ),
+    )
+    await session.flush()
+    return (result.rowcount or 0) > 0
+
+
 async def upsert_natal_profile(
     session: AsyncSession,
     *,
