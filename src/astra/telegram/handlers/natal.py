@@ -215,14 +215,11 @@ async def start_natal(message: Message, state: FSMContext, session: AsyncSession
         return
     await state.clear()
     profiles = await compatibility_crud.list_natal_profiles(session, user.id)
-    if profiles:
-        await message.answer(
-            "🌌 <b>Разбор натальной карты</b>\n\nДля кого построить разбор?",
-            parse_mode="HTML",
-            reply_markup=_subject_keyboard(profiles),
-        )
-        return
-    await _begin_self_flow(message, state, user)
+    await message.answer(
+        "🌌 <b>Разбор натальной карты</b>\n\nДля кого построить разбор?",
+        parse_mode="HTML",
+        reply_markup=_subject_keyboard(profiles),
+    )
 
 
 @router.callback_query(F.data == CB_NATAL_SUBJECT_ALL)

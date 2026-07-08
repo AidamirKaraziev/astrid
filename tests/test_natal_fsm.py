@@ -18,6 +18,7 @@ from astra.telegram.handlers.natal import (
     cb_natal_confirm,
     cb_natal_subject_new,
     cb_natal_subject_pick,
+    cb_natal_subject_self,
     collect_birth_time,
     collect_new_name,
     complete_natal_new_birth_place,
@@ -54,7 +55,8 @@ def _message() -> AsyncMock:
 
 
 @pytest.mark.anyio
-async def test_start_natal_asks_time_when_missing() -> None:
+async def test_start_natal_always_shows_picker_without_profiles() -> None:
+    # даже без сохранённых людей показываем выбор «Для меня / Новый человек»
     state = await _fsm_context()
     message = _message()
     session = AsyncMock()
@@ -71,54 +73,60 @@ async def test_start_natal_asks_time_when_missing() -> None:
     ):
         await start_natal(message, state, session)
 
+    assert await state.get_state() is None
+    keyboard = message.answer.await_args.kwargs["reply_markup"]
+    callbacks = [b.callback_data for row in keyboard.inline_keyboard for b in row]
+    assert "natal:subject:self" in callbacks
+    assert "natal:subject:new" in callbacks
+
+
+@pytest.mark.anyio
+async def test_self_flow_asks_time_when_missing() -> None:
+    state = await _fsm_context()
+    callback = _callback("natal:subject:self")
+    session = AsyncMock()
+
+    with patch(
+        "astra.telegram.handlers.natal.users_crud.get_user_by_telegram_id",
+        new=AsyncMock(return_value=_user(birth_time=None)),
+    ):
+        await cb_natal_subject_self(callback, state, session)
+
     assert await state.get_state() == NatalStates.collect_birth_time.state
-    text = message.answer.await_args.args[0]
+    text = callback.message.answer.await_args.args[0]
     assert "время рождения" in text.lower()
 
 
 @pytest.mark.anyio
-async def test_start_natal_skips_time_when_present() -> None:
+async def test_self_flow_skips_time_when_present() -> None:
     state = await _fsm_context()
-    message = _message()
+    callback = _callback("natal:subject:self")
     session = AsyncMock()
 
-    with (
-        patch(
-            "astra.telegram.handlers.natal.users_crud.get_user_by_telegram_id",
-            new=AsyncMock(return_value=_user(birth_time=datetime(1990, 6, 15, 14, 30))),
-        ),
-        patch(
-            "astra.telegram.handlers.natal.compatibility_crud.list_natal_profiles",
-            new=AsyncMock(return_value=[]),
-        ),
+    with patch(
+        "astra.telegram.handlers.natal.users_crud.get_user_by_telegram_id",
+        new=AsyncMock(return_value=_user(birth_time=datetime(1990, 6, 15, 14, 30))),
     ):
-        await start_natal(message, state, session)
+        await cb_natal_subject_self(callback, state, session)
 
     assert await state.get_state() == NatalStates.confirm.state
-    text = message.answer.await_args.args[0]
+    text = callback.message.answer.await_args.args[0]
     assert "14:30" in text
     assert "Без времени рождения" not in text
 
 
 @pytest.mark.anyio
-async def test_confirm_without_time_shows_degradation_warning() -> None:
+async def test_self_flow_invalid_time_stays_in_collect() -> None:
     state = await _fsm_context()
+    callback = _callback("natal:subject:self")
     message = _message()
     session = AsyncMock()
-    user = _user(birth_time=None)
 
-    with (
-        patch(
-            "astra.telegram.handlers.natal.users_crud.get_user_by_telegram_id",
-            new=AsyncMock(return_value=user),
-        ),
-        patch(
-            "astra.telegram.handlers.natal.compatibility_crud.list_natal_profiles",
-            new=AsyncMock(return_value=[]),
-        ),
+    with patch(
+        "astra.telegram.handlers.natal.users_crud.get_user_by_telegram_id",
+        new=AsyncMock(return_value=_user(birth_time=None)),
     ):
-        await start_natal(message, state, session)
-        # пользователь вводит время текстом
+        await cb_natal_subject_self(callback, state, session)
         message.text = "abc"
         await collect_birth_time(message, state, session)
 

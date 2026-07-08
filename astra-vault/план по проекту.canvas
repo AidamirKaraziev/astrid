@@ -61,7 +61,9 @@
 		{"id":"75b5b2c7a36f2fae","x":-1977,"y":-1140,"width":250,"height":325,"color":"4","type":"text","text":"сохранять профили людей с которыми уже были предсказания и добавить возможность дозаполнять данные из уже готовых профилей\n\nесть кнопка по которой можно посмотреть все профили и взаимодействовать с ними "},
 		{"id":"c14e5dbe1f50205a","x":-2251,"y":-904,"width":250,"height":155,"type":"text","text":"при вводе имени , если такое уже есть то предложить использовать существующий профиль natal_profiles\n"},
 		{"id":"6d5eee97897d01e1","x":-980,"y":-1360,"width":250,"height":60,"color":"4","type":"text","text":"кнопка \"🔙 Назад\""},
-		{"id":"e0967fd809d99d68","x":-980,"y":-1260,"width":250,"height":220,"color":"4","type":"text","text":"сделать сортировку людей по максимальному количеству участия в прогнозах, разборах натала, совместимостях и ежедневных предсказаниях, если они есть."}
+		{"id":"e0967fd809d99d68","x":-980,"y":-1260,"width":250,"height":220,"color":"4","type":"text","text":"сделать сортировку людей по максимальному количеству участия в прогнозах, разборах натала, совместимостях и ежедневных предсказаниях, если они есть."},
+		{"id":"2609c63ddf586e02","x":-1320,"y":-647,"width":250,"height":60,"type":"text","text":"🎴 Спросить карты"},
+		{"id":"081479daad65ea0d","x":-1320,"y":-542,"width":250,"height":60,"color":"3","type":"text","text":"⭐️ Спросить звезды"}
 	],
 	"edges":[
 		{"id":"b89a36d4825fd2af","fromNode":"b7a148e953db9036","fromSide":"bottom","toNode":"ea7be87e75765517","toSide":"top"},
@@ -110,6 +112,8 @@
 		{"id":"da4d3cc455a78202","fromNode":"d656e1476c7214ba","fromSide":"bottom","toNode":"dcb969240df291e8","toSide":"top"},
 		{"id":"b41b6d05e452d87c","fromNode":"2a1e93b4014977fe","fromSide":"bottom","toNode":"d656e1476c7214ba","toSide":"top","color":"6"},
 		{"id":"26636a54c1a91284","fromNode":"df05c515248e5a33","fromSide":"bottom","toNode":"6d5eee97897d01e1","toSide":"top","color":"4"},
-		{"id":"67f8c7b6789acf3a","fromNode":"6d5eee97897d01e1","fromSide":"bottom","toNode":"e0967fd809d99d68","toSide":"top","color":"4"}
+		{"id":"67f8c7b6789acf3a","fromNode":"6d5eee97897d01e1","fromSide":"bottom","toNode":"e0967fd809d99d68","toSide":"top","color":"4"},
+		{"id":"fab72613d74d30fe","fromNode":"8b4e2d3b96914e93","fromSide":"bottom","toNode":"2609c63ddf586e02","toSide":"top"},
+		{"id":"7393f4cc9c1af762","fromNode":"8b4e2d3b96914e93","fromSide":"bottom","toNode":"081479daad65ea0d","toSide":"top"}
 	]
 }

@@ -18,7 +18,7 @@ from astra.telegram.button_texts import (
 
 from astra.astro.simple import sun_sign_ru
 
-_GENDER_EMOJI = {"женщина": "👩", "мужчина": "👨"}
+_GENDER_EMOJI = {"женщина": "♀️", "мужчина": "♂️"}
 _ZODIAC_GLYPH = {
     "Овен": "♈", "Телец": "♉", "Близнецы": "♊", "Рак": "♋",
     "Лев": "♌", "Дева": "♍", "Весы": "♎", "Скорпион": "♏",
