@@ -14,7 +14,7 @@ from astra.services.prediction_generation import (
 
 def test_llm_generation_error_human_message() -> None:
     err = LlmGenerationError("timeout")
-    assert str(err) == "Предсказание: таймаут Ollama"
+    assert str(err) == "Предсказание: таймаут LLM"
 
 
 def test_report_prediction_generation_failure_final_message() -> None:
@@ -34,7 +34,7 @@ def test_report_prediction_generation_failure_final_message() -> None:
 
     capture.assert_called_once()
     message, = capture.call_args[0]
-    assert message == "Предсказание: таймаут Ollama после 5 попыток"
+    assert message == "Предсказание: таймаут LLM после 5 попыток"
     assert capture.call_args.kwargs["level"] == "error"
     scope.set_tag.assert_any_call("prediction_failure", "true")
     scope.set_tag.assert_any_call("failure_reason", "timeout")
@@ -73,6 +73,40 @@ async def test_generate_daily_prediction_resilient_success_after_retry() -> None
     assert result is prediction
     assert generate.call_count == 2
     delayed.assert_not_called()
+
+
+@pytest.mark.anyio
+async def test_generate_daily_prediction_resilient_retries_on_validation_failure() -> None:
+    user = AsyncMock()
+    user.id = uuid4()
+    user.telegram_id = 123
+    profile = AsyncMock()
+    session = AsyncMock()
+    prediction = AsyncMock()
+
+    side_effects = [
+        LlmGenerationError("missing_name"),
+        prediction,
+    ]
+
+    with patch(
+        "astra.services.prediction_generation.generate_prediction_text_only",
+        side_effect=side_effects,
+    ) as generate:
+        with patch(
+            "astra.services.prediction_generation.maybe_send_delayed_notification",
+            new_callable=AsyncMock,
+        ):
+            with patch("astra.services.prediction_generation.asyncio.sleep", new_callable=AsyncMock):
+                result = await generate_daily_prediction_resilient(
+                    session,
+                    user,
+                    profile,
+                    date(2026, 6, 14),
+                )
+
+    assert result is prediction
+    assert generate.call_count == 2
 
 
 @pytest.mark.anyio

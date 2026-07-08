@@ -70,7 +70,6 @@ def _build_step_request(
         "grok": cfg.grok_timeout_seconds,
         "gemini": cfg.gemini_timeout_seconds,
         "openrouter": cfg.openrouter_timeout_seconds,
-        "ollama": cfg.ollama_timeout_seconds,
     }
     timeout_seconds = timeout_by_provider.get(
         provider.name,
@@ -82,9 +81,6 @@ def _build_step_request(
         extra["json_mode"] = True
     if provider.name == "deepseek":
         extra["thinking_disabled"] = True
-    if provider.name == "ollama":
-        extra["num_ctx"] = 16384
-        extra["think"] = False
 
     temperature = None if provider.name == "openai" else _COMPATIBILITY_TEMPERATURE
 

@@ -1,16 +1,10 @@
 {
 	"nodes":[
 		{"id":"5852e0d03954dde6","type":"group","x":2240,"y":-2720,"width":665,"height":500,"color":"1","label":"Значения цветов"},
-		{"id":"b7a148e953db9036","type":"text","text":"Разделить модули ответственности генерации предсказания\n\n","x":-550,"y":480,"width":320,"height":122,"color":"6"},
-		{"id":"ea7be87e75765517","type":"text","text":"","x":-730,"y":716,"width":250,"height":60},
-		{"id":"2210d9ba31c83369","type":"text","text":"Вынести модуль генерации","x":-176,"y":716,"width":250,"height":60},
-		{"id":"485f34b94e22c675","type":"text","text":"Я хочу, чтобы у меня было много разных продуктов\nу них есть:\n- название (совместимость)\n- промт со структурой отправляемых и ожидаемых данных \n- Код который заполняет схему промта \n- пайдантик схема\n- \n","x":-770,"y":890,"width":507,"height":266},
-		{"id":"190f4e8e707a6fa5","type":"text","text":"- LLM\n- Промты\n- Pydantic schemas","x":-176,"y":890,"width":250,"height":131},
 		{"id":"0f200738dd8f17b8","type":"text","text":"Составить приветствие при старте ","x":1336,"y":-2320,"width":250,"height":60,"color":"4"},
 		{"id":"634aa790c3d41dc9","type":"text","text":"Сделать пдф для натальной карты, как карту , чтобы человек мог ее разглядывать","x":1721,"y":-2185,"width":250,"height":125,"color":"2"},
 		{"id":"fe536145843e3039","type":"text","text":"найти дизайн красивых пдф, для референса","x":1721,"y":-2320,"width":250,"height":60,"color":"2"},
 		{"id":"16f799001a83bd0e","type":"text","text":"Выбрать лицо для астрид, и сохранить ее в Lora","x":960,"y":-2320,"width":250,"height":60,"color":"3"},
-		{"id":"85507a216379b8fa","type":"text","text":"Установить гифку на аву в бота","x":1336,"y":-2122,"width":250,"height":60,"color":"4"},
 		{"id":"13c3a70681dc627d","type":"text","text":"Визуал","x":1336,"y":-2573,"width":250,"height":60,"color":"6"},
 		{"id":"2a1e93b4014977fe","type":"text","text":"Платные продукты","x":395,"y":-1080,"width":250,"height":60,"color":"5"},
 		{"id":"50b7b8dcb35f6929","type":"text","text":"Совместимость","x":392,"y":-780,"width":250,"height":60,"color":"5"},
@@ -43,9 +37,18 @@
 		{"id":"22a27710e4e4aa66","type":"text","text":"Иследование","x":2281,"y":-2360,"width":250,"height":60,"color":"2"},
 		{"id":"5871e563d88af81a","x":-1315,"y":-1360,"width":250,"height":60,"color":"3","type":"text","text":" Подключить оплату"},
 		{"id":"df05c515248e5a33","type":"text","text":"Бот","x":-980,"y":-1600,"width":250,"height":60},
-		{"id":"1cedd9de8c7fd7c3","x":-980,"y":-1360,"width":250,"height":93,"color":"4","type":"text","text":"сделать ежедневное предсказание через deepseek"},
-		{"id":"8ddcc3cf83f215c4","x":-980,"y":-1200,"width":250,"height":60,"color":"4","type":"text","text":"Генерация pdf"},
-		{"id":"e5e54f08eb016c96","x":645,"y":-2320,"width":250,"height":60,"color":"3","type":"text","text":"сделать web-app c дизайном"}
+		{"id":"e5e54f08eb016c96","x":645,"y":-2320,"width":250,"height":60,"color":"3","type":"text","text":"сделать web-app c дизайном"},
+		{"id":"b7a148e953db9036","type":"text","text":"Разделить модули ответственности генерации предсказания\n\n","x":-550,"y":480,"width":320,"height":122,"color":"6"},
+		{"id":"ea7be87e75765517","type":"text","text":"","x":-730,"y":716,"width":250,"height":60},
+		{"id":"2210d9ba31c83369","type":"text","text":"Вынести модуль генерации","x":-176,"y":716,"width":250,"height":60},
+		{"id":"485f34b94e22c675","type":"text","text":"Я хочу, чтобы у меня было много разных продуктов\nу них есть:\n- название (совместимость)\n- промт со структурой отправляемых и ожидаемых данных \n- Код который заполняет схему промта \n- пайдантик схема\n- \n","x":-770,"y":890,"width":507,"height":266},
+		{"id":"190f4e8e707a6fa5","type":"text","text":"- LLM\n- Промты\n- Pydantic schemas","x":-176,"y":890,"width":250,"height":131},
+		{"id":"db911968307824a5","x":-600,"y":-118,"width":250,"height":101,"color":"4","type":"text","text":"При приглашении сделать в подарок разбор натальной карты"},
+		{"id":"8b4e2d3b96914e93","x":-1320,"y":-780,"width":250,"height":60,"color":"5","type":"text","text":"Ежедневные предсказания"},
+		{"id":"8420c367fcaacf46","x":-1640,"y":-780,"width":250,"height":60,"color":"6","type":"text","text":"Бесплатные уведомления"},
+		{"id":"bf6e5d0a6875052b","x":-1640,"y":-617,"width":250,"height":202,"color":"3","type":"text","text":"сделать сервис который рассылает какие-то значимые астрологические предсказания"},
+		{"id":"07444ef0105ca259","x":-1959,"y":-1057,"width":250,"height":60,"type":"text","text":"Задача на завтра"},
+		{"id":"592d87b04c29b8ff","x":-421,"y":-1351,"width":250,"height":251,"color":"4","type":"text","text":"Сделать инструкцию которая рассказывает понятия:\n- трин\n- секстиль\n- квадрат\n- \n"}
 	],
 	"edges":[
 		{"id":"c8acae86303131e0","fromNode":"f5bef30b6c923f82","fromSide":"bottom","toNode":"ca32a4a6f8dbcb0b","toSide":"top","color":"3"},
@@ -79,10 +82,12 @@
 		{"id":"8368ff49e30b2d27","fromNode":"13c3a70681dc627d","fromSide":"bottom","toNode":"fe536145843e3039","toSide":"top","color":"2"},
 		{"id":"9e1b2e9e9e34d4c2","fromNode":"13c3a70681dc627d","fromSide":"bottom","toNode":"634aa790c3d41dc9","toSide":"top","color":"2"},
 		{"id":"82d80361071af17b","fromNode":"13c3a70681dc627d","fromSide":"bottom","toNode":"16f799001a83bd0e","toSide":"top","color":"3"},
-		{"id":"cbdbe52a316be7ef","fromNode":"13c3a70681dc627d","fromSide":"bottom","toNode":"85507a216379b8fa","toSide":"top","color":"4"},
 		{"id":"26421e5d9d89697e","fromNode":"df05c515248e5a33","fromSide":"bottom","toNode":"5871e563d88af81a","toSide":"top"},
-		{"id":"8d4bb64a19a74d77","fromNode":"df05c515248e5a33","fromSide":"bottom","toNode":"1cedd9de8c7fd7c3","toSide":"top"},
-		{"id":"868da3b70f1105e6","fromNode":"1cedd9de8c7fd7c3","fromSide":"bottom","toNode":"8ddcc3cf83f215c4","toSide":"top"},
-		{"id":"611f349952249928","fromNode":"13c3a70681dc627d","fromSide":"bottom","toNode":"e5e54f08eb016c96","toSide":"top"}
+		{"id":"611f349952249928","fromNode":"13c3a70681dc627d","fromSide":"bottom","toNode":"e5e54f08eb016c96","toSide":"top"},
+		{"id":"6f46f18b140c6f11","fromNode":"ca32a4a6f8dbcb0b","fromSide":"bottom","toNode":"db911968307824a5","toSide":"top"},
+		{"id":"4028a34bd6286abe","fromNode":"2a1e93b4014977fe","fromSide":"bottom","toNode":"8b4e2d3b96914e93","toSide":"top","color":"5"},
+		{"id":"0ca0373c23f3321f","fromNode":"8420c367fcaacf46","fromSide":"bottom","toNode":"bf6e5d0a6875052b","toSide":"top","color":"3"},
+		{"id":"6e5b4e6f47a7b39f","fromNode":"2a1e93b4014977fe","fromSide":"bottom","toNode":"8420c367fcaacf46","toSide":"top","color":"5"},
+		{"id":"43708408c93e5c5d","fromNode":"df05c515248e5a33","fromSide":"bottom","toNode":"592d87b04c29b8ff","toSide":"top"}
 	]
 }

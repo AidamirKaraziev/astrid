@@ -14,11 +14,9 @@ from astra.llm.factory import (
     get_gemini_provider,
     get_grok_provider,
     get_llm_provider,
-    get_ollama_provider,
     get_openai_provider,
     get_openrouter_provider,
 )
-from astra.llm.local.ollama import OllamaProvider
 from astra.llm.tracing_provider import TracingLlmProvider
 from astra.llm.types import ChatMessage, CompletionRequest
 
@@ -87,35 +85,28 @@ def _grok_settings(**overrides: object) -> SimpleNamespace:
     return SimpleNamespace(**defaults)
 
 
-def _ollama_settings(**overrides: object) -> SimpleNamespace:
-    defaults = {
-        "ollama_model": "gemma4:e2b",
-        "ollama_base_url": "http://localhost:11434",
-        "ollama_timeout_seconds": 60.0,
-    }
-    defaults.update(overrides)
-    return SimpleNamespace(**defaults)
-
-
 def test_get_llm_provider_unknown_raises() -> None:
     with pytest.raises(ValueError, match="Unknown LLM provider"):
         get_llm_provider("claude")
 
 
+def test_get_llm_provider_ollama_raises() -> None:
+    """Локальная LLM удалена: имя ollama больше не поддерживается."""
+    with pytest.raises(ValueError, match="Unknown LLM provider"):
+        get_llm_provider("ollama")
+
+
 def test_get_llm_provider_returns_typed_instances() -> None:
-    assert isinstance(get_ollama_provider(), TracingLlmProvider)
     assert isinstance(get_grok_provider(), TracingLlmProvider)
     assert isinstance(get_gemini_provider(), TracingLlmProvider)
     assert isinstance(get_openrouter_provider(), TracingLlmProvider)
     assert isinstance(get_openai_provider(), TracingLlmProvider)
     assert isinstance(get_deepseek_provider(), TracingLlmProvider)
-    assert isinstance(get_llm_provider("ollama"), TracingLlmProvider)
     assert isinstance(get_llm_provider("grok"), TracingLlmProvider)
     assert isinstance(get_llm_provider("gemini"), TracingLlmProvider)
     assert isinstance(get_llm_provider("openrouter"), TracingLlmProvider)
     assert isinstance(get_llm_provider("openai"), TracingLlmProvider)
     assert isinstance(get_llm_provider("deepseek"), TracingLlmProvider)
-    assert isinstance(get_ollama_provider()._inner, OllamaProvider)
     assert isinstance(get_deepseek_provider()._inner, DeepSeekProvider)
 
 
@@ -428,53 +419,3 @@ async def test_grok_provider_complete_empty_content() -> None:
     assert result.reason == "empty_response"
 
 
-@pytest.mark.anyio
-async def test_ollama_provider_complete_success() -> None:
-    provider = OllamaProvider(_ollama_settings())
-    request = CompletionRequest(
-        messages=(
-            ChatMessage("system", "sys"),
-            ChatMessage("user", "hi"),
-        ),
-        temperature=0.7,
-        max_tokens=100,
-        extra={"num_ctx": 4096, "think": False},
-    )
-    mock_response = httpx.Response(
-        200,
-        json={"message": {"role": "assistant", "content": " hello "}},
-        request=httpx.Request("POST", "http://localhost:11434/api/chat"),
-    )
-
-    with patch(
-        "astra.llm.local.ollama.httpx.AsyncClient.post",
-        new_callable=AsyncMock,
-        return_value=mock_response,
-    ) as post:
-        result = await provider.complete(request)
-
-    assert result.text == "hello"
-    assert result.reason == ""
-    payload = post.await_args.kwargs["json"]
-    assert payload["model"] == "gemma4:e2b"
-    assert payload["think"] is False
-    assert payload["options"]["temperature"] == 0.7
-    assert payload["options"]["num_predict"] == 100
-    assert payload["options"]["num_ctx"] == 4096
-
-
-@pytest.mark.anyio
-async def test_ollama_provider_complete_timeout() -> None:
-    provider = OllamaProvider(_ollama_settings())
-
-    with patch(
-        "astra.llm.local.ollama.httpx.AsyncClient.post",
-        new_callable=AsyncMock,
-        side_effect=httpx.TimeoutException("timeout"),
-    ):
-        result = await provider.complete(
-            CompletionRequest(messages=(ChatMessage("user", "hi"),)),
-        )
-
-    assert result.text is None
-    assert result.reason == "timeout"

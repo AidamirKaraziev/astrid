@@ -1,5 +1,7 @@
 # E2E Astrid v3 — результаты
 
+> **Архив.** Локальная LLM (Ollama) удалена из проекта в июле 2026; prod-генерация — DeepSeek, формат — Astrid v4. Скрипты `smoke_astrid_v3.py` / `e2e_astrid_v3.py` удалены. Документ сохранён как история.
+
 **Дата прогона:** 2026-06-14  
 **Окружение:** MacBook M4 Pro, Ollama local, `gemma4:e2b`  
 **Скрипт:** `uv run python scripts/e2e_astrid_v3.py`

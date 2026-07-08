@@ -16,7 +16,7 @@ class BaseLlmProvider(ABC):
     @property
     @abstractmethod
     def name(self) -> str:
-        """Идентификатор провайдера: ollama, grok, …"""
+        """Идентификатор провайдера: deepseek, openai, grok, …"""
 
     @abstractmethod
     async def complete(self, request: CompletionRequest) -> CompletionResult:

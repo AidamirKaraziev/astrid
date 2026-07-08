@@ -6,123 +6,154 @@ from uuid import uuid4
 import pytest
 
 from astra.core.prediction_errors import LlmGenerationError
-from astra.llm.prompts.astrid import pick_question_archetype
-from astra.services.astro_service import (
-    build_prediction_astro_context,
-    generate_prediction_body,
-)
+from astra.predictions.status import PredictionStatus
+from astra.services.astro_service import generate_prediction_text_only
+
+_TARGET = date(2026, 7, 8)
+
+_V2_CONTEXT = {
+    "schema_version": 2,
+    "date": _TARGET.isoformat(),
+    "accuracy_tier": 100,
+    "has_time": True,
+    "big_three": {"sun": "Лев", "moon": "Дева", "asc": None},
+}
+
+_V1_CONTEXT = {
+    "date": _TARGET.isoformat(),
+    "accuracy_tier": 100,
+    "natal": {"sun": "Лев"},
+    "transits": [],
+}
+
+
+def _user() -> SimpleNamespace:
+    return SimpleNamespace(id=uuid4())
+
+
+def _profile() -> SimpleNamespace:
+    return SimpleNamespace(display_name="Аид")
+
+
+def _stored_prediction(context: dict | None) -> SimpleNamespace:
+    return SimpleNamespace(astro_context=context)
 
 
 @pytest.mark.anyio
-async def test_generate_prediction_body_raises_when_ollama_disabled() -> None:
+async def test_text_only_raises_when_context_missing() -> None:
     session = AsyncMock()
-    user = SimpleNamespace(id=uuid4())
-    profile = SimpleNamespace(display_name="Аид")
-    chart = SimpleNamespace()
-    ctx = SimpleNamespace(model_dump_json_safe=lambda: {})
-
     with patch(
-        "astra.services.astro_service.build_context_for_date",
+        "astra.services.astro_service.predictions_crud.get_prediction_for_date",
         new_callable=AsyncMock,
-        return_value=(ctx, chart),
+        return_value=None,
     ):
         with pytest.raises(LlmGenerationError) as exc_info:
-            await generate_prediction_body(
-                session,
-                user,
-                profile,
-                date(2026, 6, 14),
-                settings=SimpleNamespace(ollama_enabled=False),
+            await generate_prediction_text_only(
+                session, _user(), _profile(), _TARGET, settings=SimpleNamespace()
             )
+
+    assert exc_info.value.reason == "missing_context"
+
+
+@pytest.mark.anyio
+async def test_text_only_raises_when_provider_disabled() -> None:
+    session = AsyncMock()
+    with patch(
+        "astra.services.astro_service.predictions_crud.get_prediction_for_date",
+        new_callable=AsyncMock,
+        return_value=_stored_prediction(_V2_CONTEXT),
+    ):
+        with patch(
+            "astra.services.astro_service.daily_provider_enabled",
+            return_value=False,
+        ):
+            with pytest.raises(LlmGenerationError) as exc_info:
+                await generate_prediction_text_only(
+                    session, _user(), _profile(), _TARGET, settings=SimpleNamespace()
+                )
 
     assert exc_info.value.reason == "disabled"
 
 
 @pytest.mark.anyio
-async def test_generate_prediction_body_raises_when_llm_empty() -> None:
+async def test_text_only_generates_v4_and_updates_prediction() -> None:
     session = AsyncMock()
-    user = SimpleNamespace(id=uuid4())
-    profile = SimpleNamespace(
-        birth_place_id=None,
-        timezone="Europe/Moscow",
-        birth_date=date(1990, 3, 15),
-        birth_time=None,
-        birth_place="Москва",
-        display_name="Аид",
-    )
-    chart = SimpleNamespace(
-        accuracy_tier=100,
-        sun_sign="Водолей",
-        moon_sign="Дева",
-        asc_sign="Овен",
-        timezone="Europe/Moscow",
-    )
-    ctx = SimpleNamespace(date=date(2026, 6, 14), model_dump_json_safe=lambda: {})
+    stored = _stored_prediction(_V2_CONTEXT)
+    expected_text = "Что важнее?\n\nСегодня день про баланс.\n\nСделай паузу — или реши."
+    updated = SimpleNamespace(text=expected_text)
 
-    with patch("astra.services.astro_service.get_settings") as settings:
-        settings.return_value.ollama_enabled = True
+    with patch(
+        "astra.services.astro_service.predictions_crud.get_prediction_for_date",
+        new_callable=AsyncMock,
+        return_value=stored,
+    ):
         with patch(
-            "astra.services.astro_service.build_context_for_date",
-            new_callable=AsyncMock,
-            return_value=(ctx, chart),
+            "astra.services.astro_service.daily_provider_enabled",
+            return_value=True,
         ):
             with patch(
-                "astra.services.astro_service.llm_generate_body",
+                "astra.services.astro_service.generate_daily_body_v4",
+                new_callable=AsyncMock,
+                return_value=(expected_text, ""),
+            ) as generate:
+                with patch(
+                    "astra.services.astro_service.predictions_crud.update_prediction",
+                    new_callable=AsyncMock,
+                    return_value=updated,
+                ) as update:
+                    result = await generate_prediction_text_only(
+                        session, _user(), _profile(), _TARGET, settings=SimpleNamespace()
+                    )
+
+    assert result is updated
+    generate.assert_awaited_once()
+    ctx_arg = generate.await_args.args[0]
+    assert ctx_arg.schema_version == 2
+    assert ctx_arg.big_three["sun"] == "Лев"
+    update.assert_awaited_once_with(
+        session,
+        stored,
+        text=expected_text,
+        status=PredictionStatus.TEXT_READY,
+    )
+
+
+@pytest.mark.anyio
+async def test_text_only_raises_with_reason_when_v4_empty() -> None:
+    session = AsyncMock()
+    with patch(
+        "astra.services.astro_service.predictions_crud.get_prediction_for_date",
+        new_callable=AsyncMock,
+        return_value=_stored_prediction(_V2_CONTEXT),
+    ):
+        with patch(
+            "astra.services.astro_service.daily_provider_enabled",
+            return_value=True,
+        ):
+            with patch(
+                "astra.services.astro_service.generate_daily_body_v4",
                 new_callable=AsyncMock,
                 return_value=(None, "timeout"),
             ):
                 with pytest.raises(LlmGenerationError) as exc_info:
-                    await generate_prediction_body(session, user, profile, date(2026, 6, 14))
+                    await generate_prediction_text_only(
+                        session, _user(), _profile(), _TARGET, settings=SimpleNamespace()
+                    )
 
     assert exc_info.value.reason == "timeout"
 
 
 @pytest.mark.anyio
-async def test_generate_prediction_body_passes_archetype_and_saves_context() -> None:
+async def test_text_only_rejects_legacy_v1_context() -> None:
     session = AsyncMock()
-    user_id = uuid4()
-    user = SimpleNamespace(id=user_id)
-    profile = SimpleNamespace(display_name="Аид")
-    chart = SimpleNamespace()
-    target = date(2026, 6, 14)
-    archetype = pick_question_archetype(user_id, target)
-    ctx = SimpleNamespace(
-        date=target,
-        model_dump_json_safe=lambda: {"date": target.isoformat(), "transits": []},
-    )
-    expected_text = "Что важнее — быть правым или быть близким?\n\nАида, сегодня…\n\nОтдохни."
+    with patch(
+        "astra.services.astro_service.predictions_crud.get_prediction_for_date",
+        new_callable=AsyncMock,
+        return_value=_stored_prediction(_V1_CONTEXT),
+    ):
+        with pytest.raises(LlmGenerationError) as exc_info:
+            await generate_prediction_text_only(
+                session, _user(), _profile(), _TARGET, settings=SimpleNamespace()
+            )
 
-    with patch("astra.services.astro_service.get_settings") as settings:
-        settings.return_value.ollama_enabled = True
-        with patch(
-            "astra.services.astro_service.build_context_for_date",
-            new_callable=AsyncMock,
-            return_value=(ctx, chart),
-        ):
-            with patch(
-                "astra.services.astro_service.llm_generate_body",
-                new_callable=AsyncMock,
-                return_value=(expected_text, ""),
-            ) as llm_mock:
-                body, astro_context = await generate_prediction_body(
-                    session,
-                    user,
-                    profile,
-                    target,
-                )
-
-    assert body == expected_text
-    assert astro_context["question_archetype_id"] == archetype.id
-    assert astro_context["date"] == target.isoformat()
-    llm_mock.assert_awaited_once()
-    assert llm_mock.await_args.kwargs["archetype"] is archetype
-
-
-def test_build_prediction_astro_context_includes_archetype_id() -> None:
-    ctx = SimpleNamespace(
-        model_dump_json_safe=lambda: {"date": "2026-06-14", "natal": {"sun": "Лев"}},
-    )
-    archetype = pick_question_archetype(uuid4(), date(2026, 6, 14))
-    payload = build_prediction_astro_context(ctx, archetype)
-    assert payload["question_archetype_id"] == archetype.id
-    assert payload["natal"]["sun"] == "Лев"
+    assert exc_info.value.reason == "legacy_context"

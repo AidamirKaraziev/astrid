@@ -5,14 +5,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from astra.astro.calculator import build_full_natal_chart, build_natal_chart
 from astra.astro.crud import chart_data_from_row, get_natal_chart, upsert_natal_chart
-from astra.astro.schemas import AstroContext, NatalChartData, TransitAspect
+from astra.astro.schemas import NatalChartData
 from astra.astro.daily_context import DailyContextV2, build_daily_context_v2
-from astra.astro.transits import build_daily_context
 from astra.core.config import Settings, get_settings
 from astra.core.prediction_errors import LlmGenerationError
 from astra.llm.daily_llm import daily_provider_enabled, generate_daily_body_v4
-from astra.llm.ollama import generate_prediction_body as llm_generate_body
-from astra.llm.prompts.astrid import QuestionArchetype, pick_question_archetype
+from astra.llm.prompts.astrid import pick_question_archetype
 from astra.places import crud as places_crud
 from astra.predictions import crud as predictions_crud
 from astra.predictions.models import Prediction
@@ -77,38 +75,6 @@ async def ensure_natal_chart(
     profile: Profile,
 ) -> NatalChartData:
     return await compute_and_store_natal_chart(session, user, profile)
-
-
-async def build_context_for_date(
-    session: AsyncSession,
-    user: User,
-    profile: Profile,
-    target: date,
-) -> tuple[AstroContext, NatalChartData]:
-    chart = await ensure_natal_chart(session, user, profile)
-    ctx = build_daily_context(profile, chart, target)
-    return ctx, chart
-
-
-def build_prediction_astro_context(
-    ctx: AstroContext,
-    archetype: QuestionArchetype,
-) -> dict:
-    """Контекст для predictions.astro_context: транзиты + метаданные генерации."""
-    payload = ctx.model_dump_json_safe()
-    payload["question_archetype_id"] = archetype.id
-    return payload
-
-
-def astro_context_from_stored(payload: dict) -> AstroContext:
-    data = {key: value for key, value in payload.items() if key != "question_archetype_id"}
-    return AstroContext(
-        date=date.fromisoformat(data["date"]),
-        accuracy_tier=data["accuracy_tier"],
-        natal=data["natal"],
-        transits=[TransitAspect.model_validate(item) for item in data["transits"]],
-        moon_phase=data.get("moon_phase"),
-    )
 
 
 async def load_natal_chart_data(session: AsyncSession, user_id: UUID) -> NatalChartData:
@@ -206,25 +172,13 @@ async def generate_prediction_text_only(
             text=row.text,
             status=PredictionStatus.TEXT_READY,
         )
-    if stored.get("schema_version") == 2:
-        if not daily_provider_enabled(cfg):
-            raise LlmGenerationError("disabled")
-        ctx_v2 = DailyContextV2.model_validate(stored)
-        body, failure_reason = await generate_daily_body_v4(ctx_v2, cfg)
-    else:
-        # legacy-контекст v1 (черновики до раската v4)
-        if not cfg.ollama_enabled:
-            raise LlmGenerationError("disabled")
-        chart = await load_natal_chart_data(session, user.id)
-        ctx = astro_context_from_stored(stored)
-        archetype = pick_question_archetype(user.id, target)
-        body, failure_reason = await llm_generate_body(
-            ctx,
-            profile,
-            chart,
-            cfg,
-            archetype=archetype,
-        )
+    if stored.get("schema_version") != 2:
+        # legacy-контекст v1: генерировался только удалённой локальной LLM
+        raise LlmGenerationError("legacy_context")
+    if not daily_provider_enabled(cfg):
+        raise LlmGenerationError("disabled")
+    ctx_v2 = DailyContextV2.model_validate(stored)
+    body, failure_reason = await generate_daily_body_v4(ctx_v2, cfg)
     if not body:
         raise LlmGenerationError(failure_reason or "empty_response")
     return await predictions_crud.update_prediction(
@@ -233,67 +187,4 @@ async def generate_prediction_text_only(
         text=body,
         status=PredictionStatus.TEXT_READY,
     )
-
-
-async def generate_prediction_body(
-    session: AsyncSession,
-    user: User,
-    profile: Profile,
-    target: date,
-    settings: Settings | None = None,
-) -> tuple[str, dict]:
-    cfg = settings or get_settings()
-    ctx, chart = await build_context_for_date(session, user, profile, target)
-    if not cfg.ollama_enabled:
-        raise LlmGenerationError("disabled")
-
-    archetype = pick_question_archetype(user.id, target)
-    body, failure_reason = await llm_generate_body(
-        ctx,
-        profile,
-        chart,
-        cfg,
-        archetype=archetype,
-    )
-    if not body:
-        raise LlmGenerationError(failure_reason or "empty_response")
-    return body, build_prediction_astro_context(ctx, archetype)
-
-
-async def create_or_update_prediction(
-    session: AsyncSession,
-    user_id: UUID,
-    target: date,
-    body: str,
-    astro_context: dict,
-) -> Prediction:
-    existing = await predictions_crud.get_prediction_for_date(session, user_id, target)
-    if existing:
-        return await predictions_crud.update_prediction(
-            session,
-            existing,
-            text=body,
-            astro_context=astro_context,
-            status=PredictionStatus.TEXT_READY,
-        )
-    return await predictions_crud.create_prediction(
-        session,
-        user_id=user_id,
-        prediction_date=target,
-        text=body,
-        astro_context=astro_context,
-        status=PredictionStatus.TEXT_READY,
-    )
-
-
-async def generate_daily_prediction(
-    session: AsyncSession,
-    user: User,
-    profile: Profile,
-    target: date | None = None,
-    settings: Settings | None = None,
-) -> Prediction:
-    day = target or date.today()
-    body, ctx = await generate_prediction_body(session, user, profile, day, settings)
-    return await create_or_update_prediction(session, user.id, day, body, ctx)
 

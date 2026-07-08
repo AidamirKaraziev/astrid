@@ -8,7 +8,7 @@
 
 ```
 Telegram API ← HTTPS ← VPN-узел (VLESS) ← mihomo :7890 ← Astra api (Docker)
-postgres / redis / ollama — без VPN (MATCH,DIRECT)
+postgres / redis / rabbitmq — без VPN (MATCH,DIRECT)
 ```
 
 | Компонент | Порт / путь |

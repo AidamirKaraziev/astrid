@@ -1,4 +1,4 @@
-"""LLM-провайдеры: local (Ollama) и API (Grok, …)."""
+"""LLM-провайдеры: облачные API (DeepSeek, OpenAI, Gemini, Grok, OpenRouter)."""
 
 from astra.llm.base import BaseLlmProvider
 from astra.llm.factory import (
@@ -6,7 +6,6 @@ from astra.llm.factory import (
     get_gemini_provider,
     get_grok_provider,
     get_llm_provider,
-    get_ollama_provider,
     get_openrouter_provider,
 )
 from astra.llm.types import ChatMessage, CompletionRequest, CompletionResult
@@ -20,6 +19,5 @@ __all__ = [
     "get_gemini_provider",
     "get_grok_provider",
     "get_llm_provider",
-    "get_ollama_provider",
     "get_openrouter_provider",
 ]

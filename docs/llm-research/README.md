@@ -1,5 +1,7 @@
 # SOTA нейросети — отчёт для Astra
 
+> **Архив.** Отчёт от 2026-06-13. Локальная LLM (Ollama, gemma4:e2b) удалена из проекта в июле 2026; prod = DeepSeek.
+
 PDF для обсуждения с коллегой. Фокус: **бесплатные API** (не UI), качество генерации, лимиты.
 
 ## Файлы
@@ -17,4 +19,4 @@ uv run --with fpdf2 python scripts/generate_sota_report_pdf.py
 ## Связанные заметки
 
 - Vault: `astra-vault/knowledge/` (при сохранении сессии)
-- Текущий LLM: `gemma4:e2b` на deadtiger через Ollama
+- LLM на момент отчёта: `gemma4:e2b` на deadtiger через Ollama (удалена 07.2026, текущий — DeepSeek)

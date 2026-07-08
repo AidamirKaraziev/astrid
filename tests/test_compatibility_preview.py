@@ -22,7 +22,6 @@ def _settings() -> SimpleNamespace:
         grok_timeout_seconds=90.0,
         gemini_timeout_seconds=45.0,
         openrouter_timeout_seconds=75.0,
-        ollama_timeout_seconds=120.0,
     )
 
 

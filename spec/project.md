@@ -18,12 +18,12 @@ Telegram-бот с **ежедневными персональными астр�
 | Онбординг (имя, дата/время/место рождения) | ✓ |
 | Справочник мест РФ (GeoNames, ~200k) | ✓ |
 | Натальная карта + транзиты (kerykeion) | ✓ |
-| Ежедневное предсказание через LLM (Ollama, gemma4:e2b) | ✓ код, local E2E ✓, deadtiger/TG — в работе |
-| Формат Astrid v3: вопрос дня (push) + прогноз + совет | ✓ |
+| Ежедневное предсказание через LLM (DeepSeek, облако) | ✓ код, local E2E ✓, deadtiger/TG — в работе |
+| Формат Astrid v4: вопрос дня (push) + прогноз + конфликт дня | ✓ |
 | Планировщик уведомлений 09:00 по TZ города | ✓ |
 | Баллы, streak, реферальная ссылка | ✓ базово |
 | REST API `/v1/*` (без JWT в MVP) | ✓ |
-| Docker Compose: api, worker, postgres, redis, rabbitmq, ollama | ✓ |
+| Docker Compose: api, worker, postgres, redis, rabbitmq | ✓ |
 
 ## Вне scope MVP
 
@@ -38,7 +38,7 @@ Telegram-бот с **ежедневными персональными астр�
 - **Worker** — генерация предсказаний через RabbitMQ.
 - **PostgreSQL** — пользователи, профили, места, предсказания.
 - **Redis** — FSM бота, дедупликация pending-генерации.
-- **Ollama** — локальная LLM (CPU-only на deadtiger).
+- **DeepSeek** — облачная LLM для всех генераций (daily, таро, совместимость, натал); локальная LLM удалена в июле 2026.
 
 Подробнее: `astra-vault/atlas/архитектура MVP monolith async 2026-05-16.md`
 
@@ -46,7 +46,7 @@ Telegram-бот с **ежедневными персональными астр�
 
 - Python ≥ 3.12, зависимости через **uv**
 - Деплой: Docker Compose на домашнем сервере (deadtiger)
-- LLM: модель ≤ ~4B Q4, генерация в фоне (worker)
+- LLM: облачный API (DeepSeek), генерация в фоне (worker)
 
 ## Связи
 

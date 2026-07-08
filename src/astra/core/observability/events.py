@@ -89,10 +89,8 @@ class Event(StrEnum):
     LLM_RESPONSE = "llm.response"
     LLM_HTTP_ERROR = "llm.http_error"
     LLM_VALIDATION_FAILED = "llm.validation_failed"
+    LLM_DAILY_PROVIDER_UNCONFIGURED = "llm.daily_provider_unconfigured"
     RABBITMQ_RECONNECT = "rabbitmq.reconnect"
-    OLLAMA_WARMUP_SKIPPED = "ollama.warmup_skipped"
-    OLLAMA_WARMUP_OK = "ollama.warmup_ok"
-    OLLAMA_WARMUP_FAILED = "ollama.warmup_failed"
 
     # GeoNames
     GEONAMES_DOWNLOAD = "geonames.download"

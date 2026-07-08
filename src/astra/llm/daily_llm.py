@@ -1,4 +1,8 @@
-"""Генерация ежедневного прогноза Astrid v4: DeepSeek (или Ollama по настройке)."""
+"""Генерация ежедневного прогноза Astrid v4 через DeepSeek.
+
+Фичи (predictions, tarot, zodiac) знают только get_daily_provider() /
+daily_provider_enabled() — конкретный провайдер выбирается здесь.
+"""
 
 from __future__ import annotations
 
@@ -6,7 +10,7 @@ from astra.astro.daily_context import DailyContextV2
 from astra.core.config import Settings, get_settings
 from astra.core.observability import Event, get_logger
 from astra.llm.base import BaseLlmProvider
-from astra.llm.factory import get_deepseek_provider, get_ollama_provider
+from astra.llm.factory import get_deepseek_provider
 from astra.llm.prompts.astrid import (
     sanitize_prediction_output,
     validate_prediction_output,
@@ -18,20 +22,14 @@ log = get_logger(__name__)
 
 _DAILY_TEMPERATURE = 0.75
 _DAILY_MAX_TOKENS = 600
-_OLLAMA_NUM_CTX = 4096
 
 
 def get_daily_provider(settings: Settings | None = None) -> BaseLlmProvider:
-    cfg = settings or get_settings()
-    if cfg.daily_llm_provider == "ollama":
-        return get_ollama_provider(cfg)
-    return get_deepseek_provider(cfg)
+    return get_deepseek_provider(settings or get_settings())
 
 
 def daily_provider_enabled(settings: Settings | None = None) -> bool:
     cfg = settings or get_settings()
-    if cfg.daily_llm_provider == "ollama":
-        return cfg.ollama_enabled
     return cfg.deepseek_enabled and bool(cfg.deepseek_api_key)
 
 
@@ -44,14 +42,6 @@ def _build_request(
         ChatMessage("system", SYSTEM_PROMPT_V4),
         ChatMessage("user", user_message),
     )
-    if provider.name == "ollama":
-        return CompletionRequest(
-            messages=messages,
-            temperature=_DAILY_TEMPERATURE,
-            max_tokens=_DAILY_MAX_TOKENS,
-            timeout_seconds=cfg.ollama_timeout_seconds,
-            extra={"num_ctx": _OLLAMA_NUM_CTX, "think": False, "keep_alive": "30m"},
-        )
     extra: dict[str, object] = {}
     if provider.name == "deepseek":
         extra["thinking_disabled"] = True

@@ -7,7 +7,7 @@ from astra.core.config import Settings, get_settings
 from astra.core.observability import Event, get_logger
 from astra.core.observability.middleware.worker import run_task_with_observability
 from astra.db.session import get_session_factory, init_engine
-from astra.llm.warmup import warmup_ollama_model
+from astra.llm.daily_llm import daily_provider_enabled
 from astra.messaging.publisher import _ensure_topology, parse_task
 from astra.messaging.queues import (
     QUEUE_ASTRO,
@@ -20,6 +20,15 @@ from astra.core.observability.tracing import instrument_sqlalchemy_engine
 from astra.workers.handlers import dispatch_task
 
 log = get_logger(__name__)
+
+
+def check_daily_provider_configured(cfg: Settings) -> None:
+    """Fail-loud при старте: без ключа DeepSeek daily-прогнозы уйдут в ретраи и FAILED."""
+    if not daily_provider_enabled(cfg):
+        log.warning(
+            Event.LLM_DAILY_PROVIDER_UNCONFIGURED,
+            hint="задай DEEPSEEK_ENABLED=true и DEEPSEEK_API_KEY в .env",
+        )
 
 
 async def _process_message(message: AbstractIncomingMessage) -> None:
@@ -39,7 +48,7 @@ async def run_consumer(settings: Settings | None = None) -> None:
     cfg = settings or get_settings()
     init_engine(cfg)
     instrument_sqlalchemy_engine(cfg)
-    await warmup_ollama_model(cfg)
+    check_daily_provider_configured(cfg)
     connection = await aio_pika.connect_robust(cfg.rabbitmq_url)
     channel = await connection.channel()
     await channel.set_qos(prefetch_count=cfg.rabbitmq_prefetch)

@@ -15,9 +15,9 @@
 
 | # | Критерий | Статус сейчас | Нужно утвердить |
 |---|----------|---------------|-----------------|
-| A | E2E на deadtiger: онбординг → прогноз в TG (кнопка + scheduler 09:00) | **local ✓ / deadtiger ☐** | См. `docs/e2e/astrid-v3-e2e.md` |
-| B | Качество текста Astrid v3 (вопрос дня + прогноз + совет) | local E2E ✓ | Кто финально оценивает: ты вручную или нужен rubric/чеклист? |
-| C | Latency генерации на deadtiger (CPU-only, gemma4:e2b) | **не замерено** | Приемлемый p95: **60 / 120 / 300 сек**? |
+| A | E2E на deadtiger: онбординг → прогноз в TG (кнопка + scheduler 09:00) | **local ✓ / deadtiger ☐** | Старый v3-чеклист в архиве: `docs/e2e/astrid-v3-e2e.md` |
+| B | Качество текста Astrid v4 (вопрос дня + прогноз + конфликт дня) | local E2E ✓ | Кто финально оценивает: ты вручную или нужен rubric/чеклист? |
+| C | Latency генерации (DeepSeek, облако) | **не замерено** | Приемлемый p95: **60 / 120 / 300 сек**? |
 | D | Стабильность под нагрузкой (PERF-1) | не делали | Запускать бета **до** или **после** нагрузочного теста? |
 | E | REST API без auth (`/v1/users/me/{uuid}`) | осознанный MVP-gap | Ок для закрытой беты или блокер? |
 
@@ -69,7 +69,7 @@
 
 | ID | Статус | Задача | Примечания |
 |----|--------|--------|------------|
-| E2E-1 | in_progress | **E2E Astrid v3** — онбординг → «🔮 Предсказание» → scheduler 09:00 → v3 в TG | **Local:** 3/3 Ollama ✓ (`scripts/e2e_astrid_v3.py`, p50 ~17s). **Deadtiger/TG:** ручной чеклист pending → `docs/e2e/astrid-v3-e2e.md` |
+| E2E-1 | in_progress | **E2E Astrid v4** — онбординг → «🔮 Предсказание» → scheduler 09:00 → v4 в TG | Локальная LLM удалена (07.2026), генерация через DeepSeek. **Deadtiger/TG:** ручной чеклист pending |
 | E2E-2 | todo | **Чеклист E2E-сценариев** — 5–7 кейсов (новый юзер, повтор, ошибка LLM, retry, реферал) | Документ `docs/e2e-checklist.md` |
 
 ---
@@ -79,7 +79,7 @@
 | ID | Статус | Задача | Примечания |
 |----|--------|--------|------------|
 | INF-1 | todo | **Одна команда для справочника городов** — `make geonames`: GeoNames RU + admin1 + `alembic upgrade` + `import_geonames_ru` | Auto-import при старте уже есть; единой команды для ручного переимпорта нет |
-| INF-2 | in_progress | **Всё в Docker** — `make up` / `docker compose`: api, worker, postgres, redis, rabbitmq, ollama | Compose + Makefile + `docker-up.sh` есть; проверить полный цикл на deadtiger |
+| INF-2 | in_progress | **Всё в Docker** — `make up` / `docker compose`: api, worker, postgres, redis, rabbitmq | Compose + Makefile + `docker-up.sh` есть; проверить полный цикл на deadtiger |
 | INF-3 | todo | Документировать флоу развёртывания (dev + deadtiger + prod) в `docs/deploy.md` | README частично покрывает; нужен отдельный deploy-guide |
 
 ---
@@ -98,7 +98,7 @@
 
 | ID | Статус | Задача | Примечания |
 |----|--------|--------|------------|
-| AI-1 | done | **Подключить LLM** для генерации текста предсказания | Ollama + `gemma4:e2b`, resilient retries, worker через RabbitMQ. Multi-provider — позже |
+| AI-1 | done | **Подключить LLM** для генерации текста предсказания | DeepSeek (облако; изначально Ollama, удалена 07.2026), resilient retries, worker через RabbitMQ |
 | AI-2 | todo | **Разделить каркас и контент** — в БД только `prediction_body`; обёртка (точность, streak) при отправке | Сейчас всё в `predictions.text` |
 | AI-3 | done | **Менее «ИИшный» тон** — промпт, постобработка, validate, запрет штампов | **Astrid v3** ✓. Опционально: A/B temperature, темы транзитов при шаблонности |
 | AI-4 | in_progress | **Астрологический контекст** — натал, транзиты, accuracy tier (33/66/100%) | kerykeion + `natal_charts` + transits ✓. Нет отдельного «ID» в UI и полных домов |
@@ -264,7 +264,7 @@
 
 | Область | Готово |
 |---------|--------|
-| LLM | Ollama, Astrid v3, retries, validate, delayed notify, Sentry |
+| LLM | DeepSeek, Astrid v4, retries, validate, delayed notify, Sentry |
 | Астро | kerykeion, natal charts, transits, accuracy tier |
 | Geo | GeoNames auto-import, fuzzy search, ~200k мест |
 | Infra | Docker Compose, CI (48 tests), Makefile, RabbitMQ worker |

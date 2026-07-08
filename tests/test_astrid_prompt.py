@@ -1,19 +1,10 @@
 import re
-from datetime import date, datetime
-from types import SimpleNamespace
+from datetime import date
 from uuid import UUID
-from zoneinfo import ZoneInfo
 
-from astra.astro.schemas import AstroContext, NatalChartData, TransitAspect
 from astra.llm.prompts.astrid import (
     MAX_BODY_SENTENCES,
-    MAX_QUESTION_LEN,
-    MIN_BODY_SENTENCES,
-    MIN_QUESTION_LEN,
-    MIN_SENTENCES,
     QUESTION_ARCHETYPES,
-    build_system_prompt,
-    build_user_message,
     pick_question_archetype,
     sanitize_prediction_output,
     validate_prediction_output,
@@ -29,48 +20,6 @@ _VALID_BODY = (
 )
 
 
-def _profile(**kwargs: object) -> SimpleNamespace:
-    defaults = {
-        "user_id": _TEST_USER_ID,
-        "display_name": "Аида",
-        "birth_date": date(1992, 2, 11),
-        "birth_time": datetime(1992, 2, 11, 14, 30, tzinfo=ZoneInfo("Europe/Moscow")),
-        "birth_place": "Москва",
-        "city": "Москва",
-        "timezone": "Europe/Moscow",
-    }
-    defaults.update(kwargs)
-    return SimpleNamespace(**defaults)
-
-
-def _chart() -> NatalChartData:
-    return NatalChartData(
-        accuracy_tier=100,
-        sun_sign="Водолей",
-        moon_sign="Рак",
-        asc_sign="Весы",
-        planets={"Sun": 312.0, "Moon": 98.0},
-        timezone="Europe/Moscow",
-    )
-
-
-def _ctx() -> AstroContext:
-    return AstroContext(
-        date=date(2026, 6, 1),
-        accuracy_tier=100,
-        natal={"sun": "Водолей", "moon": "Рак", "asc": "Весы"},
-        transits=[
-            TransitAspect(
-                transit_planet="Марс",
-                aspect="трин",
-                natal_planet="Луна",
-                orb_deg=1.1,
-                theme="границы и энергия",
-            ),
-        ],
-    )
-
-
 def _valid_raw(
     *,
     question: str = "Что важнее — быть правым или быть близким?",
@@ -78,22 +27,6 @@ def _valid_raw(
     advice: str = "Сделай паузу перед разговором, который давно откладываешь.",
 ) -> str:
     return f"{question}\n\n{body}\n\n{advice}"
-
-
-def test_system_prompt_astrologer_role() -> None:
-    prompt = build_system_prompt()
-    assert "Astrid" in prompt
-    assert "астролог" in prompt.lower()
-    assert str(MIN_SENTENCES) in prompt
-    assert str(MIN_BODY_SENTENCES) in prompt
-    assert str(MAX_BODY_SENTENCES) in prompt
-    assert str(MIN_QUESTION_LEN) in prompt
-    assert str(MAX_QUESTION_LEN) in prompt
-    assert "вопрос дня" in prompt.lower()
-    assert "✨ Прогноз дня" not in prompt
-    assert "💡 Совет дня" not in prompt
-    assert "именительном" in prompt.lower()
-    assert "внутренние процессы" in prompt
 
 
 def test_pick_question_archetype_is_deterministic() -> None:
@@ -112,28 +45,6 @@ def test_pick_question_archetype_varies_by_user_or_date() -> None:
     }
     assert len(by_user) > 1
     assert len(by_date) > 1
-
-
-def test_user_message_includes_archetype_hint() -> None:
-    profile = _profile()
-    chart = _chart()
-    archetype = pick_question_archetype(profile.user_id, _ctx().date)
-    message = build_user_message(_ctx(), profile, chart)
-    assert "Тип вопроса дня:" in message
-    assert archetype.theme in message
-    assert archetype.example in message
-
-
-def test_user_message_includes_birth_data_without_declensions() -> None:
-    profile = _profile()
-    chart = _chart()
-    message = build_user_message(_ctx(), profile, chart)
-    assert "Аида" in message
-    assert "Аиде" not in message
-    assert "1992-02-11" in message
-    assert "14:30" in message
-    assert "Москва" in message
-    assert '"transit"' in message
 
 
 def test_sanitize_v3_three_blocks() -> None:
@@ -259,7 +170,13 @@ def test_validate_rejects_legacy_markers() -> None:
     assert validate_prediction_output(text, "Аида") == "legacy_format"
 
 
-def test_golden_output_from_gemma_shape() -> None:
+def test_push_preview_question_under_iphone_limit() -> None:
+    text = sanitize_prediction_output(_valid_raw())
+    question = text.split("\n\n", 1)[0]
+    assert len(question) <= 110
+
+
+def test_golden_output_with_brackets_and_extra_advice() -> None:
     raw = (
         "[Что важнее — быть правым или быть близким?]\n\n"
         f"{_VALID_BODY}\n\n"

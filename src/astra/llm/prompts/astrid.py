@@ -1,21 +1,16 @@
-"""Промпты и постобработка ежедневного прогноза Astrid v3.
+"""Архетипы вопроса дня и постобработка ежедневного прогноза Astrid.
 
-Формат: вопрос дня + 4 предложения + совет. Оптимизирован под gemma4:e2b.
+Формат: вопрос дня + прогноз + совет. Промпт живёт в astrid_v4.
 """
 
 from __future__ import annotations
 
 import hashlib
-import json
 import re
 from dataclasses import dataclass
 from datetime import date
 from textwrap import dedent
 from uuid import UUID
-from zoneinfo import ZoneInfo
-
-from astra.astro.schemas import AstroContext, NatalChartData
-from astra.users.models import Profile
 
 MIN_SENTENCES = 4
 MAX_SENTENCES = 4
@@ -146,100 +141,6 @@ def _format_forbidden_phrases() -> str:
 
 def _format_cliche_words() -> str:
     return ", ".join(f"«{w}»" for w in _CLICHE_WORDS)
-
-
-_SYSTEM_PROMPT = dedent(
-    f"""
-    Ты — Astrid, астролог в Telegram-боте Astra.
-
-    Задача: показать, что сегодня важно именно для этого человека — не общий гороскоп.
-
-    Как думать (не выводи):
-    1. Коротко опирайся на натал: Солнце = воля/эго, Луна = эмоции (если есть), ASC = как человек входит в день (если есть).
-    2. Транзиты с меньшим orb — что сегодня задевает эти точки натала.
-    3. Сформулируй главный инсайт дня простым языком.
-    4. Сначала определи суть дня (не выводи), затем напиши вопрос дня как намёк на неё.
-
-    Вопрос дня:
-    - Одна строка, {MIN_QUESTION_LEN}–{MAX_QUESTION_LEN} символов, обязательно с «?» в конце.
-    - Таинственный, личный — как шёпот, не инструкция.
-    - Намекает на суть дня: человек чувствует тему, но не знает ответа.
-    - Не называй планеты. Не пересказывай прогноз. Без кавычек, скобок, эмодзи.
-    - Не используй слова «сегодня», «фокус», «задачи», «вопрос».
-
-    Прогноз:
-    - Около {MIN_SENTENCES} предложений (обычно {MIN_BODY_SENTENCES}–{MAX_BODY_SENTENCES}), связный рассказ, без подзаголовков.
-    - Первое предложение ОБЯЗАТЕЛЬНО начни с имени из данных в именительном падеже: «Марина, сегодня…», «Аид, сегодня…». Не склоняй имя (не «Марине», не «Аиду»).
-    - Дальше обращение на «ты»; имя больше не повторяй.
-    - Можно назвать планету и аспект, если они есть в transits — но переведи на быт: чувства, разговоры, дела, тело.
-    - Не пугай, не обещай событий наверняка.
-    - Только данные из сообщения.
-    - Запрещено: {_format_forbidden_phrases()}, {_format_cliche_words()}.
-
-    Совет:
-    - Ровно одно предложение, без заголовка и эмодзи.
-    - Конкретное действие на сегодня.
-
-    Язык: только русский (кириллица). Без иероглифов.
-
-    Формат ответа (строго, три блока через пустую строку):
-
-    [вопрос дня — одна строка]
-
-    [{MIN_SENTENCES} предложения прогноза, допустимо {MIN_BODY_SENTENCES}–{MAX_BODY_SENTENCES}]
-
-    [1 предложение совета]
-    """,
-).strip()
-
-
-def build_system_prompt() -> str:
-    """System prompt: Astrid v3 для gemma4:e2b."""
-    return _SYSTEM_PROMPT
-
-
-def build_user_message(
-    ctx: AstroContext,
-    profile: Profile,
-    chart: NatalChartData,
-    *,
-    archetype: QuestionArchetype | None = None,
-) -> str:
-    """User prompt: профиль + натал + транзиты + подсказка архетипа вопроса."""
-    display_name = (profile.display_name or "").strip() or "друг"
-    if archetype is None:
-        archetype = pick_question_archetype(profile.user_id, ctx.date)
-
-    transits = [
-        {
-            "transit": t.transit_planet,
-            "aspect": t.aspect,
-            "natal": t.natal_planet,
-            "orb": t.orb_deg,
-            "theme": t.theme,
-        }
-        for t in ctx.transits
-    ]
-    transits_json = json.dumps(transits, ensure_ascii=False, indent=2)
-    archetype_hint = format_archetype_hint(archetype)
-    return dedent(
-        f"""
-        Составь персональный прогноз на день для этого человека.
-
-        Имя: {display_name}
-        Дата прогноза: {ctx.date.isoformat()}
-        Дата рождения: {_format_birth_date(profile)}
-        Время рождения: {_format_birth_time(profile)}
-        Место рождения: {_format_birth_place(profile)}
-        Натал: Солнце {chart.sun_sign}, Луна {_format_moon(chart)}, ASC {_format_asc(chart)}
-        Точность профиля: {chart.accuracy_tier}%
-
-        Транзиты сегодня (JSON, меньший orb — сильнее влияние):
-        {transits_json}
-
-        {archetype_hint}
-        """,
-    ).strip()
 
 
 def sanitize_prediction_output(raw: str) -> str:
@@ -477,34 +378,6 @@ def _split_sentences(text: str) -> list[str]:
 
 def _count_words(text: str) -> int:
     return len(re.findall(r"\w+", text, flags=re.UNICODE))
-
-
-def _format_birth_date(profile: Profile) -> str:
-    return profile.birth_date.isoformat()
-
-
-def _format_birth_time(profile: Profile) -> str:
-    if profile.birth_time is None:
-        return "не указано"
-    tz = ZoneInfo(profile.timezone)
-    local = profile.birth_time
-    if local.tzinfo is None:
-        local = local.replace(tzinfo=tz)
-    else:
-        local = local.astimezone(tz)
-    return local.strftime("%H:%M")
-
-
-def _format_birth_place(profile: Profile) -> str:
-    return (profile.birth_place or profile.city or "не указано").strip()
-
-
-def _format_moon(chart: NatalChartData) -> str:
-    return chart.moon_sign or "не рассчитана"
-
-
-def _format_asc(chart: NatalChartData) -> str:
-    return chart.asc_sign or "не рассчитан"
 
 
 def _rewrite_cliches(text: str) -> str:

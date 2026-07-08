@@ -9,10 +9,9 @@ from astra.llm.api.grok import GrokProvider
 from astra.llm.api.openai import OpenAIProvider
 from astra.llm.api.openrouter import OpenRouterProvider
 from astra.llm.base import BaseLlmProvider
-from astra.llm.local.ollama import OllamaProvider
 from astra.llm.tracing_provider import TracingLlmProvider
 
-_KNOWN_PROVIDERS = frozenset({"ollama", "grok", "gemini", "openrouter", "openai", "deepseek"})
+_KNOWN_PROVIDERS = frozenset({"grok", "gemini", "openrouter", "openai", "deepseek"})
 
 
 def _wrap(provider: BaseLlmProvider, *, purpose: str = "unknown") -> BaseLlmProvider:
@@ -26,8 +25,6 @@ def get_llm_provider(name: str, settings: Settings | None = None, *, purpose: st
         raise ValueError(f"Unknown LLM provider: {name}")
 
     cfg = settings or get_settings()
-    if provider == "ollama":
-        return _wrap(OllamaProvider(cfg), purpose=purpose)
     if provider == "grok":
         return _wrap(GrokProvider(cfg), purpose=purpose)
     if provider == "gemini":
@@ -37,10 +34,6 @@ def get_llm_provider(name: str, settings: Settings | None = None, *, purpose: st
     if provider == "deepseek":
         return _wrap(DeepSeekProvider(cfg), purpose=purpose)
     return _wrap(OpenRouterProvider(cfg), purpose=purpose)
-
-
-def get_ollama_provider(settings: Settings | None = None) -> BaseLlmProvider:
-    return _wrap(OllamaProvider(settings or get_settings()), purpose="daily_prediction")
 
 
 def get_grok_provider(settings: Settings | None = None) -> BaseLlmProvider:

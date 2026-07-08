@@ -10,10 +10,10 @@ import sentry_sdk
 from astra.core.config import get_settings
 
 _REASON_LABELS: dict[str, str] = {
-    "disabled": "Ollama отключена",
-    "timeout": "таймаут Ollama",
-    "connection": "нет соединения с Ollama",
-    "empty_response": "пустой ответ Ollama",
+    "disabled": "LLM-провайдер отключён",
+    "timeout": "таймаут LLM",
+    "connection": "нет соединения с LLM",
+    "empty_response": "пустой ответ LLM",
     "sanitize_empty": "ответ не прошёл постобработку",
     "invalid_structure": "неверная структура ответа",
     "invalid_question": "некорректный вопрос дня",
@@ -25,9 +25,10 @@ _REASON_LABELS: dict[str, str] = {
     "invalid_advice": "некорректный совет",
     "forbidden_content": "запрещённые фразы или символы",
     "legacy_format": "устаревший формат ответа",
-    "request_error": "ошибка запроса к Ollama",
+    "request_error": "ошибка запроса к LLM",
     "missing_context": "нет астрологического контекста",
     "missing_natal_chart": "нет натальной карты",
+    "legacy_context": "устаревший контекст v1, нужна перегенерация",
 }
 
 
@@ -74,7 +75,8 @@ def report_prediction_generation_failure(
         scope.set_tag("prediction_failure", "true")
         scope.set_tag("prediction_failure_final", str(final).lower())
         scope.set_tag("failure_reason", reason)
-        scope.set_tag("ollama_model", cfg.ollama_model)
+        scope.set_tag("llm_provider", "deepseek")
+        scope.set_tag("llm_model", cfg.deepseek_model)
         scope.set_tag("service", cfg.sentry_service)
         scope.set_context(
             "prediction_generation",

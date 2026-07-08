@@ -1,9 +1,11 @@
 ---
-tags: [pattern, llm, astrid, прогноз, gemma4]
+tags: [pattern, llm, astrid, прогноз, gemma4, legacy]
 date: 2026-06-14
 ---
 
 # Промпт Astrid v3 — вопрос дня gemma4:e2b
+
+> **Legacy.** Код v3 и локальная LLM (Ollama) удалены 2026-07-08 — см. [[локальная LLM Ollama удалена весь daily на DeepSeek]]. Актуальный формат — Astrid v4 (`prompts/astrid_v4.py`, DeepSeek).
 
 Связано: [[продукт Astra telegram предсказания RU аудитория]], [[промпт Astrid v2 — 4 предложения gemma4 e2b]] (superseded)
 

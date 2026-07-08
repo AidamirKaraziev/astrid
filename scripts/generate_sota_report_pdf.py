@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
-"""Generate PDF: SOTA neural networks report for Astra (free API focus)."""
+"""Generate PDF: SOTA neural networks report for Astra (free API focus).
+
+Архив: снимок исследования на 2026-06-13. Локальная LLM (Ollama) удалена
+из проекта в июле 2026; упоминания gemma4/Ollama здесь — история.
+"""
 
 from __future__ import annotations
 

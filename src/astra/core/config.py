@@ -50,14 +50,6 @@ class Settings(BaseSettings):
     rabbitmq_url: str = "amqp://astra:astra@localhost:5672/"
     rabbitmq_prefetch: int = 8
 
-    ollama_base_url: str = "http://localhost:11434"
-    ollama_model: str = "gemma4:e2b"
-    ollama_enabled: bool = True
-    ollama_timeout_seconds: float = 300.0
-
-    # Провайдер ежедневных предсказаний: deepseek | ollama
-    daily_llm_provider: str = "deepseek"
-
     # true — всем персональные предсказания; false — общий гороскоп по знаку
     personal_predictions_enabled: bool = True
 

@@ -130,34 +130,23 @@ class TestCompassFormat:
 
 
 class TestProviderSelection:
-    def test_deepseek_by_default(self):
+    def test_get_daily_provider_always_deepseek(self):
         from astra.llm.daily_llm import get_daily_provider
 
         cfg = MagicMock()
-        cfg.daily_llm_provider = "deepseek"
         with patch("astra.llm.daily_llm.get_deepseek_provider") as ds:
             get_daily_provider(cfg)
         ds.assert_called_once_with(cfg)
-
-    def test_ollama_when_configured(self):
-        from astra.llm.daily_llm import get_daily_provider
-
-        cfg = MagicMock()
-        cfg.daily_llm_provider = "ollama"
-        with patch("astra.llm.daily_llm.get_ollama_provider") as ol:
-            get_daily_provider(cfg)
-        ol.assert_called_once_with(cfg)
 
     def test_enabled_flags(self):
         from astra.llm.daily_llm import daily_provider_enabled
 
         cfg = MagicMock()
-        cfg.daily_llm_provider = "deepseek"
         cfg.deepseek_enabled = True
         cfg.deepseek_api_key = "sk-x"
         assert daily_provider_enabled(cfg)
         cfg.deepseek_api_key = ""
         assert not daily_provider_enabled(cfg)
-        cfg.daily_llm_provider = "ollama"
-        cfg.ollama_enabled = True
-        assert daily_provider_enabled(cfg)
+        cfg.deepseek_api_key = "sk-x"
+        cfg.deepseek_enabled = False
+        assert not daily_provider_enabled(cfg)
