@@ -16,7 +16,7 @@
                 "file": "план по проекту.canvas",
                 "viewState": {
                   "x": -838.6647967097668,
-                  "y": 996.5484995615578,
+                  "y": 1378.5075746057241,
                   "zoom": 0.5681827332995008
                 }
               },
@@ -189,6 +189,8 @@
   },
   "active": "9f4845838f010fec",
   "lastOpenFiles": [
+    "Снимок экрана — 2026-07-09 в 20.54.29.png",
+    "Снимок экрана — 2026-07-09 в 20.54.20.png",
     "knowledge/debugging/deadtiger после ребута сам поднимается через несколько минут не паниковать.md",
     "sessions/2026-05-31 Docker mihomo и Telegram на домашнем сервере.md",
     "план по проекту.canvas",
@@ -214,7 +216,6 @@
     "sessions/2026-06-12 имя в начале прогноза Astrid.md",
     "knowledge/patterns/промпт Astrid v2 — 4 предложения gemma4 e2b.md",
     "sessions/2026-06-12 промпт Astrid v2 gemma4 e2b.md",
-    "knowledge/decisions/деплой Docker Compose на домашнем сервере с mihomo для Telegram.md",
-    "00-home/текущие приоритеты.md"
+    "knowledge/decisions/деплой Docker Compose на домашнем сервере с mihomo для Telegram.md"
   ]
 }
