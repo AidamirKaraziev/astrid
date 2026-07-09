@@ -167,10 +167,13 @@ def _compat_person_keyboard(
     rows.append(
         [InlineKeyboardButton(text="➕ Новый человек", callback_data=CB_COMPAT_NEW_PERSON)],
     )
-    visible = profiles if show_all else profiles[:_PROFILE_PICKER_LIMIT]
+    # Сворачиваем, только если за кнопкой прячется больше одного человека:
+    # ряд «Показать всех» ради одной строки не экономит место.
+    collapsed = not show_all and len(profiles) > _PROFILE_PICKER_LIMIT + 1
+    visible = profiles[:_PROFILE_PICKER_LIMIT] if collapsed else profiles
     picker = person_pick_keyboard(visible)
     rows.extend(picker.inline_keyboard)
-    if not show_all and len(profiles) > _PROFILE_PICKER_LIMIT:
+    if collapsed:
         rows.append(
             [
                 InlineKeyboardButton(

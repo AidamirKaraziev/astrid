@@ -62,6 +62,21 @@ def test_compat_person_keyboard_collapses_and_has_actions() -> None:
     assert CB_COMPAT_PEOPLE_ALL not in full_cb
 
 
+def test_compat_person_keyboard_no_collapse_for_single_hidden() -> None:
+    # 7 человек при лимите 6: кнопка заняла бы тот же ряд — показываем всех сразу
+    profiles = [_profile() for _ in range(7)]
+    kb = _compat_person_keyboard(profiles)
+    callbacks = [b.callback_data for row in kb.inline_keyboard for b in row]
+    assert sum(1 for c in callbacks if c.startswith(CB_PERSON_PICK_PREFIX)) == 7
+    assert CB_COMPAT_PEOPLE_ALL not in callbacks
+
+    # 8 человек: прячутся двое — сворачиваем как обычно
+    kb8 = _compat_person_keyboard([_profile() for _ in range(8)])
+    cb8 = [b.callback_data for row in kb8.inline_keyboard for b in row]
+    assert sum(1 for c in cb8 if c.startswith(CB_PERSON_PICK_PREFIX)) == 6
+    assert CB_COMPAT_PEOPLE_ALL in cb8
+
+
 @pytest.mark.asyncio
 async def test_send_person_step_no_profiles_asks_name_directly() -> None:
     state = await _fsm()

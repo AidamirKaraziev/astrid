@@ -161,10 +161,13 @@ def _subject_keyboard(
         [InlineKeyboardButton(text="🙋 Разбор для меня", callback_data=CB_NATAL_SUBJECT_SELF)],
         [InlineKeyboardButton(text="➕ Новый человек", callback_data=CB_NATAL_SUBJECT_NEW)],
     ]
-    visible = profiles if show_all else profiles[:_NATAL_PICKER_LIMIT]
+    # Сворачиваем, только если за кнопкой прячется больше одного человека:
+    # ряд «Показать всех» ради одной строки не экономит место.
+    collapsed = not show_all and len(profiles) > _NATAL_PICKER_LIMIT + 1
+    visible = profiles[:_NATAL_PICKER_LIMIT] if collapsed else profiles
     picker = person_pick_keyboard(visible, callback_prefix=CB_NATAL_SUBJECT_PICK_PREFIX)
     rows.extend(picker.inline_keyboard)
-    if not show_all and len(profiles) > _NATAL_PICKER_LIMIT:
+    if collapsed:
         rows.append(
             [
                 InlineKeyboardButton(

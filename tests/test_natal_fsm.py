@@ -304,6 +304,15 @@ def test_subject_keyboard_collapses_long_list() -> None:
     assert CB_NATAL_SUBJECT_ALL not in full_cb
 
 
+def test_subject_keyboard_no_collapse_for_single_hidden() -> None:
+    # 7 человек при лимите 6 — показываем всех без кнопки «Показать всех»
+    owner = uuid4()
+    keyboard = _subject_keyboard([_natal_profile(owner, birth_time=None) for _ in range(7)])
+    callbacks = [b.callback_data for row in keyboard.inline_keyboard for b in row]
+    assert sum(1 for c in callbacks if c.startswith(CB_NATAL_SUBJECT_PICK_PREFIX)) == 7
+    assert CB_NATAL_SUBJECT_ALL not in callbacks
+
+
 @pytest.mark.anyio
 async def test_subject_new_starts_name_collection() -> None:
     state = await _fsm_context()
