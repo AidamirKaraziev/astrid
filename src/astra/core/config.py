@@ -112,6 +112,10 @@ class Settings(BaseSettings):
     sentry_release: str | None = None
     # Компонент в одном репо: api (FastAPI + polling) | worker (RabbitMQ consumer)
     sentry_service: str = "api"
+    # Heartbeat в Sentry Crons: замена uptime-монитору без статического IP.
+    # Слаг задаётся только на проде; пустой = выключено.
+    sentry_heartbeat_slug: str | None = None
+    sentry_heartbeat_interval_minutes: int = 5
 
     # Автозагрузка справочника GeoNames при старте, если таблица places пуста
     geonames_auto_import: bool = True

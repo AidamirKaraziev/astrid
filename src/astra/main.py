@@ -8,7 +8,7 @@ from astra.core.config import get_settings
 from astra.core.observability import Event, configure_observability, get_logger
 from astra.core.observability.middleware.http import HttpObservabilityMiddleware
 from astra.core.observability.tracing import instrument_fastapi_app, instrument_sqlalchemy_engine
-from astra.core.sentry import init_sentry
+from astra.core.sentry import init_sentry, run_heartbeat
 from astra.db.session import get_session_factory, init_engine
 from astra.places.geonames_import import ensure_places_catalog
 from astra.messaging.publisher import close_publisher, verify_rabbitmq
@@ -75,6 +75,10 @@ async def lifespan(app: FastAPI):
         notification_worker(bot_send_text, settings=settings),
         name="notification_worker",
     )
+    heartbeat_task = asyncio.create_task(
+        run_heartbeat(settings),
+        name="sentry_heartbeat",
+    )
 
     polling_task: asyncio.Task | None = None
     if settings.telegram_mode == "polling":
@@ -94,9 +98,10 @@ async def lifespan(app: FastAPI):
     yield
 
     worker_task.cancel()
+    heartbeat_task.cancel()
     if polling_task:
         polling_task.cancel()
-    tasks = [worker_task]
+    tasks = [worker_task, heartbeat_task]
     if polling_task:
         tasks.append(polling_task)
     for task in tasks:

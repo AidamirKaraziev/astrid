@@ -119,3 +119,4 @@ class Event(StrEnum):
     # Sentry
     SENTRY_ENABLED = "sentry.enabled"
     SENTRY_DISABLED = "sentry.disabled"
+    SENTRY_HEARTBEAT_STARTED = "sentry.heartbeat.started"

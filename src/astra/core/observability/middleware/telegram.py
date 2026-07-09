@@ -11,6 +11,7 @@ from aiogram.types import TelegramObject, Update
 from astra.core.observability.context import bound_context
 from astra.core.observability.events import Event
 from astra.core.observability.logging import get_logger
+from astra.core.sentry import set_sentry_user
 
 log = get_logger(__name__)
 
@@ -30,6 +31,7 @@ class TelegramObservabilityMiddleware(BaseMiddleware):
         context_kwargs: dict[str, Any] = {"correlation_id": correlation_id}
         if user is not None:
             context_kwargs["telegram_id"] = user.id
+        set_sentry_user(user.id if user else None)
 
         with bound_context(**context_kwargs):
             started = time.perf_counter()
