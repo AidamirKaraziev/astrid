@@ -92,7 +92,7 @@ def share_keyboard(share_url: str) -> InlineKeyboardMarkup:
                     url=share_url,
                 ),
             ],
-            [InlineKeyboardButton(text="🏠 Домой", callback_data="menu:home")],
+            [InlineKeyboardButton(text="🔙 Назад", callback_data="menu:home")],
         ],
     )
 
@@ -123,7 +123,7 @@ def profile_menu_keyboard() -> InlineKeyboardMarkup:
                     callback_data=CB_PROFILE_PEOPLE,
                 ),
             ],
-            [InlineKeyboardButton(text="🏠 Домой", callback_data="menu:home")],
+            [InlineKeyboardButton(text="🔙 Назад", callback_data="menu:home")],
         ],
     )
 
@@ -134,7 +134,7 @@ def compatibility_context_keyboard() -> InlineKeyboardMarkup:
             [InlineKeyboardButton(text="♥️ Любовь", callback_data=f"{CB_COMPAT_CONTEXT_PREFIX}love")],
             [InlineKeyboardButton(text="💼 Работа", callback_data=f"{CB_COMPAT_CONTEXT_PREFIX}work")],
             [InlineKeyboardButton(text="🤝 Дружба", callback_data=f"{CB_COMPAT_CONTEXT_PREFIX}friendship")],
-            [InlineKeyboardButton(text="🏠 Домой", callback_data="menu:home")],
+            [InlineKeyboardButton(text="🔙 Назад", callback_data="menu:home")],
         ],
     )
 
