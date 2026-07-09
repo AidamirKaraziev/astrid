@@ -41,10 +41,15 @@ def test_build_report_title() -> None:
 
 def _report_stub(
     *,
-    title: str = "Aidamir × анжела · 💑 Отношения",
+    title: str = "Aidamir × анжела · Отношения",
+    relationship_context: str = "love",
     llm_output: dict | None = None,
 ) -> SimpleNamespace:
-    return SimpleNamespace(title=title, llm_output=llm_output)
+    return SimpleNamespace(
+        title=title,
+        relationship_context=relationship_context,
+        llm_output=llm_output,
+    )
 
 
 def test_format_compatibility_pdf_caption_with_tldr() -> None:
@@ -55,18 +60,29 @@ def test_format_compatibility_pdf_caption_with_tldr() -> None:
     report = _report_stub(llm_output={"tldr": tldr})
     caption = format_compatibility_pdf_caption(report)
     assert caption.startswith(tldr)
-    assert caption.endswith("💕 Aidamir × анжела · 💑 Отношения")
+    assert caption.endswith("♥️ Aidamir × анжела · Отношения")
     assert "\n\n" in caption
 
 
 def test_format_compatibility_pdf_caption_without_llm_output() -> None:
     report = _report_stub()
-    assert format_compatibility_pdf_caption(report) == "💕 Aidamir × анжела · 💑 Отношения"
+    assert format_compatibility_pdf_caption(report) == "♥️ Aidamir × анжела · Отношения"
+
+
+def test_caption_context_emoji_no_hearts_for_work_and_friendship() -> None:
+    friendship = _report_stub(
+        title="Aidamir × Мурадин · Дружба",
+        relationship_context="friendship",
+    )
+    assert format_compatibility_pdf_caption(friendship) == "🤝 Aidamir × Мурадин · Дружба"
+
+    work = _report_stub(title="Aidamir × Катя · Работа", relationship_context="work")
+    assert format_compatibility_pdf_caption(work) == "💼 Aidamir × Катя · Работа"
 
 
 def test_format_compatibility_pdf_caption_truncates_long_tldr() -> None:
-    title = "A × B · 💑 Отношения"
-    footer = f"💕 {title}"
+    title = "A × B · Отношения"
+    footer = f"♥️ {title}"
     tldr = "а" * (_TELEGRAM_DOCUMENT_CAPTION_MAX - len(footer))
     report = _report_stub(title=title, llm_output={"tldr": tldr})
     caption = format_compatibility_pdf_caption(report)

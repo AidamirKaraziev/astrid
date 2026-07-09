@@ -25,6 +25,7 @@ from astra.astro.synastry import (
 from astra.compatibility import crud as compatibility_crud
 from astra.compatibility.enums import (
     COMPATIBILITY_IN_FLIGHT_STATUSES,
+    RELATIONSHIP_EMOJI,
     RELATIONSHIP_LABELS,
     PairMode,
     RelationshipContext,
@@ -162,9 +163,17 @@ def build_report_title(
 _TELEGRAM_DOCUMENT_CAPTION_MAX = 1024
 
 
+def compatibility_context_emoji(context: str) -> str:
+    """Тематическое эмодзи контекста; ✨ как fallback для неизвестных значений."""
+    try:
+        return RELATIONSHIP_EMOJI[RelationshipContext(context)]
+    except ValueError:
+        return "✨"
+
+
 def format_compatibility_pdf_caption(report: CompatibilityReport) -> str:
     """Caption к PDF: краткий итог LLM + заголовок пары."""
-    footer = f"💕 {report.title}"
+    footer = f"{compatibility_context_emoji(report.relationship_context)} {report.title}"
     tldr = _report_tldr(report)
     if not tldr:
         return footer

@@ -33,8 +33,8 @@ def test_build_pdf_download_filename_format() -> None:
     assert "Анж" in name
     assert "Отношения" in name
     assert "02.07.2026 16-19" in name
-    assert "💕" in name
-    assert "💑" in name
+    assert name.startswith("♥️")
+    assert "💕" not in name
 
 
 def test_build_pdf_download_filename_no_forbidden_chars() -> None:

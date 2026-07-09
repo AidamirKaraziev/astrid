@@ -30,6 +30,7 @@ from astra.compatibility import crud as compatibility_crud
 from astra.services.compatibility_service import (
     CompatibilityRequestStatus,
     FsmPersonData,
+    compatibility_context_emoji,
     create_report_from_fsm,
     delete_compatibility_report_for_user,
     request_compatibility_report,
@@ -647,7 +648,7 @@ def _report_status_label(report: CompatibilityReport) -> str:
 def _format_report_card_text(report: CompatibilityReport) -> str:
     created = report.created_at.strftime("%d.%m.%Y %H:%M") if report.created_at else "—"
     return (
-        f"💕 <b>{report.title}</b>\n\n"
+        f"{compatibility_context_emoji(report.relationship_context)} <b>{report.title}</b>\n\n"
         f"Статус: {_report_status_label(report)}\n"
         f"Создан: {created}"
     )

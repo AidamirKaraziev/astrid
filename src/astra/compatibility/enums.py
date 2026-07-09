@@ -30,29 +30,15 @@ COMPATIBILITY_IN_FLIGHT_STATUSES: frozenset[ReportStatus] = frozenset(
 )
 
 
+# Тематическое эмодзи контекста — префикс подписи PDF, имени файла и карточки разбора.
+RELATIONSHIP_EMOJI: dict[RelationshipContext, str] = {
+    RelationshipContext.LOVE: "♥️",
+    RelationshipContext.WORK: "💼",
+    RelationshipContext.FRIENDSHIP: "🤝",
+}
+
 RELATIONSHIP_LABELS: dict[RelationshipContext, str] = {
-    RelationshipContext.LOVE: "💑 Отношения",
-    RelationshipContext.WORK: "💼 Работа",
-    RelationshipContext.FRIENDSHIP: "🤝 Дружба",
-}
-
-PAIR_MODE_LABELS: dict[PairMode, str] = {
-    PairMode.ME_PARTNER: "Моя совместимость",
-    PairMode.TWO_PEOPLE: "Другая пара",
-}
-
-# Эмодзи кнопок шага «Кто участвует в разборе?» зависят от выбранного контекста.
-PAIR_MODE_EMOJI: dict[RelationshipContext, dict[PairMode, str]] = {
-    RelationshipContext.LOVE: {
-        PairMode.ME_PARTNER: "💞",
-        PairMode.TWO_PEOPLE: "👥",
-    },
-    RelationshipContext.WORK: {
-        PairMode.ME_PARTNER: "👤",
-        PairMode.TWO_PEOPLE: "👥",
-    },
-    RelationshipContext.FRIENDSHIP: {
-        PairMode.ME_PARTNER: "🧍‍♀️",
-        PairMode.TWO_PEOPLE: "👭",
-    },
+    RelationshipContext.LOVE: "Отношения",
+    RelationshipContext.WORK: "Работа",
+    RelationshipContext.FRIENDSHIP: "Дружба",
 }

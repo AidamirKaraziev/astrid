@@ -9,7 +9,11 @@ from datetime import datetime
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
-from astra.compatibility.enums import RELATIONSHIP_LABELS, RelationshipContext
+from astra.compatibility.enums import (
+    RELATIONSHIP_EMOJI,
+    RELATIONSHIP_LABELS,
+    RelationshipContext,
+)
 from astra.compatibility.models import CompatibilityReport
 
 _FORBIDDEN_CHARS = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
@@ -49,11 +53,12 @@ def build_pdf_download_filename(
     created_at: datetime,
     timezone: str = "Europe/Moscow",
 ) -> str:
-    """Имя файла для скачивания: «💕 Имя × Имя · 💑 Отношения · 02.07.2026 16-19»."""
+    """Имя файла для скачивания: «♥️ Имя × Имя · Отношения · 02.07.2026 16-19»."""
+    emoji = RELATIONSHIP_EMOJI.get(relationship_context, "✨")
     ctx_label = RELATIONSHIP_LABELS.get(relationship_context, str(relationship_context))
     local_time = created_at.astimezone(ZoneInfo(timezone))
     ts = local_time.strftime("%d.%m.%Y %H-%M")
-    raw = f"💕 {person_a_name.strip()} × {person_b_name.strip()} · {ctx_label} · {ts}"
+    raw = f"{emoji} {person_a_name.strip()} × {person_b_name.strip()} · {ctx_label} · {ts}"
     stem = sanitize_pdf_filename_stem(raw)
     return f"{stem}.pdf"
 
