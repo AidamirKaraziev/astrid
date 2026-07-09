@@ -2,8 +2,9 @@
 
 Ловит свободный текст (когда пользователь НЕ в FSM-флоу и не нажал кнопку) и
 ведёт разговор через Astrid. Когда данных достаточно (`ready_to_route`), мягко
-передаёт управление реальному продукту — кнопкой, а не автопрыжком, чтобы
-пользователь оставался хозяином и мы не ломали существующие FSM-хендлеры.
+передаёт управление реальному продукту — вызывает ту же функцию входа, что и
+кнопка меню, с настоящим сообщением пользователя. Существующие FSM-хендлеры не
+переписываются: мы просто зовём их точку входа.
 
 Включается флагом `ai_chat_enabled` (по умолчанию выкл). Роутер регистрируется
 ПОСЛЕДНИМ, поэтому кнопки меню и активные FSM перехватываются раньше — конфликтов нет.
@@ -11,59 +12,93 @@
 
 from __future__ import annotations
 
+from collections.abc import Awaitable, Callable
+
 from aiogram import F, Router
-from aiogram.filters import StateFilter
 from aiogram.fsm.context import FSMContext
-from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
+from aiogram.types import KeyboardButton, Message, ReplyKeyboardMarkup
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from astra.core.observability import get_logger
 from astra.telegram.ai_chat.agent import run_astrid
-from astra.telegram.ai_chat.intents import AstridReply, Intent
+from astra.telegram.ai_chat.intents import Intent
+from astra.telegram.button_texts import BTN_ASK_ASTRID, BTN_BACK_MENU
+from astra.telegram.states import AiChatStates
 from astra.users import crud as users_crud
 
 log = get_logger(__name__)
 
 router = Router(name="ai_chat")
 
-# Куда ведёт кнопка «продолжить» для каждого продукта: callback_data существующих флоу.
-_ROUTE_CALLBACK: dict[Intent, str] = {
-    Intent.compatibility: "compatibility:start",   # см. handlers/compatibility.py
-    Intent.natal: "natal:start",                   # см. handlers/natal.py
-    Intent.daily_prediction: "menu:prediction",
-    Intent.tarot: "menu:tarot",
-    Intent.edit_profile: "profile:open",
-    Intent.invite: "menu:invite",
-}
-
-_ROUTE_LABEL: dict[Intent, str] = {
-    Intent.compatibility: "💕 Запустить совместимость",
-    Intent.natal: "🌌 Собрать натальную карту",
-    Intent.daily_prediction: "🔮 Показать предсказание",
-    Intent.tarot: "🔮 Разложить карты",
-    Intent.edit_profile: "✨ Открыть профиль",
-    Intent.invite: "🎁 Пригласить друга",
-}
-
 _HISTORY_KEY = "ai_chat_history"
 
+_GREETING = (
+    "Это я, Astrid ✨ Пиши мне обычным текстом — что хочешь узнать или сделать.\n\n"
+    "Например: «проверь совместимость с парнем, он родился 3 марта 92-го в Алматы» "
+    "или «что там у меня по гороскопу на сегодня».\n\n"
+    "Чтобы выйти — жми «🔙 Назад»."
+)
 
-def _route_keyboard(reply: AstridReply) -> InlineKeyboardMarkup | None:
-    """Кнопка перехода в реальный флоу — показываем, когда Astrid готова роутить."""
-    if not reply.ready_to_route or reply.intent == Intent.smalltalk:
-        return None
-    cb = _ROUTE_CALLBACK.get(reply.intent)
-    label = _ROUTE_LABEL.get(reply.intent)
-    if not cb or not label:
-        return None
-    return InlineKeyboardMarkup(
-        inline_keyboard=[[InlineKeyboardButton(text=label, callback_data=cb)]]
+
+def _ai_chat_keyboard() -> ReplyKeyboardMarkup:
+    """Клавиатура режима чата: только выход, всё остальное — текстом."""
+    return ReplyKeyboardMarkup(
+        keyboard=[[KeyboardButton(text=BTN_BACK_MENU)]],
+        resize_keyboard=True,
     )
 
+# Тип адаптера: приводим разные сигнатуры точек входа к (message, state, session).
+_FlowEntry = Callable[[Message, FSMContext, AsyncSession], Awaitable[None]]
 
-@router.message(StateFilter(None), F.text & ~F.text.startswith("/"))
+
+def _flow_dispatch() -> dict[Intent, _FlowEntry]:
+    """Intent → реальная точка входа существующего флоу.
+
+    Импорт ленивый: тянем хендлеры только при первом роутинге, без циклов на старте.
+    Сигнатуры унифицируем адаптерами (не у всех входов есть state/session).
+    """
+    from astra.telegram.handlers.catalog import open_tarot_menu
+    from astra.telegram.handlers.compatibility import start_compatibility
+    from astra.telegram.handlers.menu import invite_friend, show_profile, today_prediction
+    from astra.telegram.handlers.natal import start_natal
+
+    async def _prediction(m: Message, s: FSMContext, db: AsyncSession) -> None:
+        await s.clear()  # one-shot действие: выходим из режима чата
+        await today_prediction(m, db)
+
+    async def _tarot(m: Message, s: FSMContext, _db: AsyncSession) -> None:
+        await s.clear()
+        await open_tarot_menu(m)
+
+    async def _profile(m: Message, s: FSMContext, db: AsyncSession) -> None:
+        await s.clear()
+        await show_profile(m, db)
+
+    async def _invite(m: Message, s: FSMContext, db: AsyncSession) -> None:
+        await s.clear()
+        await invite_friend(m, db)
+
+    return {
+        Intent.compatibility: start_compatibility,
+        Intent.natal: start_natal,
+        Intent.daily_prediction: _prediction,
+        Intent.tarot: _tarot,
+        Intent.edit_profile: _profile,
+        Intent.invite: _invite,
+    }
+
+
+@router.message(F.text == BTN_ASK_ASTRID)
+async def ai_chat_enter(message: Message, state: FSMContext) -> None:
+    """Вход в режим чата по кнопке «💬 Написать Astrid»."""
+    await state.set_state(AiChatStates.chatting)
+    await state.update_data({_HISTORY_KEY: []})
+    await message.answer(_GREETING, reply_markup=_ai_chat_keyboard())
+
+
+@router.message(AiChatStates.chatting, F.text & ~F.text.startswith("/"))
 async def ai_chat_turn(message: Message, state: FSMContext, session: AsyncSession) -> None:
-    """Одна реплика диалога с Astrid (только вне FSM, только свободный текст)."""
+    """Одна реплика диалога с Astrid (только внутри режима чата, свободный текст)."""
     user_text = (message.text or "").strip()
     if not user_text:
         return
@@ -81,26 +116,23 @@ async def ai_chat_turn(message: Message, state: FSMContext, session: AsyncSessio
     await message.chat.do("typing")
     reply = await run_astrid(history, user_text, user_name=user_name)
 
-    # Сохраняем диалог в FSM-хранилище (Redis) — state как память разговора.
-    history.append({"role": "user", "content": user_text})
-    history.append({"role": "assistant", "content": reply.reply})
-    await state.update_data({_HISTORY_KEY: history[-24:]})
-
     log.info(
         "ai_chat.turn",
         intent=reply.intent.value,
         ready=reply.ready_to_route,
         missing=reply.missing,
     )
-    await message.answer(reply.reply, reply_markup=_route_keyboard(reply))
 
+    # Сначала Astrid отвечает словами...
+    await message.answer(reply.reply)
 
-@router.callback_query(F.data == "ai_chat:reset")
-async def ai_chat_reset(callback: CallbackQuery, state: FSMContext) -> None:
-    """Сбросить память разговора (кнопка «начать заново»)."""
-    data = await state.get_data()
-    data.pop(_HISTORY_KEY, None)
-    await state.set_data(data)
-    if callback.message:
-        await callback.message.answer("Начнём с чистого листа ✨ О чём поговорим?")
-    await callback.answer()
+    # ...потом, если данных хватает — передаём управление реальному флоу.
+    flow = _flow_dispatch().get(reply.intent) if reply.ready_to_route else None
+    if flow is not None:
+        await flow(message, state, session)
+        return
+
+    # Иначе продолжаем разговор: копим историю в FSM-хранилище (Redis) как память.
+    history.append({"role": "user", "content": user_text})
+    history.append({"role": "assistant", "content": reply.reply})
+    await state.update_data({_HISTORY_KEY: history[-24:]})

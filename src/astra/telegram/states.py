@@ -1,6 +1,12 @@
 from aiogram.fsm.state import State, StatesGroup
 
 
+class AiChatStates(StatesGroup):
+    """Режим свободного диалога с Astrid (AI-чат)."""
+
+    chatting = State()
+
+
 class OnboardingStates(StatesGroup):
     welcome = State()
     gender = State()

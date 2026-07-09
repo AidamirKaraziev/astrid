@@ -7,6 +7,7 @@ BTN_BACK_MENU = "🔙 Назад"
 # Старый текст кнопки: у части пользователей клавиатура закэширована клиентом.
 BTN_BACK_MENU_LEGACY = "🔙 В меню"
 
+BTN_ASK_ASTRID = "💬 Написать Astrid"
 BTN_COMPATIBILITY = "💕 Совместимость"
 BTN_ASK_STARS = "🌟 Спросить звёзды"
 BTN_NATAL = "🌌 Разбор натала"

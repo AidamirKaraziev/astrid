@@ -2,6 +2,7 @@ from aiogram.enums import ButtonStyle
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, KeyboardButton, ReplyKeyboardMarkup
 
 from astra.telegram.button_texts import (
+    BTN_ASK_ASTRID,
     BTN_ASK_STARS,
     BTN_BACK_MENU,
     BTN_COMPATIBILITY,
@@ -34,6 +35,7 @@ from astra.telegram.button_texts import (
 def main_menu_keyboard() -> ReplyKeyboardMarkup:
     return ReplyKeyboardMarkup(
         keyboard=[
+            [KeyboardButton(text=BTN_ASK_ASTRID)],
             [KeyboardButton(text=BTN_PREDICTION_TODAY)],
             [
                 KeyboardButton(text=BTN_COMPATIBILITY),
