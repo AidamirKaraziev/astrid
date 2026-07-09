@@ -23,6 +23,7 @@ from astra.telegram.handlers.compatibility import (
     _send_person_step,
     cb_choose_context,
     cb_compat_new_person,
+    cb_compat_people_all,
     cb_compat_self_first,
 )
 from astra.telegram.states import CompatibilityStates
@@ -185,6 +186,62 @@ async def test_self_first_switches_to_me_partner_and_asks_partner() -> None:
     assert data["collecting"] == "person_b"
     text = callback.message.answer.await_args.args[0]
     assert "партнёр" in text.lower()
+
+
+@pytest.mark.asyncio
+async def test_show_all_keeps_self_button_on_first_person() -> None:
+    # разворот списка на первом участнике не должен терять «🙋 Я»
+    state = await _fsm()
+    await state.set_state(CompatibilityStates.collect_name)
+    await state.update_data(collecting="person_a")
+    callback = _cb(CB_COMPAT_PEOPLE_ALL)
+    session = AsyncMock()
+    user = MagicMock(id=uuid4())
+    profiles = [_profile() for _ in range(9)]
+
+    with (
+        patch(
+            "astra.telegram.handlers.compatibility.users_crud.get_user_by_telegram_id",
+            new=AsyncMock(return_value=user),
+        ),
+        patch(
+            "astra.telegram.handlers.compatibility.compatibility_crud.list_natal_profiles",
+            new=AsyncMock(return_value=profiles),
+        ),
+    ):
+        await cb_compat_people_all(callback, state, session)
+
+    kb = callback.message.edit_reply_markup.await_args.kwargs["reply_markup"]
+    callbacks = [b.callback_data for row in kb.inline_keyboard for b in row]
+    assert CB_COMPAT_SELF_FIRST in callbacks
+    assert CB_COMPAT_NEW_PERSON in callbacks
+    assert sum(1 for c in callbacks if c.startswith(CB_PERSON_PICK_PREFIX)) == 9
+
+
+@pytest.mark.asyncio
+async def test_show_all_no_self_button_on_second_person() -> None:
+    state = await _fsm()
+    await state.set_state(CompatibilityStates.collect_name)
+    await state.update_data(collecting="person_b")
+    callback = _cb(CB_COMPAT_PEOPLE_ALL)
+    session = AsyncMock()
+    user = MagicMock(id=uuid4())
+
+    with (
+        patch(
+            "astra.telegram.handlers.compatibility.users_crud.get_user_by_telegram_id",
+            new=AsyncMock(return_value=user),
+        ),
+        patch(
+            "astra.telegram.handlers.compatibility.compatibility_crud.list_natal_profiles",
+            new=AsyncMock(return_value=[_profile() for _ in range(9)]),
+        ),
+    ):
+        await cb_compat_people_all(callback, state, session)
+
+    kb = callback.message.edit_reply_markup.await_args.kwargs["reply_markup"]
+    callbacks = [b.callback_data for row in kb.inline_keyboard for b in row]
+    assert CB_COMPAT_SELF_FIRST not in callbacks
 
 
 @pytest.mark.asyncio

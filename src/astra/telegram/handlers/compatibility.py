@@ -174,7 +174,7 @@ def _compat_person_keyboard(
         rows.append(
             [
                 InlineKeyboardButton(
-                    text=f"⬇️ Показать всех ({len(profiles)})",
+                    text=f"🔛 Показать всех ({len(profiles)})",
                     callback_data=CB_COMPAT_PEOPLE_ALL,
                 ),
             ],
@@ -339,8 +339,11 @@ async def cb_compat_people_all(
         await callback.answer()
         return
     profiles = await _selectable_profiles(session, state, user.id)
+    data = await state.get_data()
+    # «Я» доступен только на первом участнике — сохраняем кнопку при развороте списка.
+    with_self = data.get("collecting", COLLECTING_PERSON_B) == COLLECTING_PERSON_A
     await callback.message.edit_reply_markup(
-        reply_markup=_compat_person_keyboard(profiles, show_all=True),
+        reply_markup=_compat_person_keyboard(profiles, show_all=True, with_self=with_self),
     )
     await callback.answer()
 

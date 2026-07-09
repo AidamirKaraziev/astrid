@@ -168,7 +168,7 @@ def _subject_keyboard(
         rows.append(
             [
                 InlineKeyboardButton(
-                    text=f"⬇️ Показать всех ({len(profiles)})",
+                    text=f"🔛 Показать всех ({len(profiles)})",
                     callback_data=CB_NATAL_SUBJECT_ALL,
                 ),
             ],
