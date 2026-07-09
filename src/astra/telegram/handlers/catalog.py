@@ -5,6 +5,7 @@ from aiogram.types import CallbackQuery, Message
 from astra.core.config import get_settings
 from astra.telegram.button_texts import (
     BTN_BACK_MENU,
+    BTN_BACK_MENU_LEGACY,
     BTN_COMPATIBILITY,
     BTN_NATAL,
     BTN_TAROT,
@@ -46,7 +47,7 @@ async def show_help(message: Message) -> None:
     )
 
 
-@router.message(F.text == BTN_BACK_MENU)
+@router.message(F.text.in_({BTN_BACK_MENU, BTN_BACK_MENU_LEGACY}))
 async def back_to_main_menu(message: Message, state: FSMContext) -> None:
     await state.clear()
     await message.answer("Главное меню ✨", reply_markup=main_menu_keyboard())

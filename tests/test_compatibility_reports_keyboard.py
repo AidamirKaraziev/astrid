@@ -22,7 +22,7 @@ def test_compatibility_report_card_keyboard() -> None:
     assert keyboard.inline_keyboard[0][0].callback_data == f"compat:pdf:{report_id}"
     assert keyboard.inline_keyboard[1][0].text == "🗑 Удалить"
     assert keyboard.inline_keyboard[1][0].callback_data == f"compat:del:{report_id}"
-    assert keyboard.inline_keyboard[2][0].text == "◀️ К списку"
+    assert keyboard.inline_keyboard[2][0].text == "🔙 Назад"
     assert keyboard.inline_keyboard[2][0].callback_data == "compat:reports:list"
 
 

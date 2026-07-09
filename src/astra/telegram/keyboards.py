@@ -92,7 +92,7 @@ def share_keyboard(share_url: str) -> InlineKeyboardMarkup:
                     url=share_url,
                 ),
             ],
-            [InlineKeyboardButton(text="🏠 В меню", callback_data="menu:home")],
+            [InlineKeyboardButton(text="🏠 Домой", callback_data="menu:home")],
         ],
     )
 
@@ -123,7 +123,7 @@ def profile_menu_keyboard() -> InlineKeyboardMarkup:
                     callback_data=CB_PROFILE_PEOPLE,
                 ),
             ],
-            [InlineKeyboardButton(text="◀️ Назад", callback_data="menu:home")],
+            [InlineKeyboardButton(text="🏠 Домой", callback_data="menu:home")],
         ],
     )
 
@@ -134,7 +134,7 @@ def compatibility_context_keyboard() -> InlineKeyboardMarkup:
             [InlineKeyboardButton(text="♥️ Любовь", callback_data=f"{CB_COMPAT_CONTEXT_PREFIX}love")],
             [InlineKeyboardButton(text="💼 Работа", callback_data=f"{CB_COMPAT_CONTEXT_PREFIX}work")],
             [InlineKeyboardButton(text="🤝 Дружба", callback_data=f"{CB_COMPAT_CONTEXT_PREFIX}friendship")],
-            [InlineKeyboardButton(text="🔙 В меню", callback_data="menu:home")],
+            [InlineKeyboardButton(text="🏠 Домой", callback_data="menu:home")],
         ],
     )
 
@@ -153,7 +153,7 @@ def compatibility_reports_keyboard(report_buttons: list[tuple[str, str]]) -> Inl
         [InlineKeyboardButton(text=label[:60], callback_data=f"{CB_COMPAT_REPORT_PREFIX}{report_id}")]
         for label, report_id in report_buttons
     ]
-    rows.append([InlineKeyboardButton(text="◀️ Назад", callback_data="profile:back")])
+    rows.append([InlineKeyboardButton(text="🔙 Назад", callback_data="profile:back")])
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
@@ -174,7 +174,7 @@ def compatibility_report_card_keyboard(report_id: str) -> InlineKeyboardMarkup:
             ],
             [
                 InlineKeyboardButton(
-                    text="◀️ К списку",
+                    text="🔙 Назад",
                     callback_data=CB_COMPAT_REPORTS_LIST,
                 ),
             ],

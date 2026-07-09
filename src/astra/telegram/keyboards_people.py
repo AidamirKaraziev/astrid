@@ -62,7 +62,7 @@ def people_list_keyboard(profiles: list[NatalProfile]) -> InlineKeyboardMarkup:
         ]
         for profile in profiles
     ]
-    rows.append([InlineKeyboardButton(text="◀️ Назад", callback_data="profile:back")])
+    rows.append([InlineKeyboardButton(text="🔙 Назад", callback_data="profile:back")])
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
@@ -101,7 +101,7 @@ def people_card_keyboard(profile_id: str) -> InlineKeyboardMarkup:
                     callback_data=f"{CB_PEOPLE_DELETE_PREFIX}{profile_id}",
                 ),
             ],
-            [InlineKeyboardButton(text="◀️ К списку", callback_data=CB_PEOPLE_LIST)],
+            [InlineKeyboardButton(text="🔙 Назад", callback_data=CB_PEOPLE_LIST)],
         ],
     )
 
