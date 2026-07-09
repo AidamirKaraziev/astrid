@@ -15,9 +15,9 @@
               "state": {
                 "file": "план по проекту.canvas",
                 "viewState": {
-                  "x": -1026.4627218795204,
-                  "y": -163.05261737877095,
-                  "zoom": -0.6689704646247951
+                  "x": -838.6647967097668,
+                  "y": 996.5484995615578,
+                  "zoom": 0.5681827332995008
                 }
               },
               "icon": "lucide-layout-dashboard",
@@ -77,12 +77,12 @@
               "title": "Закладки"
             }
           }
-        ]
+        ],
+        "currentTab": 1
       }
     ],
     "direction": "horizontal",
-    "width": 200,
-    "collapsed": true
+    "width": 200
   },
   "right": {
     "id": "e72978c238ccc726",
@@ -189,10 +189,12 @@
   },
   "active": "9f4845838f010fec",
   "lastOpenFiles": [
+    "knowledge/debugging/deadtiger после ребута сам поднимается через несколько минут не паниковать.md",
+    "sessions/2026-05-31 Docker mihomo и Telegram на домашнем сервере.md",
+    "план по проекту.canvas",
     "knowledge/decisions/локальная LLM Ollama удалена весь daily на DeepSeek.md",
     "00-home/index.md",
     "knowledge/business/продукт Astra telegram предсказания RU аудитория.md",
-    "план по проекту.canvas",
     "knowledge/debugging/удаление пользователя из БД не проверено перед тестом is_new_user.md",
     "knowledge/patterns/кэш file_id вместо повторной заливки медиа в Telegram.md",
     "sessions/2026-07-06 приветственное видео Astrid для новых пользователей.md",

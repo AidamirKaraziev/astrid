@@ -10,7 +10,13 @@ from astra.core.observability import Event, get_logger
 from aiogram import F, Router
 from aiogram.filters import StateFilter
 from aiogram.fsm.context import FSMContext
-from aiogram.types import CallbackQuery, Message, ReplyKeyboardRemove
+from aiogram.types import (
+    CallbackQuery,
+    InlineKeyboardButton,
+    InlineKeyboardMarkup,
+    Message,
+    ReplyKeyboardRemove,
+)
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from astra.compatibility.enums import (
@@ -41,13 +47,15 @@ from astra.telegram.button_texts import (
     CB_COMPAT_CANCEL,
     CB_COMPAT_CONFIRM,
     CB_COMPAT_CONTEXT_PREFIX,
-    CB_COMPAT_MODE_PREFIX,
     CB_COMPAT_REPORT_PREFIX,
     CB_COMPAT_REPORT_PDF_PREFIX,
     CB_COMPAT_REPORTS_LIST,
     CB_COMPAT_DELETE_PREFIX,
     CB_COMPAT_DELETE_CONFIRM_PREFIX,
     CB_COMPAT_DELETE_CANCEL_PREFIX,
+    CB_COMPAT_NEW_PERSON,
+    CB_COMPAT_PEOPLE_ALL,
+    CB_COMPAT_SELF_FIRST,
     CB_PERSON_PICK_PREFIX,
     CB_PROFILE_REPORTS,
     GENDER_REPLY_BUTTONS,
@@ -60,7 +68,6 @@ from astra.telegram.keyboards import (
     compatibility_confirm_keyboard,
     compatibility_context_keyboard,
     compatibility_delete_confirm_keyboard,
-    compatibility_pair_mode_keyboard,
     compatibility_report_card_keyboard,
     compatibility_reports_keyboard,
     gender_keyboard,
@@ -112,61 +119,101 @@ async def start_compatibility(message: Message, state: FSMContext, session: Asyn
 
 
 @router.callback_query(F.data.startswith(CB_COMPAT_CONTEXT_PREFIX))
-async def cb_choose_context(callback: CallbackQuery, state: FSMContext) -> None:
-    if callback.message is None or callback.data is None:
+async def cb_choose_context(
+    callback: CallbackQuery,
+    state: FSMContext,
+    session: AsyncSession,
+) -> None:
+    if callback.message is None or callback.data is None or callback.from_user is None:
         await callback.answer()
         return
     value = callback.data.removeprefix(CB_COMPAT_CONTEXT_PREFIX)
-    if value == "back":
-        await state.set_state(CompatibilityStates.choose_context)
-        await callback.message.edit_text(
-            "💕 <b>Совместимость</b>\n\nВыбери контекст разбора:",
-            parse_mode="HTML",
-            reply_markup=compatibility_context_keyboard(),
-        )
-        await callback.answer()
-        return
-
     if value not in {c.value for c in RelationshipContext}:
         await callback.answer("Неизвестный контекст", show_alert=True)
         return
 
-    await state.update_data(relationship_context=value)
-    await state.set_state(CompatibilityStates.choose_pair_mode)
-    await callback.message.edit_text(
-        "Кто участвует в разборе?",
-        reply_markup=compatibility_pair_mode_keyboard(RelationshipContext(value)),
+    # По умолчанию — «другая пара»; выбор «🙋 Я» первым переключит на «мою совместимость».
+    await state.update_data(
+        relationship_context=value,
+        pair_mode=PairMode.TWO_PEOPLE.value,
+        collecting=COLLECTING_PERSON_A,
+    )
+    await _send_person_step(
+        callback.message,
+        state,
+        session,
+        actor_telegram_id=callback.from_user.id,
+        heading="👥 Кто <b>первый человек</b>?",
+        name_prompt="Как зовут <b>первого человека</b>?",
+        with_self=True,
     )
     await callback.answer()
 
 
 _PROFILE_PICKER_LIMIT = 6
+_NAME_PROMPT_KEY = "person_step_name_prompt"
 
 
-async def _send_profile_picker(
-    message: Message,
-    state: FSMContext,
-    session: AsyncSession,
-    actor_telegram_id: int,
-) -> None:
-    """Показать сохранённые профили, если есть что подставить."""
-    user = await users_crud.get_user_by_telegram_id(session, actor_telegram_id)
-    if user is None:
-        return
-    profiles = await compatibility_crud.list_natal_profiles(
-        session,
-        user.id,
-        limit=_PROFILE_PICKER_LIMIT,
+def _compat_person_keyboard(
+    profiles: list,
+    *,
+    show_all: bool = False,
+    with_self: bool = False,
+) -> InlineKeyboardMarkup:
+    rows: list[list[InlineKeyboardButton]] = []
+    if with_self:
+        rows.append([InlineKeyboardButton(text="🙋 Я", callback_data=CB_COMPAT_SELF_FIRST)])
+    rows.append(
+        [InlineKeyboardButton(text="➕ Новый человек", callback_data=CB_COMPAT_NEW_PERSON)],
     )
+    visible = profiles if show_all else profiles[:_PROFILE_PICKER_LIMIT]
+    picker = person_pick_keyboard(visible)
+    rows.extend(picker.inline_keyboard)
+    if not show_all and len(profiles) > _PROFILE_PICKER_LIMIT:
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    text=f"⬇️ Показать всех ({len(profiles)})",
+                    callback_data=CB_COMPAT_PEOPLE_ALL,
+                ),
+            ],
+        )
+    rows.append([InlineKeyboardButton(text="Отмена", callback_data=CB_COMPAT_CANCEL)])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+async def _selectable_profiles(session: AsyncSession, state: FSMContext, user_id: UUID) -> list:
+    profiles = await compatibility_crud.list_natal_profiles(session, user_id)
     data = await state.get_data()
     picked_a = data.get("person_a_picked_profile_id")
     if picked_a:
         profiles = [p for p in profiles if str(p.id) != str(picked_a)]
-    if not profiles:
+    return profiles
+
+
+async def _send_person_step(
+    message: Message,
+    state: FSMContext,
+    session: AsyncSession,
+    *,
+    actor_telegram_id: int,
+    heading: str,
+    name_prompt: str,
+    with_self: bool = False,
+) -> None:
+    """Единый экран выбора человека: сохранённые + «Новый человек» (+ «Я»), иначе сразу ввод имени."""
+    await state.set_state(CompatibilityStates.collect_name)
+    await state.update_data(**{_NAME_PROMPT_KEY: name_prompt})
+    user = await users_crud.get_user_by_telegram_id(session, actor_telegram_id)
+    profiles = await _selectable_profiles(session, state, user.id) if user else []
+    # На первом участнике экран показываем всегда — там есть «Я», даже без сохранённых.
+    if not profiles and not with_self:
+        await message.answer(name_prompt, parse_mode="HTML", reply_markup=ReplyKeyboardRemove())
         return
     await message.answer(
-        "Или выбери из сохранённых 👇",
-        reply_markup=person_pick_keyboard(profiles),
+        heading,
+        parse_mode="HTML",
+        reply_markup=_compat_person_keyboard(profiles, with_self=with_self),
     )
 
 
@@ -217,50 +264,83 @@ async def _finish_person_collection(
     pair_mode = data.get("pair_mode", PairMode.ME_PARTNER)
     if pair_mode == PairMode.TWO_PEOPLE and collecting == COLLECTING_PERSON_A:
         await state.update_data(collecting=COLLECTING_PERSON_B)
-        await state.set_state(CompatibilityStates.collect_name)
-        await message.answer(
-            "Теперь данные <b>второго человека</b>.\n\nКак его/её зовут?",
-            parse_mode="HTML",
-            reply_markup=ReplyKeyboardRemove(),
+        await _send_person_step(
+            message,
+            state,
+            session,
+            actor_telegram_id=actor_telegram_id,
+            heading="👥 Кто <b>второй человек</b>?",
+            name_prompt="Данные <b>второго человека</b>.\n\nКак его/её зовут?",
         )
-        await _send_profile_picker(message, state, session, actor_telegram_id)
         return
     await _show_confirm(message, state)
 
 
-@router.callback_query(F.data.startswith(CB_COMPAT_MODE_PREFIX))
-async def cb_choose_pair_mode(
+@router.callback_query(
+    StateFilter(CompatibilityStates.collect_name),
+    F.data == CB_COMPAT_SELF_FIRST,
+)
+async def cb_compat_self_first(
     callback: CallbackQuery,
     state: FSMContext,
     session: AsyncSession,
 ) -> None:
-    if callback.message is None or callback.data is None or callback.from_user is None:
+    """Первый участник — сам пользователь: это «моя совместимость», дальше только партнёр."""
+    if callback.message is None or callback.from_user is None:
         await callback.answer()
         return
-    value = callback.data.removeprefix(CB_COMPAT_MODE_PREFIX)
-    if value not in {m.value for m in PairMode}:
-        await callback.answer("Неизвестный режим", show_alert=True)
-        return
-
-    await state.update_data(pair_mode=value)
-    if value == PairMode.ME_PARTNER:
-        await state.update_data(collecting=COLLECTING_PERSON_B)
-        await state.set_state(CompatibilityStates.collect_name)
-        await callback.message.answer(
+    await state.update_data(
+        pair_mode=PairMode.ME_PARTNER.value,
+        collecting=COLLECTING_PERSON_B,
+    )
+    await _send_person_step(
+        callback.message,
+        state,
+        session,
+        actor_telegram_id=callback.from_user.id,
+        heading="Данные о <b>тебе</b> возьму из профиля.\n\n👥 Кто <b>партнёр</b>?",
+        name_prompt=(
             "Данные о <b>тебе</b> возьму из профиля.\n\n"
-            "Как зовут <b>партнёра</b>?",
-            parse_mode="HTML",
-            reply_markup=ReplyKeyboardRemove(),
-        )
-    else:
-        await state.update_data(collecting=COLLECTING_PERSON_A)
-        await state.set_state(CompatibilityStates.collect_name)
-        await callback.message.answer(
-            "Как зовут <b>первого человека</b>?",
-            parse_mode="HTML",
-            reply_markup=ReplyKeyboardRemove(),
-        )
-    await _send_profile_picker(callback.message, state, session, callback.from_user.id)
+            "Как зовут <b>партнёра</b>?"
+        ),
+    )
+    await callback.answer()
+
+
+@router.callback_query(
+    StateFilter(CompatibilityStates.collect_name),
+    F.data == CB_COMPAT_NEW_PERSON,
+)
+async def cb_compat_new_person(callback: CallbackQuery, state: FSMContext) -> None:
+    if callback.message is None:
+        await callback.answer()
+        return
+    data = await state.get_data()
+    prompt = str(data.get(_NAME_PROMPT_KEY) or "Как зовут человека?")
+    await callback.message.answer(prompt, parse_mode="HTML", reply_markup=ReplyKeyboardRemove())
+    await callback.answer()
+
+
+@router.callback_query(
+    StateFilter(CompatibilityStates.collect_name),
+    F.data == CB_COMPAT_PEOPLE_ALL,
+)
+async def cb_compat_people_all(
+    callback: CallbackQuery,
+    state: FSMContext,
+    session: AsyncSession,
+) -> None:
+    if callback.message is None or callback.from_user is None:
+        await callback.answer()
+        return
+    user = await users_crud.get_user_by_telegram_id(session, callback.from_user.id)
+    if user is None:
+        await callback.answer()
+        return
+    profiles = await _selectable_profiles(session, state, user.id)
+    await callback.message.edit_reply_markup(
+        reply_markup=_compat_person_keyboard(profiles, show_all=True),
+    )
     await callback.answer()
 
 

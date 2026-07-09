@@ -1,7 +1,6 @@
 from aiogram.enums import ButtonStyle
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, KeyboardButton, ReplyKeyboardMarkup
 
-from astra.compatibility.enums import PAIR_MODE_EMOJI, PAIR_MODE_LABELS, PairMode, RelationshipContext
 from astra.telegram.button_texts import (
     BTN_ASK_STARS,
     BTN_BACK_MENU,
@@ -20,7 +19,6 @@ from astra.telegram.button_texts import (
     CB_COMPAT_CANCEL,
     CB_COMPAT_CONFIRM,
     CB_COMPAT_CONTEXT_PREFIX,
-    CB_COMPAT_MODE_PREFIX,
     CB_COMPAT_REPORT_PREFIX,
     CB_COMPAT_REPORT_PDF_PREFIX,
     CB_COMPAT_REPORTS_LIST,
@@ -137,23 +135,6 @@ def compatibility_context_keyboard() -> InlineKeyboardMarkup:
             [InlineKeyboardButton(text="💼 Работа", callback_data=f"{CB_COMPAT_CONTEXT_PREFIX}work")],
             [InlineKeyboardButton(text="🤝 Дружба", callback_data=f"{CB_COMPAT_CONTEXT_PREFIX}friendship")],
             [InlineKeyboardButton(text="🔙 В меню", callback_data="menu:home")],
-        ],
-    )
-
-
-def compatibility_pair_mode_keyboard(context: RelationshipContext) -> InlineKeyboardMarkup:
-    emoji = PAIR_MODE_EMOJI[context]
-    return InlineKeyboardMarkup(
-        inline_keyboard=[
-            [InlineKeyboardButton(
-                text=f"{emoji[PairMode.ME_PARTNER]} {PAIR_MODE_LABELS[PairMode.ME_PARTNER]}",
-                callback_data=f"{CB_COMPAT_MODE_PREFIX}me_partner",
-            )],
-            [InlineKeyboardButton(
-                text=f"{emoji[PairMode.TWO_PEOPLE]} {PAIR_MODE_LABELS[PairMode.TWO_PEOPLE]}",
-                callback_data=f"{CB_COMPAT_MODE_PREFIX}two_people",
-            )],
-            [InlineKeyboardButton(text="◀️ Назад", callback_data=f"{CB_COMPAT_CONTEXT_PREFIX}back")],
         ],
     )
 

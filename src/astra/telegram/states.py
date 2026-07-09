@@ -18,7 +18,6 @@ class ProfileStates(StatesGroup):
 
 class CompatibilityStates(StatesGroup):
     choose_context = State()
-    choose_pair_mode = State()
     collect_name = State()
     collect_gender = State()
     collect_birth_date = State()
