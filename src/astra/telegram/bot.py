@@ -81,6 +81,14 @@ async def create_dispatcher(settings: Settings) -> Dispatcher:
     dp.include_router(natal.router)
     dp.include_router(tarot_daily.router)
     dp.include_router(catalog.router)
+
+    # AI-чат Astrid — регистрируется ПОСЛЕДНИМ, чтобы кнопки/FSM ловились раньше.
+    if settings.ai_chat_enabled:
+        from astra.telegram.ai_chat import router as ai_chat_router
+
+        dp.include_router(ai_chat_router)
+        log.info("telegram.ai_chat.enabled", provider=settings.ai_chat_provider)
+
     return dp
 
 

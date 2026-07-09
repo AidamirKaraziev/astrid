@@ -96,6 +96,11 @@ class Settings(BaseSettings):
     deepseek_base_url: str = "https://api.deepseek.com/v1"
     deepseek_timeout_seconds: float = 120.0
 
+    # AI-чат Astrid (прототип feature/ai-chat-astrid) — свободный текст вместо кнопок.
+    # Ловит сообщения вне FSM и ведёт разговор через LLM. По умолчанию выключен.
+    ai_chat_enabled: bool = False
+    ai_chat_provider: str = "deepseek"
+
     # PDF совместимости на volume (Docker: /data/compatibility)
     compatibility_pdf_dir: str = "data/compatibility_pdfs"
 
