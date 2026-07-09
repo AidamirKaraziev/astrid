@@ -18,6 +18,7 @@ from astra.telegram.button_texts import (
 )
 from astra.telegram.keyboards import main_menu_keyboard, tarot_keyboard
 from astra.telegram.states import (
+    AiChatStates,
     CompatibilityStates,
     NatalStates,
     OnboardingStates,
@@ -27,6 +28,8 @@ from astra.telegram.states import (
 
 _KEYBOARD_SUPPRESSED_FSM_STATES: frozenset[str] = frozenset(
     {
+        # AI-чат: держим свою «Назад»-клавиатуру, не подставляем главное меню.
+        AiChatStates.chatting.state,
         OnboardingStates.welcome.state,
         OnboardingStates.gender.state,
         OnboardingStates.birth_date.state,
