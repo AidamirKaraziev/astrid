@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from astra.core.observability import get_logger
 from astra.services.tarot_daily_service import format_tarot_reveal, reveal_daily_card
 from astra.telegram.keyboards import CB_TAROT_DAILY
+from astra.telegram.tarot_media import send_card_photo
 from astra.users import crud as users_crud
 
 log = get_logger(__name__)
@@ -43,11 +44,12 @@ async def cb_tarot_daily(callback: CallbackQuery, session: AsyncSession) -> None
         return
 
     await session.commit()
-    await callback.message.answer(
+    await send_card_photo(
+        callback.message,
+        outcome.card,
         format_tarot_reveal(
             outcome.card,
             outcome.draw.interpretation or "",
             repeated=outcome.already_drawn,
         ),
-        parse_mode="HTML",
     )
