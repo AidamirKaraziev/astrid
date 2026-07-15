@@ -23,7 +23,10 @@ class Intent(str, Enum):
     daily_prediction = "daily_prediction"   # 🔮 Предсказание на сегодня
     compatibility = "compatibility"         # 💕 Совместимость
     natal = "natal"                         # 🌌 Разбор натала
-    tarot = "tarot"                         # 🔮 Карты Таро
+    tarot = "tarot"                         # 🔮 Карты Таро (меню, если расклад не ясен)
+    tarot_yes_no = "tarot_yes_no"           # ⚖️ Таро: расклад на решение (да/нет)
+    tarot_three_cards = "tarot_three_cards"  # 🃏 Таро: три карты
+    tarot_relationship = "tarot_relationship"  # 💕 Таро: расклад на отношения
     edit_profile = "edit_profile"           # ✨ Обо мне (правка данных)
     invite = "invite"                       # 🎁 Пригласить друга
 

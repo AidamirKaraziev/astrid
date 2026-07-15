@@ -61,6 +61,11 @@ def _flow_dispatch() -> dict[Intent, _FlowEntry]:
     from astra.telegram.handlers.compatibility import start_compatibility
     from astra.telegram.handlers.menu import invite_friend, show_profile, today_prediction
     from astra.telegram.handlers.natal import start_natal
+    from astra.telegram.handlers.tarot_spreads import (
+        start_relationship,
+        start_three_cards,
+        start_yes_no,
+    )
 
     async def _prediction(m: Message, s: FSMContext, db: AsyncSession) -> None:
         await s.clear()  # one-shot действие: выходим из режима чата
@@ -83,6 +88,10 @@ def _flow_dispatch() -> dict[Intent, _FlowEntry]:
         Intent.natal: start_natal,
         Intent.daily_prediction: _prediction,
         Intent.tarot: _tarot,
+        # Конкретные расклады: сами ставят TarotStates.waiting_question и спросят вопрос
+        Intent.tarot_yes_no: start_yes_no,
+        Intent.tarot_three_cards: start_three_cards,
+        Intent.tarot_relationship: start_relationship,
         Intent.edit_profile: _profile,
         Intent.invite: _invite,
     }

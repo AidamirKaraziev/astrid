@@ -17,7 +17,12 @@ _PRODUCTS = """
 - compatibility     — 💕 Совместимость пары. Нужны данные ВТОРОГО человека:
                       имя, пол, дата рождения; время и город — желательно.
 - natal             — 🌌 Разбор натальной карты. Нужны дата, время и город рождения.
-- tarot             — 🔮 Карты Таро (три карты / на отношения / на решение).
+- tarot             — 🔮 Карты Таро: открыть меню, когда непонятно, какой расклад нужен.
+- tarot_yes_no      — ⚖️ Таро на решение: вопрос с ответом «да/нет»
+                      («стоит ли…», «соглашаться ли…»). Данные не нужны.
+- tarot_three_cards — 🃏 Таро три карты: прошлое/настоящее/будущее ситуации.
+- tarot_relationship — 💕 Таро на отношения: что происходит между двумя людьми
+                      (без даты рождения второго — это карты, не синастрия).
 - edit_profile      — ✨ Правка своих данных (имя, дата, время, город).
 - invite            — 🎁 Пригласить друга.
 - smalltalk         — обычный разговор или вопрос про астрологию без запуска продукта.
@@ -40,7 +45,10 @@ _RULES = """
 
 _SCHEMA = {
     "reply": "строка — что ты говоришь пользователю",
-    "intent": "одно из: smalltalk | daily_prediction | compatibility | natal | tarot | edit_profile | invite",
+    "intent": (
+        "одно из: smalltalk | daily_prediction | compatibility | natal | tarot | "
+        "tarot_yes_no | tarot_three_cards | tarot_relationship | edit_profile | invite"
+    ),
     "birth_data": {
         "name": "строка или null",
         "gender": "'male' | 'female' | null",
