@@ -14,6 +14,8 @@ from astra.messaging.publisher import (
     publish_pdf_generate,
     publish_prediction_generate,
     publish_prediction_send,
+    publish_tarot_reading_generate,
+    publish_tarot_reading_send,
 )
 from astra.messaging.schemas import TaskMessage, TaskType
 from astra.predictions import crud as predictions_crud
@@ -33,6 +35,11 @@ from astra.services.compatibility_service import (
     generate_compatibility_pdf,
 )
 from astra.services.prediction_generation import generate_daily_prediction_resilient
+from astra.services.tarot_reading_service import (
+    deliver_reading,
+    generate_reading_interpretation,
+    notify_reading_failed,
+)
 from astra.services.prediction_pending import clear_prediction_pending
 from astra.services.prediction_service import format_prediction_for_user, mark_prediction_sent
 from astra.telegram.progress.api import send_chat_action_typing
@@ -340,6 +347,44 @@ async def handle_natal_send(session: AsyncSession, task: TaskMessage) -> None:
         log.info(Event.NATAL_REPORT_SENT, report_id=task.report_id)
 
 
+async def handle_tarot_reading_generate(session: AsyncSession, task: TaskMessage) -> None:
+    if task.reading_id is None:
+        log.warning(Event.TASK_SKIPPED, reason="missing_reading_id")
+        return
+
+    from astra.tarot import models as tarot_crud
+    from astra.tarot.enums import ReadingStatus
+
+    draft = await tarot_crud.get_reading(session, task.reading_id)
+    if draft is None:
+        return
+    if draft.interpretation and draft.status in (ReadingStatus.TEXT_READY, ReadingStatus.READY):
+        await publish_tarot_reading_send(draft.id)  # requeue после рестарта: LLM не повторяем
+        return
+
+    user = await users_crud.get_user_by_id(session, draft.user_id)
+    if user is not None:
+        await send_chat_action_typing(user.telegram_id)
+
+    reading = await generate_reading_interpretation(session, task.reading_id)
+    if reading is None:
+        await session.commit()  # failed-статус фиксируем: лимит возвращён
+        await notify_reading_failed(session, draft)
+        return
+
+    await session.commit()
+    await publish_tarot_reading_send(reading.id)
+
+
+async def handle_tarot_reading_send(session: AsyncSession, task: TaskMessage) -> None:
+    if task.reading_id is None:
+        log.warning(Event.TASK_SKIPPED, reason="missing_reading_id")
+        return
+    sent = await deliver_reading(session, task.reading_id)
+    if sent:
+        await session.commit()
+
+
 async def dispatch_task(session: AsyncSession, task: TaskMessage) -> None:
     if task.type == TaskType.NATAL_CHART_GENERATE:
         await handle_natal_chart_generate(session, task)
@@ -363,5 +408,9 @@ async def dispatch_task(session: AsyncSession, task: TaskMessage) -> None:
         await handle_natal_pdf_generate(session, task)
     elif task.type == TaskType.NATAL_SEND:
         await handle_natal_send(session, task)
+    elif task.type == TaskType.TAROT_READING_GENERATE:
+        await handle_tarot_reading_generate(session, task)
+    elif task.type == TaskType.TAROT_READING_SEND:
+        await handle_tarot_reading_send(session, task)
     else:
         log.warning(Event.TASK_SKIPPED, reason="unknown_task_type", task_type=str(task.type))

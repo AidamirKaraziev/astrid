@@ -101,6 +101,10 @@ class Settings(BaseSettings):
     ai_chat_enabled: bool = False
     ai_chat_provider: str = "deepseek"
 
+    # Платные расклады таро (MVP: бесплатно с дневным лимитом)
+    tarot_spreads_enabled: bool = True
+    tarot_spreads_daily_limit: int = 1
+
     # PDF совместимости на volume (Docker: /data/compatibility)
     compatibility_pdf_dir: str = "data/compatibility_pdfs"
 

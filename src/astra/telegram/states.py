@@ -43,6 +43,12 @@ class NatalStates(StatesGroup):
     new_birth_place_query = State()
 
 
+class TarotStates(StatesGroup):
+    """Платный расклад: ждём вопрос к картам (тип расклада — в FSM data)."""
+
+    waiting_question = State()
+
+
 class PeopleStates(StatesGroup):
     """Редактирование сохранённого натального профиля («Мои люди»)."""
 

@@ -26,6 +26,8 @@ from astra.messaging.queues import (
     ROUTING_PREDICTION_GENERATE,
     ROUTING_PREDICTION_SEND,
     ROUTING_SYNASTRY_BUILD,
+    ROUTING_TAROT_READING_GENERATE,
+    ROUTING_TAROT_READING_SEND,
 )
 from astra.messaging.schemas import TaskMessage, TaskType
 
@@ -65,6 +67,8 @@ async def _ensure_topology(channel: aio_pika.Channel) -> aio_pika.Exchange:
         (QUEUE_COMPATIBILITY, ROUTING_NATAL_GENERATE),
         (QUEUE_REPORTS, ROUTING_NATAL_PDF_GENERATE),
         (QUEUE_NOTIFICATIONS, ROUTING_NATAL_SEND),
+        (QUEUE_PREDICTIONS, ROUTING_TAROT_READING_GENERATE),
+        (QUEUE_NOTIFICATIONS, ROUTING_TAROT_READING_SEND),
     )
     for queue_name, routing_key in bindings:
         queue = await channel.declare_queue(queue_name, durable=True)
@@ -286,6 +290,28 @@ async def publish_natal_send(
     await _publish(
         ROUTING_NATAL_SEND,
         _task_message(type=TaskType.NATAL_SEND, report_id=report_id),
+        settings,
+    )
+
+
+async def publish_tarot_reading_generate(
+    reading_id: UUID,
+    settings: Settings | None = None,
+) -> None:
+    await _publish(
+        ROUTING_TAROT_READING_GENERATE,
+        _task_message(type=TaskType.TAROT_READING_GENERATE, reading_id=reading_id),
+        settings,
+    )
+
+
+async def publish_tarot_reading_send(
+    reading_id: UUID,
+    settings: Settings | None = None,
+) -> None:
+    await _publish(
+        ROUTING_TAROT_READING_SEND,
+        _task_message(type=TaskType.TAROT_READING_SEND, reading_id=reading_id),
         settings,
     )
 

@@ -17,6 +17,7 @@ BTN_TAROT = "🔮 Карты Таро"
 BTN_TAROT_THREE = "🃏 Три карты"
 BTN_TAROT_RELATIONS = "💕 На отношения"
 BTN_TAROT_DECISION = "⚖️ На решение"
+BTN_TAROT_SKIP = "⏭ Пропустить"
 
 BTN_GENDER_MALE = "Мужчина"
 BTN_GENDER_FEMALE = "Женщина"

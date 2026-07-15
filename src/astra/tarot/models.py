@@ -1,16 +1,29 @@
-"""История вытянутых карт: лимит «одна карта в день» + данные для будущей игры."""
+"""История вытянутых карт: карта дня (TarotDraw) и платные расклады (TarotReading)."""
 
 from __future__ import annotations
 
 import uuid
-from datetime import date as date_type
+from datetime import UTC, date as date_type, datetime
 
-from sqlalchemy import Boolean, Date, ForeignKey, String, Text, UniqueConstraint, select
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy import (
+    Boolean,
+    Date,
+    DateTime,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+    func,
+    select,
+)
+from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Mapped, mapped_column
 
 from astra.db.base import Base, TimestampMixin
+from astra.tarot.enums import ReadingStatus
 
 CONTEXT_DAILY_CONFLICT = "daily_conflict"
 
@@ -69,6 +82,89 @@ async def get_previous_draw(
         .limit(1),
     )
     return result.scalar_one_or_none()
+
+
+class TarotReading(Base, TimestampMixin):
+    """Платный расклад: вопрос → карты → LLM-интерпретация → доставка.
+
+    price_stars/paid_at — задел под Telegram Stars: NULL = бесплатный расклад.
+    """
+
+    __tablename__ = "tarot_readings"
+    __table_args__ = (Index("ix_tarot_readings_user_date", "user_id", "date"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid.uuid4,
+    )
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        index=True,
+    )
+    date: Mapped[date_type] = mapped_column(Date)  # локальная дата юзера — для лимита
+    spread_type: Mapped[str] = mapped_column(String(32))
+    question: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # [{"position": 1, "position_key": "past", "card_id": "wands_03", "reversed": false}]
+    cards: Mapped[list] = mapped_column(JSONB)
+    interpretation: Mapped[str | None] = mapped_column(Text, nullable=True)
+    status: Mapped[str] = mapped_column(String(32), default=ReadingStatus.PENDING)
+    failure_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    price_stars: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    paid_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+async def get_reading(session: AsyncSession, reading_id: uuid.UUID) -> TarotReading | None:
+    result = await session.execute(select(TarotReading).where(TarotReading.id == reading_id))
+    return result.scalar_one_or_none()
+
+
+async def count_readings_for_date(
+    session: AsyncSession,
+    user_id: uuid.UUID,
+    target: date_type,
+) -> int:
+    """Расклады за локальный день; failed не считаются — фейл возвращает попытку."""
+    result = await session.execute(
+        select(func.count())
+        .select_from(TarotReading)
+        .where(
+            TarotReading.user_id == user_id,
+            TarotReading.date == target,
+            TarotReading.status != ReadingStatus.FAILED,
+        ),
+    )
+    return int(result.scalar_one())
+
+
+async def create_reading(
+    session: AsyncSession,
+    *,
+    user_id: uuid.UUID,
+    target: date_type,
+    spread_type: str,
+    question: str | None,
+    cards: list[dict],
+) -> TarotReading:
+    row = TarotReading(
+        user_id=user_id,
+        date=target,
+        spread_type=spread_type,
+        question=question,
+        cards=cards,
+        status=ReadingStatus.PENDING,
+    )
+    session.add(row)
+    await session.flush()
+    return row
+
+
+async def mark_reading_sent(session: AsyncSession, reading: TarotReading) -> None:
+    reading.status = ReadingStatus.READY
+    reading.sent_at = datetime.now(UTC)
+    await session.flush()
 
 
 async def create_draw(

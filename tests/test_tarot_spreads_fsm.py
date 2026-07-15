@@ -1,0 +1,139 @@
+"""Тесты FSM платных раскладов: вход, вопрос, лимит, даблтап, назад."""
+
+from contextlib import ExitStack
+from unittest.mock import AsyncMock, MagicMock, patch
+from uuid import uuid4
+
+from astra.tarot.spreads import SpreadType
+from astra.telegram.button_texts import BTN_BACK_MENU, BTN_TAROT_DECISION, BTN_TAROT_SKIP
+from astra.telegram.handlers.tarot_spreads import spread_button, spread_question
+from astra.telegram.states import TarotStates
+
+_MODULE = "astra.telegram.handlers.tarot_spreads"
+
+
+def _message(text: str) -> MagicMock:
+    message = MagicMock()
+    message.text = text
+    message.from_user = MagicMock(id=100500)
+    message.answer = AsyncMock()
+    return message
+
+
+def _state(data: dict | None = None) -> AsyncMock:
+    state = AsyncMock()
+    state.get_data = AsyncMock(return_value=data or {})
+    return state
+
+
+def _user() -> MagicMock:
+    user = MagicMock()
+    user.id = uuid4()
+    user.onboarding_completed = True
+    user.profile = MagicMock(timezone="Europe/Moscow")
+    return user
+
+
+def _mocks(**overrides) -> dict:
+    defaults = {
+        "users_crud.get_user_by_telegram_id": AsyncMock(return_value=_user()),
+        "check_daily_limit": AsyncMock(return_value=True),
+        "try_acquire_reading_lock": AsyncMock(return_value=True),
+        "release_reading_lock": AsyncMock(),
+        "create_reading": AsyncMock(return_value=(MagicMock(id=uuid4()), [MagicMock()])),
+        "send_card_photo": AsyncMock(),
+        "send_cards_album": AsyncMock(),
+        "publish_tarot_reading_generate": AsyncMock(),
+    }
+    defaults.update(overrides)
+    return defaults
+
+
+async def _run(handler, message, state, session, mocks: dict) -> None:
+    with ExitStack() as stack:
+        for name, mock in mocks.items():
+            stack.enter_context(patch(f"{_MODULE}.{name}", mock))
+        await handler(message, state, session)
+
+
+class TestSpreadButton:
+    async def test_sets_state_and_asks_question(self):
+        message, state = _message(BTN_TAROT_DECISION), _state()
+        await _run(spread_button, message, state, AsyncMock(), _mocks())
+        state.set_state.assert_awaited_once_with(TarotStates.waiting_question)
+        state.update_data.assert_awaited_once_with(tarot_spread_type="yes_no")
+        assert "да" in message.answer.call_args.args[0].lower()
+
+    async def test_limit_hit_blocks_entry(self):
+        message, state = _message(BTN_TAROT_DECISION), _state()
+        await _run(
+            spread_button, message, state, AsyncMock(),
+            _mocks(check_daily_limit=AsyncMock(return_value=False)),
+        )
+        state.set_state.assert_not_awaited()
+        assert "разложены" in message.answer.call_args.args[0]
+
+    async def test_requires_onboarded_user(self):
+        message, state = _message(BTN_TAROT_DECISION), _state()
+        await _run(
+            spread_button, message, state, AsyncMock(),
+            _mocks(**{"users_crud.get_user_by_telegram_id": AsyncMock(return_value=None)}),
+        )
+        state.set_state.assert_not_awaited()
+        assert "/start" in message.answer.call_args.args[0]
+
+
+class TestSpreadQuestion:
+    _DATA = {"tarot_spread_type": "yes_no"}
+
+    async def test_back_returns_to_main_menu(self):
+        message, state = _message(BTN_BACK_MENU), _state(self._DATA)
+        await _run(spread_question, message, state, AsyncMock(), _mocks())
+        state.clear.assert_awaited_once()
+        assert "меню" in message.answer.call_args.args[0].lower()
+
+    async def test_too_short_question_reprompts(self):
+        message, state = _message("Да"), _state(self._DATA)
+        mocks = _mocks()
+        await _run(spread_question, message, state, AsyncMock(), mocks)
+        mocks["create_reading"].assert_not_awaited()
+        assert "символов" in message.answer.call_args.args[0]
+
+    async def test_skip_rejected_when_question_required(self):
+        message, state = _message(BTN_TAROT_SKIP), _state(self._DATA)
+        mocks = _mocks()
+        await _run(spread_question, message, state, AsyncMock(), mocks)
+        mocks["create_reading"].assert_not_awaited()
+
+    async def test_unknown_spread_type_resets(self):
+        message, state = _message("Нормальный вопрос?"), _state({})
+        mocks = _mocks()
+        await _run(spread_question, message, state, AsyncMock(), mocks)
+        state.clear.assert_awaited_once()
+        mocks["create_reading"].assert_not_awaited()
+
+    async def test_valid_question_creates_and_publishes(self):
+        message, state = _message("Стоит ли менять работу этим летом?"), _state(self._DATA)
+        session, mocks = AsyncMock(), _mocks()
+        await _run(spread_question, message, state, session, mocks)
+        mocks["create_reading"].assert_awaited_once()
+        assert mocks["create_reading"].await_args.args[2] is SpreadType.YES_NO
+        session.commit.assert_awaited_once()
+        mocks["send_card_photo"].assert_awaited_once()
+        mocks["publish_tarot_reading_generate"].assert_awaited_once()
+        mocks["release_reading_lock"].assert_awaited_once()
+        state.clear.assert_awaited_once()
+
+    async def test_double_tap_lock(self):
+        message, state = _message("Стоит ли менять работу этим летом?"), _state(self._DATA)
+        mocks = _mocks(try_acquire_reading_lock=AsyncMock(return_value=False))
+        await _run(spread_question, message, state, AsyncMock(), mocks)
+        mocks["create_reading"].assert_not_awaited()
+        assert "секунду" in message.answer.call_args.args[0]
+
+    async def test_limit_recheck_after_lock(self):
+        message, state = _message("Стоит ли менять работу этим летом?"), _state(self._DATA)
+        mocks = _mocks(check_daily_limit=AsyncMock(return_value=False))
+        await _run(spread_question, message, state, AsyncMock(), mocks)
+        mocks["create_reading"].assert_not_awaited()
+        mocks["release_reading_lock"].assert_awaited_once()

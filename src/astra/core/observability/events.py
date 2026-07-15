@@ -70,6 +70,13 @@ class Event(StrEnum):
     TAROT_LIMIT_HIT = "tarot.limit_hit"
     TAROT_INTERPRET_FAILED = "tarot.interpret_failed"
 
+    # Tarot readings pipeline (платные расклады)
+    TAROT_READING_CREATED = "tarot_reading.created"
+    TAROT_READING_GENERATED = "tarot_reading.generated"
+    TAROT_READING_SENT = "tarot_reading.sent"
+    TAROT_READING_FAILED = "tarot_reading.failed"
+    TAROT_READING_LIMIT_HIT = "tarot_reading.limit_hit"
+
     # Natal report pipeline
     NATAL_REPORT_CREATED = "natal_report.created"
     NATAL_REPORT_LLM_DONE = "natal_report.llm_done"
