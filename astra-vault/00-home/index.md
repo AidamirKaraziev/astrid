@@ -47,6 +47,7 @@ date: 2026-07-03
 - [[PII политика логирования Astra]]
 - [[OpenTelemetry traces Sentry export Astra]]
 - [[главное меню бота платные продукты в reply без каталога]]
+- [[таро гибридный пайплайн карты мгновенно интерпретация из worker]]
 - [[пайплайн совместимости промпт LLM PDF worker]]
 - [[Split Contract LLM и Pydantic для совместимости]]
 - [[локальная LLM Ollama удалена весь daily на DeepSeek]]
