@@ -28,7 +28,9 @@ from astra.telegram.button_texts import (
     BTN_BACK_MENU,
     BTN_BACK_MENU_LEGACY,
     BTN_TAROT_DECISION,
+    BTN_TAROT_RELATIONS,
     BTN_TAROT_SKIP,
+    BTN_TAROT_THREE,
     COMING_SOON_TEXT,
 )
 from astra.telegram.keyboards import main_menu_keyboard, tarot_keyboard
@@ -43,9 +45,10 @@ router = Router(name="tarot_spreads")
 _QUESTION_MIN_LEN = 3
 _QUESTION_MAX_LEN = 500
 
-# Кнопка меню → тип расклада. «3 карты» и «Отношения» подключаются в PR4.
 SPREAD_BUTTONS: dict[str, SpreadType] = {
     BTN_TAROT_DECISION: SpreadType.YES_NO,
+    BTN_TAROT_THREE: SpreadType.THREE_CARDS,
+    BTN_TAROT_RELATIONS: SpreadType.RELATIONSHIP,
 }
 
 _IN_PROGRESS_TEXT = "Карты уже раскладываются — секунду 🕯"

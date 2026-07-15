@@ -191,3 +191,35 @@ class TestFormatting:
             question="<b>вопрос</b>",
         )
         assert "<b>вопрос</b>" not in format_reading_message(reading)
+
+    def test_relationship_caption_fits_album_limit(self):
+        spec = SPREADS[SpreadType.RELATIONSHIP]
+        cards = [
+            card_by_id(card_id)
+            for card_id in ("major_06", "cups_queen", "swords_03", "pentacles_04", "wands_10")
+        ]
+        caption = format_reading_caption(spec, cards)
+        assert len(caption) <= 1024
+        assert "Между вами:" in caption and "Королева Кубков" in caption
+
+    def test_three_cards_message_all_positions(self):
+        blocks = [
+            "Карта прошлого говорит о накопленной усталости и старом выборе позиции.",
+            "Карта настоящего показывает точку равновесия и передышку в моменте.",
+            "Карта будущего обещает движение после честного разговора с собой.",
+            "Итог: дай ситуации неделю и один честный разговор — дальше станет легче.",
+        ]
+        reading = _reading_mock(
+            spread_type=SpreadType.THREE_CARDS,
+            interpretation="\n\n".join(blocks),
+            cards=[
+                {"position": 1, "position_key": "past", "card_id": "swords_04", "reversed": False},
+                {"position": 2, "position_key": "present", "card_id": "major_11", "reversed": False},
+                {"position": 3, "position_key": "future", "card_id": "wands_03", "reversed": False},
+            ],
+        )
+        text = format_reading_message(reading)
+        assert "Прошлое — Четвёрка Мечей" in text
+        assert "Настоящее — Справедливость" in text
+        assert "Будущее — Тройка Жезлов" in text
+        assert "Итог:" in text

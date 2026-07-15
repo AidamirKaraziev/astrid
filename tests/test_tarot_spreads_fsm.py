@@ -137,3 +137,39 @@ class TestSpreadQuestion:
         await _run(spread_question, message, state, AsyncMock(), mocks)
         mocks["create_reading"].assert_not_awaited()
         mocks["release_reading_lock"].assert_awaited_once()
+
+
+class TestMultiCardSpreads:
+    async def test_three_cards_skip_creates_without_question(self):
+        message = _message(BTN_TAROT_SKIP)
+        state = _state({"tarot_spread_type": "three_cards"})
+        mocks = _mocks(
+            create_reading=AsyncMock(
+                return_value=(MagicMock(id=uuid4()), [MagicMock()] * 3),
+            ),
+        )
+        await _run(spread_question, message, state, AsyncMock(), mocks)
+        assert mocks["create_reading"].await_args.args[3] is None  # question
+        mocks["send_cards_album"].assert_awaited_once()
+        mocks["send_card_photo"].assert_not_awaited()
+
+    async def test_relationship_sends_five_card_album(self):
+        message = _message("Что происходит между мной и Сашей?")
+        state = _state({"tarot_spread_type": "relationship"})
+        mocks = _mocks(
+            create_reading=AsyncMock(
+                return_value=(MagicMock(id=uuid4()), [MagicMock()] * 5),
+            ),
+        )
+        await _run(spread_question, message, state, AsyncMock(), mocks)
+        assert mocks["create_reading"].await_args.args[2] is SpreadType.RELATIONSHIP
+        cards_sent = mocks["send_cards_album"].await_args.args[1]
+        assert len(cards_sent) == 5
+        mocks["publish_tarot_reading_generate"].assert_awaited_once()
+
+    async def test_entry_buttons_map_to_spreads(self):
+        from astra.telegram.button_texts import BTN_TAROT_RELATIONS, BTN_TAROT_THREE
+        from astra.telegram.handlers.tarot_spreads import SPREAD_BUTTONS
+
+        assert SPREAD_BUTTONS[BTN_TAROT_THREE] is SpreadType.THREE_CARDS
+        assert SPREAD_BUTTONS[BTN_TAROT_RELATIONS] is SpreadType.RELATIONSHIP
