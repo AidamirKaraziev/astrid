@@ -14,7 +14,8 @@ from astra.tarot.spreads import SpreadSpec, SpreadType
 
 TAROT_SPREAD_SYSTEM_PROMPT = dedent(
     """\
-    Ты — Astrid, астролог и таролог в Telegram-боте Astra.
+    Ты — Астрид, астролог и таролог в Telegram-боте Astra. Если называешь себя —
+    только «Астрид» (кириллицей), никогда «Astrid».
     Человек задал вопрос и вытянул карты расклада. Твоя задача — прочитать
     каждую карту В ЕЁ ПОЗИЦИИ как ответ на вопрос, а затем собрать общий итог.
 
@@ -26,7 +27,14 @@ TAROT_SPREAD_SYSTEM_PROMPT = dedent(
     3. Карты в раскладе разговаривают друг с другом: замечай перекличку
        и противоречия между позициями, вплетай их в итог.
     4. Тон: тёплый, честный, без запугивания и фатализма. Обращение на «ты».
-    5. Запрещено: «вибрации», «энергетика», «трансформация», «космос
+    5. Учитывай клиента (блок «клиент» в данных):
+       - Согласуй род глаголов и прилагательных с полом. Женщине: «ты готова»,
+         «ты сама», «уверена», «решила». Мужчине: «ты готов», «ты сам»,
+         «уверен», «решил». Если пол не указан — строй фразы так, чтобы не
+         выдавать род («тебе стоит», «ты можешь»).
+       - Если есть имя — можешь мягко обратиться по нему один раз (не в каждом
+         предложении, без навязчивости).
+    6. Запрещено: «вибрации», «энергетика», «трансформация», «космос
        подсказывает», «карты никогда не ошибаются».
 
     Формат ответа — СТРОГО по одному блоку на каждую позицию расклада,
@@ -58,17 +66,29 @@ def build_spread_user_message(
     spec: SpreadSpec,
     question: str | None,
     cards: list[TarotCard],
+    *,
+    user_name: str | None = None,
+    gender: str | None = None,
 ) -> str:
-    """Расклад + вопрос: карты в порядке позиций спеки."""
-    payload: dict = {
-        "расклад": spec.title_ru,
-        "вопрос": question or "вопрос не задан — прочитай расклад о текущем дне человека",
-        "позиции": [
-            _card_payload(card, position.label_ru, position.meaning)
-            for position, card in zip(spec.positions, cards, strict=True)
-        ],
-        "число_блоков_в_ответе": spec.card_count + 1,
-    }
+    """Расклад + вопрос: карты в порядке позиций спеки.
+
+    user_name / gender — из профиля: род согласуется, имя используется мягко.
+    """
+    payload: dict = {}
+    client: dict = {}
+    if user_name:
+        client["имя"] = user_name
+    if gender:
+        client["пол"] = gender
+    if client:
+        payload["клиент"] = client
+    payload["расклад"] = spec.title_ru
+    payload["вопрос"] = question or "вопрос не задан — прочитай расклад о текущем дне человека"
+    payload["позиции"] = [
+        _card_payload(card, position.label_ru, position.meaning)
+        for position, card in zip(spec.positions, cards, strict=True)
+    ]
+    payload["число_блоков_в_ответе"] = spec.card_count + 1
     return (
         "Прочитай расклад как ответ на вопрос.\n\n"
         f"{json.dumps(payload, ensure_ascii=False, indent=2)}"

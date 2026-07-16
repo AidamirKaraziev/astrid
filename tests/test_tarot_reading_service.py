@@ -47,6 +47,12 @@ def _provider_mock(*results: CompletionResult) -> MagicMock:
     return provider
 
 
+def _patch_user(name: str = "Аня", gender: str = "женщина"):
+    user = MagicMock()
+    user.profile = MagicMock(display_name=name, gender=gender)
+    return patch(f"{_MODULE}.users_crud.get_user_by_id", AsyncMock(return_value=user))
+
+
 class TestCheckDailyLimit:
     async def test_under_limit(self):
         session, user = AsyncMock(), MagicMock()
@@ -86,6 +92,7 @@ class TestGenerateInterpretation:
         reading = _reading_mock()
         with (
             patch(f"{_MODULE}.tarot_crud.get_reading", AsyncMock(return_value=reading)),
+            _patch_user(),
             patch(
                 f"{_MODULE}.get_daily_provider",
                 return_value=_provider_mock(CompletionResult(_VALID_YES_NO, None)),
@@ -96,6 +103,28 @@ class TestGenerateInterpretation:
         assert reading.status == ReadingStatus.TEXT_READY
         assert "Да, но" in reading.interpretation
 
+    async def test_profile_name_and_gender_passed_to_prompt(self):
+        session = AsyncMock()
+        reading = _reading_mock()
+        captured = {}
+
+        def build(spec, question, cards, *, user_name=None, gender=None):
+            captured["user_name"] = user_name
+            captured["gender"] = gender
+            return "user message"
+
+        with (
+            patch(f"{_MODULE}.tarot_crud.get_reading", AsyncMock(return_value=reading)),
+            _patch_user(name="Марк", gender="мужчина"),
+            patch(f"{_MODULE}.build_spread_user_message", side_effect=build),
+            patch(
+                f"{_MODULE}.get_daily_provider",
+                return_value=_provider_mock(CompletionResult(_VALID_YES_NO, None)),
+            ),
+        ):
+            await generate_reading_interpretation(session, reading.id)
+        assert captured == {"user_name": "Марк", "gender": "мужчина"}
+
     async def test_retry_then_success(self):
         session = AsyncMock()
         reading = _reading_mock()
@@ -105,6 +134,7 @@ class TestGenerateInterpretation:
         )
         with (
             patch(f"{_MODULE}.tarot_crud.get_reading", AsyncMock(return_value=reading)),
+            _patch_user(),
             patch(f"{_MODULE}.get_daily_provider", return_value=provider),
         ):
             result = await generate_reading_interpretation(session, reading.id)
@@ -120,6 +150,7 @@ class TestGenerateInterpretation:
         )
         with (
             patch(f"{_MODULE}.tarot_crud.get_reading", AsyncMock(return_value=reading)),
+            _patch_user(),
             patch(f"{_MODULE}.get_daily_provider", return_value=provider),
         ):
             result = await generate_reading_interpretation(session, reading.id)

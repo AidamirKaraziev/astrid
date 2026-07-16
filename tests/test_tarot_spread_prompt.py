@@ -1,6 +1,7 @@
 """Тесты спек раскладов и промпта: структура, нормализация, валидация."""
 
 from astra.llm.prompts.tarot_spread import (
+    TAROT_SPREAD_SYSTEM_PROMPT,
     build_spread_user_message,
     normalize_spread_blocks,
     validate_spread_output,
@@ -41,6 +42,27 @@ class TestBuildMessage:
     def test_no_question_fallback(self):
         message = build_spread_user_message(_THREE, None, [card_by_id("major_00")] * 3)
         assert "вопрос не задан" in message
+
+    def test_client_name_and_gender_included(self):
+        cards = [card_by_id("major_07")]
+        message = build_spread_user_message(
+            _YES_NO, "Начинать ли бизнес?", cards,
+            user_name="Аня", gender="женщина",
+        )
+        assert '"клиент"' in message
+        assert "Аня" in message
+        assert "женщина" in message
+
+    def test_client_block_omitted_when_no_profile(self):
+        message = build_spread_user_message(_YES_NO, "Вопрос?", [card_by_id("major_07")])
+        assert "клиент" not in message
+
+
+class TestPersona:
+    def test_prompt_uses_cyrillic_name(self):
+        assert "Астрид" in TAROT_SPREAD_SYSTEM_PROMPT
+        assert "Astrid" in TAROT_SPREAD_SYSTEM_PROMPT  # только в запрете «никогда Astrid»
+        assert "род" in TAROT_SPREAD_SYSTEM_PROMPT.lower()
 
 
 class TestNormalize:

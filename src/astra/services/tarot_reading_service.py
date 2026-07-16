@@ -159,11 +159,22 @@ async def generate_reading_interpretation(
 
     spec = SPREADS[SpreadType(reading.spread_type)]
     cards = reading_cards(reading)
+    user = await users_crud.get_user_by_id(session, reading.user_id)
+    profile = user.profile if user else None
     provider = get_daily_provider(cfg)
     request = CompletionRequest(
         messages=(
             ChatMessage("system", TAROT_SPREAD_SYSTEM_PROMPT),
-            ChatMessage("user", build_spread_user_message(spec, reading.question, cards)),
+            ChatMessage(
+                "user",
+                build_spread_user_message(
+                    spec,
+                    reading.question,
+                    cards,
+                    user_name=profile.display_name if profile else None,
+                    gender=profile.gender if profile else None,
+                ),
+            ),
         ),
         temperature=_TAROT_TEMPERATURE,
         max_tokens=spec.max_tokens,
@@ -231,7 +242,7 @@ def format_reading_caption(spec: SpreadSpec, cards: list[TarotCard]) -> str:
         f"<b>{position.label_ru}:</b> {card.name_ru} {card.emoji}"
         for position, card in zip(spec.positions, cards, strict=True)
     ]
-    lines += ["", "Astrid уже читает расклад — интерпретация будет через минуту 🕯"]
+    lines += ["", "Астрид уже читает расклад — интерпретация будет через минуту 🕯"]
     return "\n".join(lines)
 
 
