@@ -5,8 +5,18 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 
 from astra.tarot.spreads import SpreadType
-from astra.telegram.button_texts import BTN_BACK_MENU, BTN_TAROT_DECISION, BTN_TAROT_SKIP
-from astra.telegram.handlers.tarot_spreads import spread_button, spread_question
+from astra.telegram.button_texts import (
+    BTN_BACK_MENU,
+    BTN_TAROT_DECISION,
+    BTN_TAROT_SKIP,
+    BTN_TAROT_UNLOCK,
+    CB_TAROT_UNLOCK,
+)
+from astra.telegram.handlers.tarot_spreads import (
+    cb_tarot_unlock,
+    spread_button,
+    spread_question,
+)
 from astra.telegram.states import TarotStates
 
 _MODULE = "astra.telegram.handlers.tarot_spreads"
@@ -64,7 +74,7 @@ class TestSpreadButton:
         state.update_data.assert_awaited_once_with(tarot_spread_type="yes_no")
         assert "да" in message.answer.call_args.args[0].lower()
 
-    async def test_limit_hit_blocks_entry(self):
+    async def test_limit_hit_shows_unlock_button(self):
         message, state = _message(BTN_TAROT_DECISION), _state()
         await _run(
             spread_button, message, state, AsyncMock(),
@@ -72,6 +82,9 @@ class TestSpreadButton:
         )
         state.set_state.assert_not_awaited()
         assert "разложены" in message.answer.call_args.args[0]
+        markup = message.answer.call_args.kwargs["reply_markup"]
+        assert markup.inline_keyboard[0][0].text == BTN_TAROT_UNLOCK
+        assert markup.inline_keyboard[0][0].callback_data == CB_TAROT_UNLOCK
 
     async def test_requires_onboarded_user(self):
         message, state = _message(BTN_TAROT_DECISION), _state()
@@ -173,3 +186,50 @@ class TestMultiCardSpreads:
 
         assert SPREAD_BUTTONS[BTN_TAROT_THREE] is SpreadType.THREE_CARDS
         assert SPREAD_BUTTONS[BTN_TAROT_RELATIONS] is SpreadType.RELATIONSHIP
+
+
+class TestUnlock:
+    def _callback(self) -> MagicMock:
+        callback = MagicMock()
+        callback.data = CB_TAROT_UNLOCK
+        callback.from_user = MagicMock(id=100500)
+        callback.answer = AsyncMock()
+        callback.message = MagicMock()
+        callback.message.answer = AsyncMock()
+        callback.message.edit_reply_markup = AsyncMock()
+        return callback
+
+    async def test_grants_bonus_and_opens_menu(self):
+        callback = self._callback()
+        user = _user()
+        with (
+            patch(
+                "astra.telegram.handlers.tarot_spreads.users_crud.get_user_by_telegram_id",
+                AsyncMock(return_value=user),
+            ),
+            patch(
+                "astra.telegram.handlers.tarot_spreads.grant_bonus_reading",
+                AsyncMock(return_value=1),
+            ) as grant,
+            patch("astra.telegram.handlers.tarot_spreads.tarot_keyboard", MagicMock()),
+        ):
+            await cb_tarot_unlock(callback, AsyncMock())
+        grant.assert_awaited_once()
+        callback.answer.assert_awaited_once()
+        callback.message.edit_reply_markup.assert_awaited_once_with(reply_markup=None)
+        callback.message.answer.assert_awaited_once()
+
+    async def test_requires_user(self):
+        callback = self._callback()
+        with (
+            patch(
+                "astra.telegram.handlers.tarot_spreads.users_crud.get_user_by_telegram_id",
+                AsyncMock(return_value=None),
+            ),
+            patch(
+                "astra.telegram.handlers.tarot_spreads.grant_bonus_reading",
+                AsyncMock(),
+            ) as grant,
+        ):
+            await cb_tarot_unlock(callback, AsyncMock())
+        grant.assert_not_awaited()

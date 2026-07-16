@@ -76,6 +76,7 @@ class Event(StrEnum):
     TAROT_READING_SENT = "tarot_reading.sent"
     TAROT_READING_FAILED = "tarot_reading.failed"
     TAROT_READING_LIMIT_HIT = "tarot_reading.limit_hit"
+    TAROT_READING_BONUS_GRANTED = "tarot_reading.bonus_granted"
 
     # Natal report pipeline
     NATAL_REPORT_CREATED = "natal_report.created"

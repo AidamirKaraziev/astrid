@@ -56,13 +56,28 @@ def _patch_user(name: str = "Аня", gender: str = "женщина"):
 class TestCheckDailyLimit:
     async def test_under_limit(self):
         session, user = AsyncMock(), MagicMock()
-        with patch(f"{_MODULE}.tarot_crud.count_readings_for_date", AsyncMock(return_value=0)):
+        with (
+            patch(f"{_MODULE}.tarot_crud.count_readings_for_date", AsyncMock(return_value=0)),
+            patch(f"{_MODULE}.granted_bonus", AsyncMock(return_value=0)),
+        ):
             assert await check_daily_limit(session, user, date(2026, 7, 15)) is True
 
     async def test_limit_reached(self):
         session, user = AsyncMock(), MagicMock()
-        with patch(f"{_MODULE}.tarot_crud.count_readings_for_date", AsyncMock(return_value=1)):
+        with (
+            patch(f"{_MODULE}.tarot_crud.count_readings_for_date", AsyncMock(return_value=1)),
+            patch(f"{_MODULE}.granted_bonus", AsyncMock(return_value=0)),
+        ):
             assert await check_daily_limit(session, user, date(2026, 7, 15)) is False
+
+    async def test_bonus_raises_limit(self):
+        session, user = AsyncMock(), MagicMock()
+        with (
+            patch(f"{_MODULE}.tarot_crud.count_readings_for_date", AsyncMock(return_value=1)),
+            patch(f"{_MODULE}.granted_bonus", AsyncMock(return_value=1)),
+        ):
+            # использован 1 расклад, лимит 1, но выдан 1 бонус → снова можно
+            assert await check_daily_limit(session, user, date(2026, 7, 15)) is True
 
 
 class TestCreateReading:

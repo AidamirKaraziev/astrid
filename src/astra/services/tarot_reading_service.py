@@ -49,13 +49,53 @@ READING_FAILED_TEXT = (
 
 LIMIT_HIT_TEXT = (
     "🎴 На сегодня карты уже разложены. Колоде нужно время, чтобы голоса карт "
-    "не смешивались, — возвращайся завтра ✨\n"
-    "(Скоро появятся расклады без ожидания.)"
+    "не смешивались ✨\n"
+    "Но если вопрос не ждёт — можно сделать ещё один расклад прямо сейчас 👇"
 )
+
+# Бонусные расклады сверх дневного лимита (пока выдаются бесплатно по кнопке).
+# Живут в Redis до конца суток+, чтобы не плодить миграцию под временную механику.
+_BONUS_TTL_SEC = 60 * 60 * 48
+
+
+def _bonus_key(user_id: UUID, target: date_type) -> str:
+    return f"astra:tarot:reading:bonus:{user_id}:{target.isoformat()}"
 
 
 def local_today(user: User) -> date_type:
     return datetime.now(ZoneInfo(user.profile.timezone)).date()
+
+
+async def granted_bonus(
+    user_id: UUID,
+    target: date_type,
+    settings: Settings | None = None,
+) -> int:
+    """Сколько дополнительных раскладов уже выдано сверх лимита за этот день."""
+    cfg = settings or get_settings()
+    client = Redis.from_url(cfg.redis_url, decode_responses=True)
+    try:
+        value = await client.get(_bonus_key(user_id, target))
+        return int(value) if value else 0
+    finally:
+        await client.aclose()
+
+
+async def grant_bonus_reading(
+    user_id: UUID,
+    target: date_type,
+    settings: Settings | None = None,
+) -> int:
+    """Выдать ещё один расклад сверх лимита; возвращает новое число бонусов."""
+    cfg = settings or get_settings()
+    client = Redis.from_url(cfg.redis_url, decode_responses=True)
+    try:
+        key = _bonus_key(user_id, target)
+        new_value = await client.incr(key)
+        await client.expire(key, _BONUS_TTL_SEC)
+        return int(new_value)
+    finally:
+        await client.aclose()
 
 
 async def check_daily_limit(
@@ -64,10 +104,14 @@ async def check_daily_limit(
     target: date_type,
     settings: Settings | None = None,
 ) -> bool:
-    """True — можно тянуть; failed-расклады попытку не съедают."""
+    """True — можно тянуть; failed-расклады попытку не съедают.
+
+    Эффективный лимит = базовый из конфига + бонусы, выданные по кнопке.
+    """
     cfg = settings or get_settings()
     used = await tarot_crud.count_readings_for_date(session, user.id, target)
-    return used < cfg.tarot_spreads_daily_limit
+    bonus = await granted_bonus(user.id, target, cfg)
+    return used < cfg.tarot_spreads_daily_limit + bonus
 
 
 async def try_acquire_reading_lock(user_id: UUID, settings: Settings | None = None) -> bool:

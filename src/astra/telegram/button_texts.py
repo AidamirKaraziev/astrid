@@ -20,6 +20,9 @@ BTN_TAROT_THREE = "🃏 Три карты"
 BTN_TAROT_RELATIONS = "💕 На отношения"
 BTN_TAROT_DECISION = "⚖️ На решение"
 BTN_TAROT_SKIP = "⏭ Пропустить"
+# Инлайн-кнопка под сообщением о дневном лимите: выдаёт ещё расклад (пока бесплатно).
+BTN_TAROT_UNLOCK = "🔮 Сделать ещё расклад"
+CB_TAROT_UNLOCK = "tarot:reading:unlock"
 
 BTN_GENDER_MALE = "Мужчина"
 BTN_GENDER_FEMALE = "Женщина"

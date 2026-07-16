@@ -8,7 +8,14 @@ from __future__ import annotations
 
 from aiogram import F, Router
 from aiogram.fsm.context import FSMContext
-from aiogram.types import KeyboardButton, Message, ReplyKeyboardMarkup
+from aiogram.types import (
+    CallbackQuery,
+    InlineKeyboardButton,
+    InlineKeyboardMarkup,
+    KeyboardButton,
+    Message,
+    ReplyKeyboardMarkup,
+)
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from astra.core.config import get_settings
@@ -19,6 +26,7 @@ from astra.services.tarot_reading_service import (
     check_daily_limit,
     create_reading,
     format_reading_caption,
+    grant_bonus_reading,
     local_today,
     release_reading_lock,
     try_acquire_reading_lock,
@@ -31,6 +39,8 @@ from astra.telegram.button_texts import (
     BTN_TAROT_RELATIONS,
     BTN_TAROT_SKIP,
     BTN_TAROT_THREE,
+    BTN_TAROT_UNLOCK,
+    CB_TAROT_UNLOCK,
     COMING_SOON_TEXT,
 )
 from astra.telegram.keyboards import main_menu_keyboard, tarot_keyboard
@@ -66,6 +76,17 @@ def _question_keyboard(question_required: bool) -> ReplyKeyboardMarkup:
     return ReplyKeyboardMarkup(keyboard=rows, resize_keyboard=True)
 
 
+def _limit_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[[InlineKeyboardButton(text=BTN_TAROT_UNLOCK, callback_data=CB_TAROT_UNLOCK)]],
+    )
+
+
+async def _send_limit(message: Message, user_id, spread_type: SpreadType) -> None:
+    log.info(Event.TAROT_READING_LIMIT_HIT, user_id=user_id, spread_type=str(spread_type))
+    await message.answer(LIMIT_HIT_TEXT, reply_markup=_limit_keyboard())
+
+
 async def _require_user(message: Message, session: AsyncSession):
     if message.from_user is None:
         return None
@@ -89,8 +110,7 @@ async def _start_spread(
     if user is None:
         return
     if not await check_daily_limit(session, user, local_today(user)):
-        log.info(Event.TAROT_READING_LIMIT_HIT, user_id=user.id, spread_type=str(spread_type))
-        await message.answer(LIMIT_HIT_TEXT)
+        await _send_limit(message, user.id, spread_type)
         return
     spec = SPREADS[spread_type]
     await state.clear()
@@ -159,9 +179,8 @@ async def spread_question(message: Message, state: FSMContext, session: AsyncSes
     try:
         target = local_today(user)
         if not await check_daily_limit(session, user, target):
-            log.info(Event.TAROT_READING_LIMIT_HIT, user_id=user.id, spread_type=str(spread_type))
             await state.clear()
-            await message.answer(LIMIT_HIT_TEXT, reply_markup=tarot_keyboard())
+            await _send_limit(message, user.id, spread_type)
             return
 
         reading, cards = await create_reading(session, user, spread_type, question, target)
@@ -177,3 +196,23 @@ async def spread_question(message: Message, state: FSMContext, session: AsyncSes
         await publish_tarot_reading_generate(reading.id)
     finally:
         await release_reading_lock(user.id)
+
+
+@router.callback_query(F.data == CB_TAROT_UNLOCK)
+async def cb_tarot_unlock(callback: CallbackQuery, session: AsyncSession) -> None:
+    """Кнопка «ещё расклад»: пока бесплатно выдаём +1 расклад сверх лимита."""
+    if callback.message is None or callback.from_user is None:
+        await callback.answer()
+        return
+    user = await users_crud.get_user_by_telegram_id(session, callback.from_user.id)
+    if user is None or user.profile is None:
+        await callback.answer("Сначала: /start", show_alert=True)
+        return
+
+    await grant_bonus_reading(user.id, local_today(user))
+    log.info(Event.TAROT_READING_BONUS_GRANTED, user_id=user.id)
+
+    await callback.answer("Открыла для тебя ещё один расклад ✨")
+    # Снимаем кнопку с этого сообщения, чтобы бонусы не копились от повторных нажатий.
+    await callback.message.edit_reply_markup(reply_markup=None)
+    await callback.message.answer("Выбери расклад ✨", reply_markup=tarot_keyboard())
