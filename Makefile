@@ -1,4 +1,4 @@
-.PHONY: help up down test build logs ps check infra-down
+.PHONY: help up down test build logs ps check infra infra-down worker
 
 help:
 	@echo "Astra Docker"
@@ -11,6 +11,7 @@ help:
 	@echo "  make ps     — статус сервисов"
 	@echo "  make down   — остановить и удалить контейнеры"
 	@echo "  make infra  — только postgres + redis (dev на хосте)"
+	@echo "  make worker — воркер на хосте в терминале (инфра в докере, без api/worker-контейнеров)"
 
 up:
 	@./scripts/docker-up.sh
@@ -41,3 +42,11 @@ infra:
 
 infra-down:
 	docker compose stop postgres redis
+
+# Воркер на хосте: инфра (postgres/redis/rabbitmq) в докере, сам воркер — в этом
+# терминале (логи здесь, Ctrl+C для остановки). Не поднимает api/worker-контейнеры.
+worker:
+	docker compose up -d postgres redis rabbitmq
+	@until docker compose exec -T postgres pg_isready -U astra -d astra >/dev/null 2>&1; do sleep 1; done
+	uv run alembic upgrade head
+	uv run astra-worker
