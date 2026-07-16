@@ -10,7 +10,7 @@ HELP_CARD_TEXT = (
 )
 
 HELP_CARD_FOOTER_WITH_SUPPORT = (
-    "\n\nЕсть вопрос? Astrid на связи ✨"
+    "\n\nЕсть вопрос? Астрид на связи ✨"
 )
 
 HELP_CARD_NO_SUPPORT = (

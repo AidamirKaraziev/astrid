@@ -243,7 +243,7 @@ def help_keyboard(support_username: str) -> InlineKeyboardMarkup:
         inline_keyboard=[
             [
                 InlineKeyboardButton(
-                    text="💌 Написать Astrid",
+                    text="💌 Написать Астрид",
                     url=f"https://t.me/{username}",
                     style=ButtonStyle.PRIMARY,
                 ),

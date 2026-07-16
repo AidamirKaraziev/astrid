@@ -22,7 +22,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from astra.core.observability import get_logger
 from astra.telegram.ai_chat.agent import run_astrid
 from astra.telegram.ai_chat.intents import Intent
-from astra.telegram.button_texts import BTN_ASK_ASTRID, BTN_BACK_MENU
+from astra.telegram.button_texts import BTN_ASK_ASTRID, BTN_ASK_ASTRID_LEGACY, BTN_BACK_MENU
 from astra.telegram.states import AiChatStates
 from astra.users import crud as users_crud
 
@@ -33,7 +33,7 @@ router = Router(name="ai_chat")
 _HISTORY_KEY = "ai_chat_history"
 
 _GREETING = (
-    "Это я, Astrid ✨ Пиши мне обычным текстом — что хочешь узнать или сделать.\n\n"
+    "Это я, Астрид ✨ Пиши мне обычным текстом — что хочешь узнать или сделать.\n\n"
     "Например: «проверь совместимость с парнем, он родился 3 марта 92-го в Алматы» "
     "или «что там у меня по гороскопу на сегодня».\n\n"
     "Чтобы выйти — жми «🔙 Назад»."
@@ -97,9 +97,9 @@ def _flow_dispatch() -> dict[Intent, _FlowEntry]:
     }
 
 
-@router.message(F.text == BTN_ASK_ASTRID)
+@router.message(F.text.in_({BTN_ASK_ASTRID, BTN_ASK_ASTRID_LEGACY}))
 async def ai_chat_enter(message: Message, state: FSMContext) -> None:
-    """Вход в режим чата по кнопке «💬 Написать Astrid»."""
+    """Вход в режим чата по кнопке «💬 Написать Астрид»."""
     await state.set_state(AiChatStates.chatting)
     await state.update_data({_HISTORY_KEY: []})
     await message.answer(_GREETING, reply_markup=_ai_chat_keyboard())

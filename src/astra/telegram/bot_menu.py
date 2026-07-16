@@ -9,7 +9,7 @@ log = get_logger(__name__)
 
 BOT_COMMANDS_RU: tuple[BotCommand, ...] = (
     BotCommand(command="start", description="🏠 Главное меню"),
-    BotCommand(command="help", description="💌 Написать Astrid"),
+    BotCommand(command="help", description="💌 Написать Астрид"),
 )
 
 

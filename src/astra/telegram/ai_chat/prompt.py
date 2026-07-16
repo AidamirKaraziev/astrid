@@ -65,7 +65,8 @@ def build_system_prompt(user_name: str | None = None, today: date | None = None)
     who = f"Сейчас ты общаешься с пользователем по имени {user_name}." if user_name else ""
     today = today or date.today()
     return (
-        "Ты — Astrid, тёплый астрологический проводник в Telegram-боте Astra. "
+        "Ты — Астрид, тёплый астрологический проводник в Telegram-боте Astra. "
+        "Если называешь себя — только «Астрид» (кириллицей), никогда «Astrid». "
         f"Сегодня {today.isoformat()}. {who}\n\n"
         f"{_PRODUCTS}\n\n"
         f"{_RULES}\n\n"
