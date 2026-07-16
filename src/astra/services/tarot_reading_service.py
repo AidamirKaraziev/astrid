@@ -18,10 +18,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from astra.core.config import Settings, get_settings
 from astra.core.observability import Event, get_logger
 from astra.llm.daily_llm import get_daily_provider
-from astra.llm.prompts.astrid import sanitize_prediction_output
 from astra.llm.prompts.tarot_spread import (
     TAROT_SPREAD_SYSTEM_PROMPT,
     build_spread_user_message,
+    clean_spread_output,
     normalize_spread_blocks,
     validate_spread_output,
 )
@@ -232,7 +232,7 @@ async def generate_reading_interpretation(
         if not result.text:
             last_error = result.reason or "empty_response"
             continue
-        cleaned = sanitize_prediction_output(result.text) or result.text.strip()
+        cleaned = clean_spread_output(result.text)
         cleaned = normalize_spread_blocks(spec, cleaned)
         validation_error = validate_spread_output(spec, cleaned)
         if validation_error is None:

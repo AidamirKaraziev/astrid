@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import json
+import re
 from textwrap import dedent
 
 from astra.tarot.card import TarotCard
@@ -93,6 +94,44 @@ def build_spread_user_message(
         "Прочитай расклад как ответ на вопрос.\n\n"
         f"{json.dumps(payload, ensure_ascii=False, indent=2)}"
     )
+
+
+_QUOTE_CHARS = {'"', "'", "«", "»"}
+# Позиционный заголовок вида «Прошлое:» / «**Итог**:» отдельной строкой — снимаем,
+# чтобы модель не «съедала» блок под подпись (мы сами подписываем позиции при выводе).
+_LABEL_LINE = re.compile(r"^\s*[*_#>\s]*[А-ЯЁ][А-Яа-яёЁ ]{1,24}\s*[:：)]\s*$")
+
+
+def clean_spread_output(raw: str) -> str:
+    """Лёгкая очистка вывода модели БЕЗ переформатирования блоков.
+
+    В отличие от sanitize_prediction_output (обработчик прогноза, схлопывает
+    текст в «вопрос+прогноз+совет»), тут только снимаем обёртки — блочную
+    структуру расклада сохраняем.
+    """
+    text = raw.strip()
+    if not text:
+        return ""
+    # markdown-ограждения ```lang ... ```
+    text = re.sub(r"^```\w*\n?", "", text)
+    text = re.sub(r"\n?```$", "", text).strip()
+    # кавычки вокруг всего ответа
+    if len(text) >= 2 and text[0] in _QUOTE_CHARS and text[-1] in _QUOTE_CHARS:
+        text = text[1:-1].strip()
+    # схлопываем одиночные строки-заголовки позиций в следующий абзац
+    lines = text.split("\n")
+    merged: list[str] = []
+    pending_label: str | None = None
+    for line in lines:
+        if _LABEL_LINE.match(line):
+            pending_label = line.strip().rstrip(":：) ").strip("*_#> ")
+            continue
+        if pending_label and line.strip():
+            merged.append(f"{pending_label}. {line.strip()}")
+            pending_label = None
+        else:
+            merged.append(line)
+    return "\n".join(merged).strip()
 
 
 def normalize_spread_blocks(spec: SpreadSpec, text: str) -> str:

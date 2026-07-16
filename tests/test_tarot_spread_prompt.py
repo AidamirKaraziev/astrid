@@ -3,6 +3,7 @@
 from astra.llm.prompts.tarot_spread import (
     TAROT_SPREAD_SYSTEM_PROMPT,
     build_spread_user_message,
+    clean_spread_output,
     normalize_spread_blocks,
     validate_spread_output,
 )
@@ -104,3 +105,71 @@ class TestValidate:
     def test_valid_relationship(self):
         text = "\n\n".join([_BLOCK] * 5 + [_SUMMARY])
         assert validate_spread_output(_REL, text) is None
+
+
+# Реалистичные ответы модели (как их присылает DeepSeek) — проверяем ВЕСЬ путь
+# clean → normalize → validate, а не только валидатор на чистых строках.
+_THREE_REAL = (
+    "Тройка Жезлов в прошлом говорит о моменте, когда ты уже отправила корабли "
+    "в путь и решилась расширяться, пусть и с тревогой в груди.\n\n"
+    "Справедливость в настоящем показывает точку честного расчёта: сейчас всё "
+    "взвешивается ровно, и ты получаешь то, что посеяла раньше.\n\n"
+    "Королева Кубков в будущем обещает тепло и эмоциональную зрелость, если ты "
+    "позволишь себе довериться собственным чувствам.\n\n"
+    "Итог: расклад складывается в твою пользу — продолжай начатое и дай себе "
+    "неделю на спокойное решение без спешки."
+)
+
+_REL_REAL = "\n\n".join(
+    [
+        "Ты вносишь в эти отношения искренний интерес и готовность вкладываться, "
+        "но иногда ждёшь подтверждения слишком быстро.",
+        "Он приходит осторожнее: ему нужно время, чтобы поверить, что здесь "
+        "безопасно открыться по-настоящему.",
+        "Между вами живая связь, в которой больше тепла, чем вы оба готовы "
+        "признать вслух прямо сейчас.",
+        "Мешает страх сделать первый шаг — каждый ждёт, что начнёт другой, "
+        "и пауза затягивается.",
+        "Если хотя бы один заговорит честно, отношения двинутся к сближению, "
+        "а не к медленному угасанию.",
+        "Итог: связь жива и хочет расти — не жди идеального момента, скажи о "
+        "своих чувствах на этой неделе.",
+    ],
+)
+
+
+class TestFullPipeline:
+    """clean → normalize → validate на реальных форматах вывода."""
+
+    def _run(self, spec, raw: str) -> str | None:
+        return validate_spread_output(spec, normalize_spread_blocks(spec, clean_spread_output(raw)))
+
+    def test_three_cards_real_output_passes(self):
+        assert self._run(_THREE, _THREE_REAL) is None
+
+    def test_relationship_real_output_passes(self):
+        assert self._run(_REL, _REL_REAL) is None
+
+    def test_code_fence_wrapper_stripped(self):
+        wrapped = f"```\n{_THREE_REAL}\n```"
+        assert self._run(_THREE, wrapped) is None
+
+    def test_outer_quotes_stripped(self):
+        assert self._run(_THREE, f"«{_THREE_REAL}»") is None
+
+    def test_position_label_lines_merged(self):
+        # модель подписала блоки заголовками отдельной строкой
+        labelled = (
+            "Прошлое:\nТройка Жезлов говорит о решимости расширяться, принятой "
+            "ранее с тревогой, но всё же принятой тобой честно.\n\n"
+            "Настоящее:\nСправедливость показывает честный расчёт — сейчас всё "
+            "взвешивается ровно и по заслугам твоим.\n\n"
+            "Будущее:\nКоролева Кубков обещает тепло, если доверишься чувствам "
+            "своим и не будешь торопить события вокруг.\n\n"
+            "Итог:\nРасклад в твою пользу — продолжай начатое и дай себе неделю "
+            "на спокойное взвешенное решение."
+        )
+        assert self._run(_THREE, labelled) is None
+
+    def test_clean_does_not_touch_plain_blocks(self):
+        assert clean_spread_output(_THREE_REAL) == _THREE_REAL
