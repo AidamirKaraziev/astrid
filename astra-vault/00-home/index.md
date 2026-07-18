@@ -62,6 +62,7 @@ date: 2026-07-03
 - [[карточка профиля A2 сокращение названий GeoNames]]
 - [[reply-меню Telegram обновляется через AutoKeyboardMiddleware]]
 - [[кэш file_id вместо повторной заливки медиа в Telegram]]
+- [[как доводим платный таро-продукт до идеала]]
 
 ### Интеграции (`knowledge/integrations/`)
 
