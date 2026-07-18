@@ -41,7 +41,7 @@ class TestBuildUserMessage:
             "работать ли с Анжелой?", cards, user_name="Аня", gender="женщина",
         )
         assert "работать ли с Анжелой?" in msg
-        assert "Туз Жезлов" in msg and "past" in msg  # поле позиции
+        assert "Туз Жезлов" in msg and "heart" in msg  # поле позиции
         assert "женщина" in msg and "Аня" in msg
 
     def test_client_omitted_without_profile(self):
@@ -53,7 +53,7 @@ class TestBuildUserMessage:
 class TestParse:
     def test_valid_json_parses(self):
         product = TAROT_PRODUCTS[SpreadType.THREE_CARDS]
-        raw = '{"past":"a","present":"b","future":"c","summary":"d"}'
+        raw = '{"heart":"a","hidden":"b","outcome":"c","summary":"d"}'
         assert isinstance(product.parse(raw), ThreeCardsReading)
 
     def test_code_fence_stripped(self):
@@ -67,7 +67,7 @@ class TestParse:
 
     def test_missing_field_returns_none(self):
         product = TAROT_PRODUCTS[SpreadType.THREE_CARDS]
-        assert product.parse('{"past":"a","present":"b"}') is None
+        assert product.parse('{"heart":"a","hidden":"b"}') is None
 
 
 class TestYesNo:
@@ -95,21 +95,29 @@ class TestThreeCardsAlignment:
     def test_each_position_gets_its_own_field(self):
         cards = [card_by_id("wands_01"), card_by_id("wands_10"), card_by_id("cups_06")]
         data = ThreeCardsReading(
-            past="ПРОШЛОЕ-текст достаточной длины про первую карту расклада.",
-            present="НАСТОЯЩЕЕ-текст достаточной длины про вторую карту расклада.",
-            future="БУДУЩЕЕ-текст достаточной длины про третью карту расклада.",
+            heart="СЕРДЦЕ-текст достаточной длины про суть вопроса на поверхности.",
+            hidden="СКРЫТОЕ-текст достаточной длины про неочевидный фактор внутри.",
+            outcome="ИСХОД-текст достаточной длины про то, к чему всё идёт дальше.",
             summary="итог достаточной длины с конкретным действием на сегодня",
         )
         assert self.product.validate(data) is None
         out = self.product.render("вопрос?", cards, data)
         # текст позиции стоит ровно под своей картой — без сдвига
-        assert "Прошлое — Туз Жезлов</b>\nПРОШЛОЕ-текст" in out
-        assert "Настоящее — Десятка Жезлов</b>\nНАСТОЯЩЕЕ-текст" in out
-        assert "Будущее — Шестёрка Кубков</b>\nБУДУЩЕЕ-текст" in out
+        assert "Сердце вопроса — Туз Жезлов</b>\nСЕРДЦЕ-текст" in out
+        assert "Скрытое течение — Десятка Жезлов</b>\nСКРЫТОЕ-текст" in out
+        assert "К чему идёт — Шестёрка Кубков</b>\nИСХОД-текст" in out
+
+    def test_position_emoji_used_not_card_emoji(self):
+        cards = [card_by_id("wands_01"), card_by_id("wands_10"), card_by_id("cups_06")]
+        data = ThreeCardsReading(heart=_LONG, hidden=_LONG, outcome=_LONG, summary=_LONG)
+        out = self.product.render("вопрос?", cards, data)
+        assert "💛 <b>Сердце вопроса" in out
+        assert "🌊 <b>Скрытое течение" in out
+        assert "🔮 <b>К чему идёт" in out
 
     def test_short_field_rejected(self):
-        data = ThreeCardsReading(past="мало", present=_LONG, future=_LONG, summary=_LONG)
-        assert self.product.validate(data) == "field_past_too_short"
+        data = ThreeCardsReading(heart="мало", hidden=_LONG, outcome=_LONG, summary=_LONG)
+        assert self.product.validate(data) == "field_heart_too_short"
 
 
 class TestRelationship:

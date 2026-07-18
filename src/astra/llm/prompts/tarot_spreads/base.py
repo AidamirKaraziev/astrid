@@ -76,8 +76,9 @@ def question_line(question: str | None) -> str | None:
     return f"<i>«{html.escape(question)}»</i>" if question else None
 
 
-def position_block(label_ru: str, card: TarotCard, text: str) -> str:
-    return f"{card.emoji} <b>{label_ru} — {card.name_ru}</b>\n{text.strip()}"
+def position_block(label_ru: str, card: TarotCard, text: str, *, emoji: str = "") -> str:
+    lead = emoji or card.emoji  # тематическое эмодзи позиции, иначе — эмодзи карты
+    return f"{lead} <b>{label_ru} — {card.name_ru}</b>\n{text.strip()}"
 
 
 def summary_block(summary: str) -> str:
@@ -142,7 +143,15 @@ class TarotProduct(ABC):
         if q_line:
             lines.append(q_line)
         for position, card in zip(self.spec.positions, cards, strict=True):
-            lines += ["", position_block(position.label_ru, card, getattr(data, position.key))]
+            lines += [
+                "",
+                position_block(
+                    position.label_ru,
+                    card,
+                    getattr(data, position.key),
+                    emoji=position.emoji,
+                ),
+            ]
         lines += ["", summary_block(data.summary)]  # type: ignore[attr-defined]
         return "\n".join(lines)
 

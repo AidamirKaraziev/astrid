@@ -17,6 +17,7 @@ class SpreadPosition:
     key: str
     label_ru: str
     meaning: str  # что эта позиция значит — уходит в промпт
+    emoji: str = ""  # тематическое эмодзи позиции; пусто — берём эмодзи карты
 
 
 @dataclass(frozen=True, slots=True)
@@ -59,27 +60,36 @@ SPREADS: dict[SpreadType, SpreadSpec] = {
         emoji="🃏",
         positions=(
             SpreadPosition(
-                key="past",
-                label_ru="Прошлое",
-                meaning="что привело к текущей ситуации, корень происходящего",
+                key="heart",
+                label_ru="Сердце вопроса",
+                emoji="💛",
+                meaning=(
+                    "суть на поверхности — что человек уже чувствует и назвал бы сам, "
+                    "явное ядро ситуации"
+                ),
             ),
             SpreadPosition(
-                key="present",
-                label_ru="Настоящее",
-                meaning="что происходит сейчас, главная сила момента",
+                key="hidden",
+                label_ru="Скрытое течение",
+                emoji="🌊",
+                meaning=(
+                    "что скрыто под ситуацией — неочевидный фактор, подавленное чувство, "
+                    "иллюзия или страх, который человек не замечает"
+                ),
             ),
             SpreadPosition(
-                key="future",
-                label_ru="Будущее",
-                meaning="куда движется ситуация, если ничего не менять",
+                key="outcome",
+                label_ru="К чему идёт",
+                emoji="🔮",
+                meaning="вероятный исход при нынешнем раскладе сил, если ничего не менять",
             ),
         ),
         question_required=False,
         question_hint=(
             "О чём спросить карты? Опиши ситуацию одним-двумя предложениями —\n"
-            "или нажми «⏭ Пропустить», и карты расскажут о твоём дне."
+            "или нажми «⏭ Пропустить», и карты заглянут в суть твоего дня."
         ),
-        max_tokens=700,
+        max_tokens=750,
     ),
     SpreadType.RELATIONSHIP: SpreadSpec(
         type=SpreadType.RELATIONSHIP,
