@@ -35,51 +35,59 @@ class ThreeCardsReading(BaseModel):
 
 # --- План доводки модуля «Три карты» до идеала (TODO 3: сохранить этот план) ---
 # TODO 1 ✅ Жёсткая структура промпта и схемы сообщения + «слова от Астрид» (intro).
-# TODO 2 ⏳ После одобрения промпта — перевести его на английский язык.
+# TODO 2 ✅ Промпт переведён на английский (экономия токенов); вывод — только русский.
 # TODO 3 ⏳ Держать этот план в файле; отмечать сделанные шаги.
+#
+# _METHOD — на английском (дешевле по токенам для DeepSeek). ВАЖНО: значения
+# полей модель обязана писать по-русски (кириллицей) — это жёстко прописано.
+# PERSONA (base.py) остаётся на русском: она общая для всех раскладов и русским
+# контекстом дополнительно гарантирует русский ответ.
 _METHOD = dedent(
     """\
-    Продукт: «Три карты» в раскладе Сердце → Скрытое течение → Исход.
-    Это НЕ прошлое-настоящее-будущее, а три слоя одной ситуации.
+    Product: the "Three Cards" spread — Heart -> Hidden Current -> Outcome.
+    Not past/present/future, but three layers of ONE situation.
 
-    ЖЁСТКАЯ СТРУКТУРА. Верни JSON РОВНО с пятью полями в этом порядке:
+    CRITICAL LANGUAGE RULE: write every JSON string VALUE in RUSSIAN (Cyrillic)
+    only. This is a Russian-language product. Never write values in English or
+    Latin letters. Keep the JSON keys exactly as given below (in English).
 
-    1) intro (слова от Астрид). ЕДИНСТВЕННОЕ место для тёплого вступления: 1–2
-       предложения, которыми ты настраиваешь человека и обозначаешь, что этот
-       расклад заглядывает ПОД поверхность вопроса. Без обращения по имени, с
-       учётом пола. Пример тона: «Давай посмотрим глубже. Карты показывают не
-       только то, что на виду, но и то, что ты пока не назвала словами.»
-    2) heart (Сердце вопроса). Суть на поверхности — то, что человек уже
-       чувствует и назвал бы сам. Ядро ситуации, честно и тепло.
-    3) hidden (Скрытое течение). САМАЯ ценная карта: неочевидный фактор,
-       подавленное чувство, иллюзия или страх, которого человек не замечает.
-       Здесь ты открываешь то, что не лежит на поверхности.
-    4) outcome (К чему идёт). Куда ведёт нынешний расклад сил, если ничего не
-       менять. Не приговор, а честный вектор.
-    5) summary (Итог). Свяжи три слоя и дай ОДНО конкретное действие (часто —
-       как отделить реальное от выдуманного).
+    FIXED STRUCTURE. Return JSON with EXACTLY these five fields, in this order:
 
-    Правила: intro — единственное вступление; heart/hidden/outcome содержат
-    ТОЛЬКО смысл своей позиции, без приветствий и без имени. Каждую карту читай
-    строго в её слое; карты перекликаются — скрытое объясняет сердце, исход
-    вытекает из обоих.
+    1) intro (Astrid's words). The ONLY place for a warm opening: 1-2 sentences
+       that set the tone and signal this spread looks BENEATH the surface of the
+       question. Do not address by name; match the client's grammatical gender
+       (field "пол": женщина -> feminine forms, мужчина -> masculine).
+    2) heart (Сердце вопроса). The essence on the surface — what the person
+       already feels and would name themselves. The core, honest and warm.
+    3) hidden (Скрытое течение). The MOST valuable card: a non-obvious factor,
+       a suppressed feeling, an illusion or fear the person does not notice.
+       Reveal what does not lie on the surface.
+    4) outcome (К чему идёт). Where the current balance of forces leads if nothing
+       changes. Not a verdict, an honest vector.
+    5) summary (Итог). Tie the three layers together and give ONE concrete action
+       (often: how to tell the real from the imagined).
 
-    Схема JSON (верни ровно эти поля, ровно в этом порядке):
+    Rules: intro is the only opening; heart/hidden/outcome contain ONLY the
+    meaning of their own layer — no greetings, no name. Read each card strictly
+    in its layer; the cards echo each other (hidden explains heart, outcome
+    follows from both).
+
+    JSON schema (return exactly these fields, in this order; VALUES IN RUSSIAN):
     {
-      "intro": "1–2 предложения: тёплое вступление от Астрид",
-      "heart": "2–4 предложения: суть вопроса на поверхности",
-      "hidden": "2–4 предложения: что скрыто под ситуацией, неочевидный фактор",
-      "outcome": "2–4 предложения: к чему всё идёт при нынешнем раскладе",
-      "summary": "1–2 предложения итога + одно конкретное действие"
+      "intro": "1-2 sentences: warm opening from Astrid",
+      "heart": "2-4 sentences: the essence of the question on the surface",
+      "hidden": "2-4 sentences: what is hidden beneath, the non-obvious factor",
+      "outcome": "2-4 sentences: where it heads at the current balance of forces",
+      "summary": "1-2 sentences of conclusion + one concrete action"
     }
 
-    Как человек увидит сообщение (структура фиксирована, эмодзи и названия карт
-    подставляем мы — тебе их писать не нужно):
+    How the user sees the final message (structure is fixed; the emoji and card
+    names are added by us — do NOT write them yourself):
     🃏 Три карты
     [intro]
-    💛 Сердце вопроса — <карта>: [heart]
-    🌊 Скрытое течение — <карта>: [hidden]
-    🔮 К чему идёт — <карта>: [outcome]
+    💛 Сердце вопроса — <card>: [heart]
+    🌊 Скрытое течение — <card>: [hidden]
+    🔮 К чему идёт — <card>: [outcome]
     ✨ Итог: [summary]
     """,
 )

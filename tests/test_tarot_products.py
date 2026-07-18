@@ -135,6 +135,17 @@ class TestThreeCardsAlignment:
         data = ThreeCardsReading(intro="Коротко.", heart=_LONG, hidden=_LONG, outcome=_LONG, summary=_LONG)
         assert self.product.validate(data) == "field_intro_too_short"
 
+    def test_prompt_is_english_but_forces_russian_output(self):
+        prompt = self.product.system_prompt
+        # метод переведён на английский (экономия токенов)
+        assert "Three Cards" in prompt and "Heart" in prompt
+        # но вывод жёстко требуется на русском
+        assert "RUSSIAN" in prompt
+        assert "VALUES IN RUSSIAN" in prompt
+        # ключи схемы остаются прежними — парсинг не ломается
+        for key in ("intro", "heart", "hidden", "outcome", "summary"):
+            assert key in prompt
+
 
 class TestRelationship:
     product = TAROT_PRODUCTS[SpreadType.RELATIONSHIP]
