@@ -3,11 +3,11 @@
 from astra.llm.prompts.tarot_spreads.base import TarotProduct
 from astra.llm.prompts.tarot_spreads.relationship import RelationshipProduct
 from astra.llm.prompts.tarot_spreads.three_cards import ThreeCardsProduct
-from astra.llm.prompts.tarot_spreads.yes_no import YesNoProduct
+from astra.llm.prompts.tarot_spreads.wish import WishProduct
 from astra.tarot.spreads import SpreadType
 
 TAROT_PRODUCTS: dict[SpreadType, TarotProduct] = {
-    SpreadType.YES_NO: YesNoProduct(),
+    SpreadType.WISH: WishProduct(),
     SpreadType.THREE_CARDS: ThreeCardsProduct(),
     SpreadType.RELATIONSHIP: RelationshipProduct(),
 }

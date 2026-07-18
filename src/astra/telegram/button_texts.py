@@ -18,7 +18,9 @@ BTN_TAROT = "🔮 Карты Таро"
 
 BTN_TAROT_THREE = "🃏 Три карты"
 BTN_TAROT_RELATIONS = "💕 На отношения"
-BTN_TAROT_DECISION = "⚖️ На решение"
+BTN_TAROT_WISH = "🌟 Загадай желание"
+# Старая кнопка «На решение»: у части пользователей клавиатура закэширована клиентом.
+BTN_TAROT_DECISION_LEGACY = "⚖️ На решение"
 BTN_TAROT_SKIP = "⏭ Пропустить"
 # Инлайн-кнопка под сообщением о дневном лимите: выдаёт ещё расклад (пока бесплатно).
 BTN_TAROT_UNLOCK = "🔮 Сделать ещё расклад"
@@ -38,7 +40,7 @@ PAID_PRODUCT_BUTTONS = (
 TAROT_PRODUCT_BUTTONS = (
     BTN_TAROT_THREE,
     BTN_TAROT_RELATIONS,
-    BTN_TAROT_DECISION,
+    BTN_TAROT_WISH,
 )
 
 COMING_SOON_TEXT = "Скоро появится, выбери что-то другое."

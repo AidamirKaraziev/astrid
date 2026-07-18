@@ -64,7 +64,7 @@ def _flow_dispatch() -> dict[Intent, _FlowEntry]:
     from astra.telegram.handlers.tarot_spreads import (
         start_relationship,
         start_three_cards,
-        start_yes_no,
+        start_wish,
     )
 
     async def _prediction(m: Message, s: FSMContext, db: AsyncSession) -> None:
@@ -89,7 +89,7 @@ def _flow_dispatch() -> dict[Intent, _FlowEntry]:
         Intent.daily_prediction: _prediction,
         Intent.tarot: _tarot,
         # Конкретные расклады: сами ставят TarotStates.waiting_question и спросят вопрос
-        Intent.tarot_yes_no: start_yes_no,
+        Intent.tarot_wish: start_wish,
         Intent.tarot_three_cards: start_three_cards,
         Intent.tarot_relationship: start_relationship,
         Intent.edit_profile: _profile,

@@ -18,21 +18,27 @@ from astra.tarot.spreads import SPREADS, SpreadType
 
 _MODULE = "astra.services.tarot_reading_service"
 
-_YES_NO_JSON = (
-    '{"verdict":"да, но",'
-    '"answer":"Королева Жезлов отвечает: да, если понесёшь дело как свой огонь, а не побег.",'
-    '"summary":"Начинай — запиши три услуги и покажи одному реальному клиенту на этой неделе."}'
+_WISH_JSON = (
+    '{"verdict":"Сбудется, если",'
+    '"timing":"ориентировочно 2–3 месяца, когда остынут эмоции",'
+    '"intro":"Загадала — карты отвечают честно, включая срок.",'
+    '"heart":"Шестёрка Кубков видит здесь настоящую тёплую тягу, а не пустую надежду.",'
+    '"path":"Тройка Мечей: старая обида и недосказанность держат желание на месте.",'
+    '"outcome":"Влюблённые уже поворачивают к тебе, но качнёт исход чей-то первый шаг.",'
+    '"summary":"Перестань ждать и напиши первой, без упрёка, — этим и приблизишь срок."}'
 )
 
 
-def _reading_mock(spread_type: str = SpreadType.YES_NO, **overrides) -> MagicMock:
+def _reading_mock(spread_type: str = SpreadType.WISH, **overrides) -> MagicMock:
     reading = MagicMock()
     reading.id = uuid4()
     reading.user_id = uuid4()
     reading.spread_type = spread_type
-    reading.question = "Стоит ли менять работу?"
+    reading.question = "Хочу, чтобы мы с Сашей снова были вместе"
     reading.cards = [
-        {"position": 1, "position_key": "answer", "card_id": "major_07", "reversed": False},
+        {"position": 1, "position_key": "heart", "card_id": "cups_06", "reversed": False},
+        {"position": 2, "position_key": "path", "card_id": "swords_03", "reversed": False},
+        {"position": 3, "position_key": "outcome", "card_id": "major_06", "reversed": False},
     ]
     reading.interpretation = None
     reading.status = ReadingStatus.PENDING
@@ -111,20 +117,21 @@ class TestGenerateInterpretation:
             _patch_user(),
             patch(
                 f"{_MODULE}.get_daily_provider",
-                return_value=_provider_mock(CompletionResult(_YES_NO_JSON, None)),
+                return_value=_provider_mock(CompletionResult(_WISH_JSON, None)),
             ),
         ):
             result = await generate_reading_interpretation(session, reading.id)
         assert result is reading
         assert reading.status == ReadingStatus.TEXT_READY
         # interpretation — уже готовое отрендеренное сообщение
-        assert "Итог — Да, но:" in reading.interpretation
-        assert "Расклад на решение" in reading.interpretation
+        assert "Вердикт — Сбудется, если:" in reading.interpretation
+        assert "Когда сбудется:" in reading.interpretation
+        assert "Загадай желание" in reading.interpretation
 
     async def test_json_mode_and_profile_passed_to_llm(self):
         session = AsyncMock()
         reading = _reading_mock()
-        provider = _provider_mock(CompletionResult(_YES_NO_JSON, None))
+        provider = _provider_mock(CompletionResult(_WISH_JSON, None))
         with (
             patch(f"{_MODULE}.tarot_crud.get_reading", AsyncMock(return_value=reading)),
             _patch_user(name="Марк", gender="мужчина"),
@@ -141,7 +148,7 @@ class TestGenerateInterpretation:
         reading = _reading_mock()
         provider = _provider_mock(
             CompletionResult("это не json", None),
-            CompletionResult(_YES_NO_JSON, None),
+            CompletionResult(_WISH_JSON, None),
         )
         with (
             patch(f"{_MODULE}.tarot_crud.get_reading", AsyncMock(return_value=reading)),
@@ -172,7 +179,12 @@ class TestGenerateInterpretation:
     async def test_verdict_missing_is_validation_failure(self):
         session = AsyncMock()
         reading = _reading_mock()
-        bad = '{"verdict":"возможно","answer":"' + "x" * 50 + '","summary":"' + "y" * 30 + '"}'
+        bad = (
+            '{"verdict":"возможно","timing":"через пару месяцев по весне",'
+            '"intro":"Загадала — сейчас честно посмотрю по картам.",'
+            '"heart":"' + "х" * 45 + '","path":"' + "х" * 45 + '",'
+            '"outcome":"' + "х" * 45 + '","summary":"' + "у" * 30 + '"}'
+        )
         provider = _provider_mock(
             CompletionResult(bad, None),
             CompletionResult(bad, None),
@@ -232,10 +244,11 @@ class TestDeliverReading:
 
 class TestCaption:
     def test_caption_lists_positions_and_cards(self):
-        spec = SPREADS[SpreadType.YES_NO]
-        caption = format_reading_caption(spec, [card_by_id("major_07")])
-        assert "Расклад на решение" in caption
-        assert "Ответ:" in caption and "Колесница" in caption
+        spec = SPREADS[SpreadType.WISH]
+        cards = [card_by_id(c) for c in ("cups_06", "swords_03", "major_06")]
+        caption = format_reading_caption(spec, cards)
+        assert "Загадай желание" in caption
+        assert "Сердце желания:" in caption and "Шестёрка Кубков" in caption
         assert len(caption) <= 1024
 
     def test_relationship_caption_fits_album_limit(self):

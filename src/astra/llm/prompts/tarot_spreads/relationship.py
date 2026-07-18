@@ -17,10 +17,7 @@ from pydantic import BaseModel, Field
 from astra.llm.prompts.tarot_spreads.base import (
     PERSONA,
     TarotProduct,
-    position_block,
-    question_line,
-    summary_block,
-    title_line,
+    render_with_intro,
     validate_field_lengths,
 )
 from astra.tarot.card import TarotCard
@@ -143,20 +140,4 @@ class RelationshipProduct(TarotProduct):
 
     def render(self, question: str | None, cards: list[TarotCard], data: RelationshipReading) -> str:  # type: ignore[override]
         # Жёсткий формат: заголовок → слова от Астрид → 5 позиций → итог.
-        lines = [title_line(self.spec)]
-        q_line = question_line(question)
-        if q_line:
-            lines.append(q_line)
-        lines += ["", data.intro.strip()]
-        for position, card in zip(self.spec.positions, cards, strict=True):
-            lines += [
-                "",
-                position_block(
-                    position.label_ru,
-                    card,
-                    getattr(data, position.key),
-                    emoji=position.emoji,
-                ),
-            ]
-        lines += ["", summary_block(data.summary)]
-        return "\n".join(lines)
+        return render_with_intro(self.spec, question, cards, data)

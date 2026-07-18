@@ -35,11 +35,12 @@ from astra.tarot.spreads import SPREADS, SpreadType
 from astra.telegram.button_texts import (
     BTN_BACK_MENU,
     BTN_BACK_MENU_LEGACY,
-    BTN_TAROT_DECISION,
+    BTN_TAROT_DECISION_LEGACY,
     BTN_TAROT_RELATIONS,
     BTN_TAROT_SKIP,
     BTN_TAROT_THREE,
     BTN_TAROT_UNLOCK,
+    BTN_TAROT_WISH,
     CB_TAROT_UNLOCK,
     COMING_SOON_TEXT,
 )
@@ -56,7 +57,8 @@ _QUESTION_MIN_LEN = 3
 _QUESTION_MAX_LEN = 500
 
 SPREAD_BUTTONS: dict[str, SpreadType] = {
-    BTN_TAROT_DECISION: SpreadType.YES_NO,
+    BTN_TAROT_WISH: SpreadType.WISH,
+    BTN_TAROT_DECISION_LEGACY: SpreadType.WISH,  # старая кнопка у закэшированных клиентов
     BTN_TAROT_THREE: SpreadType.THREE_CARDS,
     BTN_TAROT_RELATIONS: SpreadType.RELATIONSHIP,
 }
@@ -123,8 +125,8 @@ async def _start_spread(
     )
 
 
-async def start_yes_no(message: Message, state: FSMContext, session: AsyncSession) -> None:
-    await _start_spread(message, state, session, SpreadType.YES_NO)
+async def start_wish(message: Message, state: FSMContext, session: AsyncSession) -> None:
+    await _start_spread(message, state, session, SpreadType.WISH)
 
 
 async def start_three_cards(message: Message, state: FSMContext, session: AsyncSession) -> None:

@@ -9,7 +9,7 @@ import pytest
 from astra.llm.prompts.tarot_spreads import TAROT_PRODUCTS
 from astra.llm.prompts.tarot_spreads.relationship import RelationshipReading
 from astra.llm.prompts.tarot_spreads.three_cards import ThreeCardsReading
-from astra.llm.prompts.tarot_spreads.yes_no import YesNoReading
+from astra.llm.prompts.tarot_spreads.wish import WishReading
 from astra.tarot.deck import card_by_id
 from astra.tarot.spreads import SpreadType
 
@@ -24,7 +24,7 @@ class TestRegistry:
         prompts = {p.system_prompt for p in TAROT_PRODUCTS.values()}
         schemas = {p.schema for p in TAROT_PRODUCTS.values()}
         assert len(prompts) == 3
-        assert schemas == {YesNoReading, ThreeCardsReading, RelationshipReading}
+        assert schemas == {WishReading, ThreeCardsReading, RelationshipReading}
 
     def test_prompts_use_cyrillic_persona_and_forbid_greetings(self):
         for product in TAROT_PRODUCTS.values():
@@ -45,8 +45,9 @@ class TestBuildUserMessage:
         assert "женщина" in msg and "Аня" in msg
 
     def test_client_omitted_without_profile(self):
-        product = TAROT_PRODUCTS[SpreadType.YES_NO]
-        msg = product.build_user_message("вопрос?", [card_by_id("major_07")])
+        product = TAROT_PRODUCTS[SpreadType.WISH]
+        cards = [card_by_id(c) for c in ("cups_06", "swords_03", "major_06")]
+        msg = product.build_user_message("вопрос?", cards)
         assert "клиент" not in msg
 
 
@@ -57,12 +58,15 @@ class TestParse:
         assert isinstance(product.parse(raw), ThreeCardsReading)
 
     def test_code_fence_stripped(self):
-        product = TAROT_PRODUCTS[SpreadType.YES_NO]
-        raw = '```json\n{"verdict":"да","answer":"a","summary":"b"}\n```'
+        product = TAROT_PRODUCTS[SpreadType.WISH]
+        raw = (
+            '```json\n{"verdict":"да","timing":"скоро","intro":"i","heart":"a",'
+            '"path":"b","outcome":"c","summary":"d"}\n```'
+        )
         assert product.parse(raw) is not None
 
     def test_invalid_json_returns_none(self):
-        product = TAROT_PRODUCTS[SpreadType.YES_NO]
+        product = TAROT_PRODUCTS[SpreadType.WISH]
         assert product.parse("это не json, а просто текст") is None
 
     def test_missing_field_returns_none(self):
@@ -70,23 +74,49 @@ class TestParse:
         assert product.parse('{"heart":"a","hidden":"b"}') is None
 
 
-class TestYesNo:
-    product = TAROT_PRODUCTS[SpreadType.YES_NO]
+class TestWish:
+    product = TAROT_PRODUCTS[SpreadType.WISH]
+
+    def _cards(self):
+        return [card_by_id(c) for c in ("cups_06", "swords_03", "major_06")]
+
+    def _reading(self, **over):
+        base = dict(
+            verdict="Сбудется, если",
+            timing="ориентировочно 2–3 месяца, когда остынут эмоции",
+            intro="Загадала — карты отвечают честно, включая срок.",
+            heart=_LONG, path=_LONG, outcome=_LONG,
+            summary="итог достаточной длины с конкретным действием на неделю",
+        )
+        base.update(over)
+        return WishReading(**base)
 
     def test_verdict_required(self):
-        data = YesNoReading(verdict="возможно", answer=_LONG, summary="итог достаточной длины тут")
-        assert self.product.validate(data) == "missing_verdict"
+        assert self.product.validate(self._reading(verdict="возможно")) == "missing_verdict"
 
     def test_valid(self):
-        data = YesNoReading(verdict="да, но", answer=_LONG, summary="итог достаточной длины тут")
-        assert self.product.validate(data) is None
+        assert self.product.validate(self._reading()) is None
 
-    def test_render_shows_verdict_in_summary(self):
-        data = YesNoReading(verdict="да, но", answer=_LONG, summary="сделай один конкретный шаг сегодня")
-        out = self.product.render("стоит ли?", [card_by_id("wands_queen")], data)
-        assert "Расклад на решение" in out
-        assert "Итог — Да, но:" in out
-        assert "Королева Жезлов" in out
+    def test_short_timing_rejected(self):
+        assert self.product.validate(self._reading(timing="скоро")) == "field_timing_too_short"
+
+    def test_short_intro_rejected(self):
+        assert self.product.validate(self._reading(intro="Коротко.")) == "field_intro_too_short"
+
+    def test_render_shows_verdict_timing_and_cards(self):
+        out = self.product.render("сбудется ли?", self._cards(), self._reading())
+        assert "Загадай желание" in out
+        assert "✨ <b>Вердикт — Сбудется, если:</b>" in out
+        assert "⏳ <b>Когда сбудется:</b>" in out
+        assert "💫 <b>Сердце желания" in out
+
+    def test_prompt_english_forces_russian_and_honesty(self):
+        prompt = self.product.system_prompt
+        assert "RUSSIAN" in prompt and "VALUES IN RUSSIAN" in prompt
+        assert "sugar-coat" in prompt
+        assert "NEVER invent an exact date" in prompt
+        for key in ("verdict", "timing", "intro", "heart", "path", "outcome", "summary"):
+            assert key in prompt
 
 
 class TestThreeCardsAlignment:

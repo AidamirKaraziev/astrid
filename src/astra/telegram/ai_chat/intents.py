@@ -24,7 +24,7 @@ class Intent(str, Enum):
     compatibility = "compatibility"         # 💕 Совместимость
     natal = "natal"                         # 🌌 Разбор натала
     tarot = "tarot"                         # 🔮 Карты Таро (меню, если расклад не ясен)
-    tarot_yes_no = "tarot_yes_no"           # ⚖️ Таро: расклад на решение (да/нет)
+    tarot_wish = "tarot_wish"               # 🌟 Таро: загадай желание (сбудется ли + срок)
     tarot_three_cards = "tarot_three_cards"  # 🃏 Таро: три карты
     tarot_relationship = "tarot_relationship"  # 💕 Таро: расклад на отношения
     edit_profile = "edit_profile"           # ✨ Обо мне (правка данных)

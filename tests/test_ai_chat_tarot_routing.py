@@ -8,7 +8,7 @@ from astra.telegram.ai_chat.intents import AstridReply, Intent
 from astra.telegram.ai_chat.prompt import build_system_prompt
 from astra.telegram.states import TarotStates
 
-_TAROT_INTENTS = (Intent.tarot_yes_no, Intent.tarot_three_cards, Intent.tarot_relationship)
+_TAROT_INTENTS = (Intent.tarot_wish, Intent.tarot_three_cards, Intent.tarot_relationship)
 
 
 class TestIntents:

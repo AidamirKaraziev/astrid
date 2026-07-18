@@ -7,7 +7,7 @@ from enum import StrEnum
 
 
 class SpreadType(StrEnum):
-    YES_NO = "yes_no"
+    WISH = "wish"
     THREE_CARDS = "three_cards"
     RELATIONSHIP = "relationship"
 
@@ -36,23 +36,37 @@ class SpreadSpec:
 
 
 SPREADS: dict[SpreadType, SpreadSpec] = {
-    SpreadType.YES_NO: SpreadSpec(
-        type=SpreadType.YES_NO,
-        title_ru="Расклад на решение",
-        emoji="⚖️",
+    SpreadType.WISH: SpreadSpec(
+        type=SpreadType.WISH,
+        title_ru="Загадай желание",
+        emoji="🌟",
+        # Компактный ритуал: 3 карты + честный вердикт «сбудется ли» + срок.
         positions=(
             SpreadPosition(
-                key="answer",
-                label_ru="Ответ",
-                meaning="карта отвечает на вопрос да или нет и объясняет цену этого ответа",
+                key="heart",
+                label_ru="Сердце желания",
+                emoji="💫",
+                meaning="суть желания глазами карт — что человек хочет на самом деле",
+            ),
+            SpreadPosition(
+                key="path",
+                label_ru="Что на пути",
+                emoji="🛤",
+                meaning="что помогает и что мешает желанию сбыться прямо сейчас",
+            ),
+            SpreadPosition(
+                key="outcome",
+                label_ru="К чему идёт",
+                emoji="🌙",
+                meaning="сбудется ли желание при нынешнем раскладе сил и с какой ценой",
             ),
         ),
         question_required=True,
         question_hint=(
-            "Сформулируй вопрос так, чтобы на него можно было ответить «да» или «нет».\n"
-            "Например: «Стоит ли мне соглашаться на эту работу?»"
+            "Загадай желание — опиши его одним-двумя предложениями.\n"
+            "Например: «Хочу, чтобы мы с Сашей снова были вместе»."
         ),
-        max_tokens=400,
+        max_tokens=700,
     ),
     SpreadType.THREE_CARDS: SpreadSpec(
         type=SpreadType.THREE_CARDS,

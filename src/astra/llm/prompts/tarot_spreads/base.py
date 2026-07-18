@@ -85,6 +85,62 @@ def summary_block(summary: str) -> str:
     return f"✨ <b>Итог:</b> {summary.strip()}"
 
 
+def normalize_verdict(verdict: str) -> str:
+    """Вердикт к нижнему регистру без ведущих кавычек/тире — для проверки начала."""
+    return verdict.strip().lower().lstrip("«\"'— ")
+
+
+def verdict_summary_block(verdict: str, summary: str, *, label: str = "Итог") -> str:
+    """Итоговый блок с вердиктом-словом в шапке (для продуктов с вердиктом)."""
+    verdict = verdict.strip().rstrip(".")
+    verdict = verdict[:1].upper() + verdict[1:]
+    return f"✨ <b>{label} — {verdict}:</b> {summary.strip()}"
+
+
+def intro_position_lines(
+    spec: SpreadSpec,
+    question: str | None,
+    cards: list[TarotCard],
+    data: BaseModel,
+    *,
+    intro_attr: str = "intro",
+) -> list[str]:
+    """Общая шапка продукта: заголовок → вопрос → intro → блок на каждую позицию.
+
+    Возвращает строки без итога — хвост (итог/вердикт/срок) добавляет продукт.
+    """
+    lines = [title_line(spec)]
+    q_line = question_line(question)
+    if q_line:
+        lines.append(q_line)
+    intro = str(getattr(data, intro_attr, "")).strip()
+    if intro:
+        lines += ["", intro]
+    for position, card in zip(spec.positions, cards, strict=True):
+        lines += [
+            "",
+            position_block(
+                position.label_ru,
+                card,
+                getattr(data, position.key),
+                emoji=position.emoji,
+            ),
+        ]
+    return lines
+
+
+def render_with_intro(
+    spec: SpreadSpec,
+    question: str | None,
+    cards: list[TarotCard],
+    data: BaseModel,
+) -> str:
+    """Заголовок → вопрос → intro → позиции → итог. Формат «Три карты»/«Отношения»."""
+    lines = intro_position_lines(spec, question, cards, data)
+    lines += ["", summary_block(data.summary)]  # type: ignore[attr-defined]
+    return "\n".join(lines)
+
+
 def validate_field_lengths(data: BaseModel, field_names: list[str]) -> str | None:
     for name in field_names:
         if len(str(getattr(data, name, "")).strip()) < MIN_FIELD_LEN:
@@ -130,30 +186,6 @@ class TarotProduct(ABC):
             return self.schema.model_validate_json(text)
         except (ValidationError, ValueError):
             return None
-
-    def render_positioned(
-        self,
-        question: str | None,
-        cards: list[TarotCard],
-        data: BaseModel,
-    ) -> str:
-        """Общий формат: заголовок, вопрос, блок на позицию (поле = position.key), итог."""
-        lines = [title_line(self.spec)]
-        q_line = question_line(question)
-        if q_line:
-            lines.append(q_line)
-        for position, card in zip(self.spec.positions, cards, strict=True):
-            lines += [
-                "",
-                position_block(
-                    position.label_ru,
-                    card,
-                    getattr(data, position.key),
-                    emoji=position.emoji,
-                ),
-            ]
-        lines += ["", summary_block(data.summary)]  # type: ignore[attr-defined]
-        return "\n".join(lines)
 
     @abstractmethod
     def validate(self, data: BaseModel) -> str | None:
