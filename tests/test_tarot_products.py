@@ -149,28 +149,61 @@ class TestThreeCardsAlignment:
 
 class TestRelationship:
     product = TAROT_PRODUCTS[SpreadType.RELATIONSHIP]
+    _cards_ids = ("major_06", "cups_queen", "swords_03", "pentacles_04", "wands_10")
 
-    def test_valid_and_five_blocks_rendered(self):
-        cards = [
-            card_by_id(c)
-            for c in ("major_06", "cups_queen", "swords_03", "pentacles_04", "wands_10")
-        ]
-        data = RelationshipReading(
-            you=_LONG, partner=_LONG, between=_LONG, obstacle=_LONG, direction=_LONG,
+    def _cards(self):
+        return [card_by_id(c) for c in self._cards_ids]
+
+    def _reading(self, **over):
+        base = dict(
+            intro="Посмотрим, что он чувствует к тебе, но не проговаривает вслух.",
+            who_you_are=_LONG, unspoken=_LONG, holding_back=_LONG,
+            what_wants=_LONG, your_move=_LONG,
             summary="итог достаточной длины с конкретным действием на неделю",
         )
+        base.update(over)
+        return RelationshipReading(**base)
+
+    def test_valid_and_five_blocks_rendered(self):
+        data = self._reading()
         assert self.product.validate(data) is None
-        out = self.product.render("что между нами?", cards, data)
-        for label in ("Ты —", "Он(а) —", "Между вами —", "Что мешает —", "Куда это идёт —"):
+        out = self.product.render("что между нами?", self._cards(), data)
+        for label in (
+            "Кто ты для него(неё) —",
+            "Что чувствует, но молчит —",
+            "Что его(её) останавливает —",
+            "Чего хочет на самом деле —",
+            "Твой ход —",
+        ):
             assert label in out
         assert "html" not in out  # эскейпа мусора нет
 
+    def test_intro_rendered_after_title_before_cards(self):
+        data = self._reading(intro="СЛОВА-АСТРИД: заглянем в то, что он не говорит.")
+        out = self.product.render(None, self._cards(), data)
+        assert out.index("Расклад на отношения") < out.index("СЛОВА-АСТРИД")
+        assert out.index("СЛОВА-АСТРИД") < out.index("Кто ты для него")
+
+    def test_unspoken_position_uses_its_emoji(self):
+        out = self.product.render("вопрос?", self._cards(), self._reading())
+        assert "🌊 <b>Что чувствует, но молчит" in out
+        assert "➡️ <b>Твой ход" in out
+
+    def test_short_field_rejected(self):
+        assert self.product.validate(self._reading(unspoken="мало")) == "field_unspoken_too_short"
+
+    def test_short_intro_rejected(self):
+        assert self.product.validate(self._reading(intro="Коротко.")) == "field_intro_too_short"
+
+    def test_prompt_english_forces_russian_and_honesty(self):
+        prompt = self.product.system_prompt
+        assert "RUSSIAN" in prompt and "VALUES IN RUSSIAN" in prompt
+        assert "sugar-coat" in prompt  # правило «не сглаживать»
+        assert "not fatalism" in prompt or "NOT fatalism" in prompt
+        for key in ("intro", "who_you_are", "unspoken", "holding_back", "what_wants", "your_move", "summary"):
+            assert key in prompt
+
     def test_question_html_escaped(self):
-        cards = [card_by_id(c) for c in ("major_06", "cups_queen", "swords_03", "pentacles_04", "wands_10")]
-        data = RelationshipReading(
-            you=_LONG, partner=_LONG, between=_LONG, obstacle=_LONG, direction=_LONG,
-            summary="итог достаточной длины с конкретным действием на неделю",
-        )
-        out = self.product.render("<b>взлом</b>", cards, data)
+        out = self.product.render("<b>взлом</b>", self._cards(), self._reading())
         assert "<b>взлом</b>" not in out
         assert "&lt;b&gt;" in out

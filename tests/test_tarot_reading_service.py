@@ -96,7 +96,7 @@ class TestCreateReading:
             )
         assert len(cards) == 5
         keys = [entry["position_key"] for entry in created["cards"]]
-        assert keys == ["you", "partner", "between", "obstacle", "direction"]
+        assert keys == ["who_you_are", "unspoken", "holding_back", "what_wants", "your_move"]
         card_ids = [entry["card_id"] for entry in created["cards"]]
         assert len(card_ids) == len(set(card_ids))
         assert all(entry["reversed"] is False for entry in created["cards"])
@@ -246,4 +246,4 @@ class TestCaption:
         ]
         caption = format_reading_caption(spec, cards)
         assert len(caption) <= 1024
-        assert "Между вами:" in caption and "Королева Кубков" in caption
+        assert "Что чувствует, но молчит:" in caption and "Королева Кубков" in caption
