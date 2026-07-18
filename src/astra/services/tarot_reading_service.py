@@ -7,7 +7,6 @@ tarot_reading.generate; worker генерирует интерпретацию (
 
 from __future__ import annotations
 
-import html
 from datetime import date as date_type, datetime
 from uuid import UUID
 from zoneinfo import ZoneInfo
@@ -18,13 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from astra.core.config import Settings, get_settings
 from astra.core.observability import Event, get_logger
 from astra.llm.daily_llm import get_daily_provider
-from astra.llm.prompts.tarot_spread import (
-    TAROT_SPREAD_SYSTEM_PROMPT,
-    build_spread_user_message,
-    clean_spread_output,
-    normalize_spread_blocks,
-    validate_spread_output,
-)
+from astra.llm.prompts.tarot_spreads import TAROT_PRODUCTS
 from astra.llm.types import ChatMessage, CompletionRequest
 from astra.tarot import models as tarot_crud
 from astra.tarot.deck import TarotCard, card_by_id
@@ -201,18 +194,20 @@ async def generate_reading_interpretation(
     reading.status = ReadingStatus.GENERATING
     await session.flush()
 
-    spec = SPREADS[SpreadType(reading.spread_type)]
+    product = TAROT_PRODUCTS[SpreadType(reading.spread_type)]
     cards = reading_cards(reading)
     user = await users_crud.get_user_by_id(session, reading.user_id)
     profile = user.profile if user else None
     provider = get_daily_provider(cfg)
+    extra: dict = {"json_mode": True}
+    if provider.name == "deepseek":
+        extra["thinking_disabled"] = True
     request = CompletionRequest(
         messages=(
-            ChatMessage("system", TAROT_SPREAD_SYSTEM_PROMPT),
+            ChatMessage("system", product.system_prompt),
             ChatMessage(
                 "user",
-                build_spread_user_message(
-                    spec,
+                product.build_user_message(
                     reading.question,
                     cards,
                     user_name=profile.display_name if profile else None,
@@ -221,9 +216,9 @@ async def generate_reading_interpretation(
             ),
         ),
         temperature=_TAROT_TEMPERATURE,
-        max_tokens=spec.max_tokens,
+        max_tokens=product.max_tokens,
         timeout_seconds=cfg.deepseek_timeout_seconds,
-        extra={"thinking_disabled": True} if provider.name == "deepseek" else {},
+        extra=extra,
     )
 
     last_error = "unknown"
@@ -232,11 +227,15 @@ async def generate_reading_interpretation(
         if not result.text:
             last_error = result.reason or "empty_response"
             continue
-        cleaned = clean_spread_output(result.text)
-        cleaned = normalize_spread_blocks(spec, cleaned)
-        validation_error = validate_spread_output(spec, cleaned)
+        data = product.parse(result.text)
+        if data is None:
+            last_error = "json_invalid"
+            continue
+        validation_error = product.validate(data)
         if validation_error is None:
-            reading.interpretation = cleaned
+            # Рендерим финальное сообщение сразу из структурированных полей —
+            # позиция→текст детерминированы, съехать не может.
+            reading.interpretation = product.render(reading.question, cards, data)
             reading.status = ReadingStatus.TEXT_READY
             await session.flush()
             log.info(Event.TAROT_READING_GENERATED, reading_id=reading.id)
@@ -262,7 +261,8 @@ async def deliver_reading(
     user = await users_crud.get_user_by_id(session, reading.user_id)
     if user is None:
         return False
-    await send_telegram_html(user.telegram_id, format_reading_message(reading), settings)
+    # interpretation уже содержит готовое HTML-сообщение (отрендерено при генерации).
+    await send_telegram_html(user.telegram_id, reading.interpretation, settings)
     await tarot_crud.mark_reading_sent(session, reading)
     log.info(Event.TAROT_READING_SENT, reading_id=reading.id, user_id=user.id)
     return True
@@ -287,21 +287,4 @@ def format_reading_caption(spec: SpreadSpec, cards: list[TarotCard]) -> str:
         for position, card in zip(spec.positions, cards, strict=True)
     ]
     lines += ["", "Астрид уже читает расклад — интерпретация будет через минуту 🕯"]
-    return "\n".join(lines)
-
-
-def format_reading_message(reading: TarotReading) -> str:
-    """HTML-сообщение с интерпретацией: блоки по позициям + итог."""
-    spec = SPREADS[SpreadType(reading.spread_type)]
-    cards = reading_cards(reading)
-    blocks = [b.strip() for b in (reading.interpretation or "").split("\n\n") if b.strip()]
-    position_blocks, summary = blocks[: spec.card_count], blocks[spec.card_count:]
-
-    lines = [f"{spec.emoji} <b>{spec.title_ru}</b>"]
-    if reading.question:
-        lines.append(f"<i>«{html.escape(reading.question)}»</i>")
-    for position, card, block in zip(spec.positions, cards, position_blocks, strict=False):
-        lines += ["", f"{card.emoji} <b>{position.label_ru} — {card.name_ru}</b>", block]
-    if summary:
-        lines += ["", f"✨ <b>Итог:</b> {' '.join(summary)}"]
     return "\n".join(lines)
