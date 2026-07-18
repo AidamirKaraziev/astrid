@@ -53,7 +53,7 @@ class TestBuildUserMessage:
 class TestParse:
     def test_valid_json_parses(self):
         product = TAROT_PRODUCTS[SpreadType.THREE_CARDS]
-        raw = '{"heart":"a","hidden":"b","outcome":"c","summary":"d"}'
+        raw = '{"intro":"i","heart":"a","hidden":"b","outcome":"c","summary":"d"}'
         assert isinstance(product.parse(raw), ThreeCardsReading)
 
     def test_code_fence_stripped(self):
@@ -95,6 +95,7 @@ class TestThreeCardsAlignment:
     def test_each_position_gets_its_own_field(self):
         cards = [card_by_id("wands_01"), card_by_id("wands_10"), card_by_id("cups_06")]
         data = ThreeCardsReading(
+            intro="Давай посмотрим глубже, чем лежит на поверхности вопроса.",
             heart="СЕРДЦЕ-текст достаточной длины про суть вопроса на поверхности.",
             hidden="СКРЫТОЕ-текст достаточной длины про неочевидный фактор внутри.",
             outcome="ИСХОД-текст достаточной длины про то, к чему всё идёт дальше.",
@@ -107,17 +108,32 @@ class TestThreeCardsAlignment:
         assert "Скрытое течение — Десятка Жезлов</b>\nСКРЫТОЕ-текст" in out
         assert "К чему идёт — Шестёрка Кубков</b>\nИСХОД-текст" in out
 
+    def test_intro_rendered_after_title_before_cards(self):
+        cards = [card_by_id("wands_01"), card_by_id("wands_10"), card_by_id("cups_06")]
+        data = ThreeCardsReading(
+            intro="СЛОВА-АСТРИД: заглянем под поверхность твоего вопроса вместе.",
+            heart=_LONG, hidden=_LONG, outcome=_LONG, summary=_LONG,
+        )
+        out = self.product.render(None, cards, data)
+        # вступление стоит между заголовком и первой картой
+        assert out.index("СЛОВА-АСТРИД") < out.index("Сердце вопроса")
+        assert out.index("Три карты") < out.index("СЛОВА-АСТРИД")
+
     def test_position_emoji_used_not_card_emoji(self):
         cards = [card_by_id("wands_01"), card_by_id("wands_10"), card_by_id("cups_06")]
-        data = ThreeCardsReading(heart=_LONG, hidden=_LONG, outcome=_LONG, summary=_LONG)
+        data = ThreeCardsReading(intro=_LONG, heart=_LONG, hidden=_LONG, outcome=_LONG, summary=_LONG)
         out = self.product.render("вопрос?", cards, data)
         assert "💛 <b>Сердце вопроса" in out
         assert "🌊 <b>Скрытое течение" in out
         assert "🔮 <b>К чему идёт" in out
 
     def test_short_field_rejected(self):
-        data = ThreeCardsReading(heart="мало", hidden=_LONG, outcome=_LONG, summary=_LONG)
+        data = ThreeCardsReading(intro=_LONG, heart="мало", hidden=_LONG, outcome=_LONG, summary=_LONG)
         assert self.product.validate(data) == "field_heart_too_short"
+
+    def test_short_intro_rejected(self):
+        data = ThreeCardsReading(intro="Коротко.", heart=_LONG, hidden=_LONG, outcome=_LONG, summary=_LONG)
+        assert self.product.validate(data) == "field_intro_too_short"
 
 
 class TestRelationship:
