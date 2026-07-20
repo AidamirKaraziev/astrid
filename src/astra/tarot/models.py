@@ -15,7 +15,6 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
-    func,
     select,
 )
 from sqlalchemy.dialects.postgresql import JSONB, UUID
@@ -85,9 +84,10 @@ async def get_previous_draw(
 
 
 class TarotReading(Base, TimestampMixin):
-    """Платный расклад: вопрос → карты → LLM-интерпретация → доставка.
+    """Платный расклад: вопрос → оплата Stars → карты → LLM-интерпретация → доставка.
 
-    price_stars/paid_at — задел под Telegram Stars: NULL = бесплатный расклад.
+    price_stars/paid_at заполняются при оплате; NULL = черновик (pending_payment).
+    Финансовый документ — таблица payments; здесь только снапшот для удобства.
     """
 
     __tablename__ = "tarot_readings"
@@ -121,24 +121,6 @@ async def get_reading(session: AsyncSession, reading_id: uuid.UUID) -> TarotRead
     return result.scalar_one_or_none()
 
 
-async def count_readings_for_date(
-    session: AsyncSession,
-    user_id: uuid.UUID,
-    target: date_type,
-) -> int:
-    """Расклады за локальный день; failed не считаются — фейл возвращает попытку."""
-    result = await session.execute(
-        select(func.count())
-        .select_from(TarotReading)
-        .where(
-            TarotReading.user_id == user_id,
-            TarotReading.date == target,
-            TarotReading.status != ReadingStatus.FAILED,
-        ),
-    )
-    return int(result.scalar_one())
-
-
 async def create_reading(
     session: AsyncSession,
     *,
@@ -147,6 +129,7 @@ async def create_reading(
     spread_type: str,
     question: str | None,
     cards: list[dict],
+    status: ReadingStatus = ReadingStatus.PENDING,
 ) -> TarotReading:
     row = TarotReading(
         user_id=user_id,
@@ -154,7 +137,7 @@ async def create_reading(
         spread_type=spread_type,
         question=question,
         cards=cards,
-        status=ReadingStatus.PENDING,
+        status=status,
     )
     session.add(row)
     await session.flush()

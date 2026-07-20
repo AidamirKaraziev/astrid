@@ -75,8 +75,15 @@ class Event(StrEnum):
     TAROT_READING_GENERATED = "tarot_reading.generated"
     TAROT_READING_SENT = "tarot_reading.sent"
     TAROT_READING_FAILED = "tarot_reading.failed"
-    TAROT_READING_LIMIT_HIT = "tarot_reading.limit_hit"
-    TAROT_READING_BONUS_GRANTED = "tarot_reading.bonus_granted"
+
+    # Payments (Telegram Stars) — воронка: invoice_sent → completed
+    PAYMENT_INVOICE_SENT = "payment.invoice_sent"
+    PAYMENT_PRE_CHECKOUT_REJECTED = "payment.pre_checkout_rejected"
+    PAYMENT_COMPLETED = "payment.completed"
+    PAYMENT_DUPLICATE = "payment.duplicate"
+    PAYMENT_ORPHAN = "payment.orphan"
+    PAYMENT_REFUNDED = "payment.refunded"
+    PAYMENT_REFUND_FAILED = "payment.refund_failed"
 
     # Natal report pipeline
     NATAL_REPORT_CREATED = "natal_report.created"

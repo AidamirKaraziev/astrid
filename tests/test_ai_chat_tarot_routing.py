@@ -64,10 +64,6 @@ class TestRouting:
                 "astra.telegram.handlers.tarot_spreads.users_crud.get_user_by_telegram_id",
                 AsyncMock(return_value=user),
             ),
-            patch(
-                "astra.telegram.handlers.tarot_spreads.check_daily_limit",
-                AsyncMock(return_value=True),
-            ),
         ):
             await ai_chat_turn(message, state, session)
 

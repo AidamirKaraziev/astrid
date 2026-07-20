@@ -6,11 +6,11 @@ from uuid import uuid4
 
 from astra.llm.types import CompletionResult
 from astra.services.tarot_reading_service import (
-    check_daily_limit,
-    create_reading,
+    create_reading_draft,
     deliver_reading,
     format_reading_caption,
     generate_reading_interpretation,
+    mark_reading_paid,
 )
 from astra.tarot.deck import card_by_id
 from astra.tarot.enums import ReadingStatus
@@ -61,33 +61,7 @@ def _patch_user(name: str = "Аня", gender: str = "женщина"):
     return patch(f"{_MODULE}.users_crud.get_user_by_id", AsyncMock(return_value=user))
 
 
-class TestCheckDailyLimit:
-    async def test_under_limit(self):
-        session, user = AsyncMock(), MagicMock()
-        with (
-            patch(f"{_MODULE}.tarot_crud.count_readings_for_date", AsyncMock(return_value=0)),
-            patch(f"{_MODULE}.granted_bonus", AsyncMock(return_value=0)),
-        ):
-            assert await check_daily_limit(session, user, date(2026, 7, 15)) is True
-
-    async def test_limit_reached(self):
-        session, user = AsyncMock(), MagicMock()
-        with (
-            patch(f"{_MODULE}.tarot_crud.count_readings_for_date", AsyncMock(return_value=1)),
-            patch(f"{_MODULE}.granted_bonus", AsyncMock(return_value=0)),
-        ):
-            assert await check_daily_limit(session, user, date(2026, 7, 15)) is False
-
-    async def test_bonus_raises_limit(self):
-        session, user = AsyncMock(), MagicMock()
-        with (
-            patch(f"{_MODULE}.tarot_crud.count_readings_for_date", AsyncMock(return_value=1)),
-            patch(f"{_MODULE}.granted_bonus", AsyncMock(return_value=1)),
-        ):
-            assert await check_daily_limit(session, user, date(2026, 7, 15)) is True
-
-
-class TestCreateReading:
+class TestCreateReadingDraft:
     async def test_cards_json_matches_spec_positions(self):
         session, user = AsyncMock(), MagicMock(id=uuid4())
         created = {}
@@ -97,15 +71,26 @@ class TestCreateReading:
             return MagicMock(id=uuid4())
 
         with patch(f"{_MODULE}.tarot_crud.create_reading", AsyncMock(side_effect=capture)):
-            _, cards = await create_reading(
+            await create_reading_draft(
                 session, user, SpreadType.RELATIONSHIP, "Что между нами?", date(2026, 7, 15),
             )
-        assert len(cards) == 5
         keys = [entry["position_key"] for entry in created["cards"]]
         assert keys == ["who_you_are", "unspoken", "holding_back", "what_wants", "your_move"]
         card_ids = [entry["card_id"] for entry in created["cards"]]
         assert len(card_ids) == len(set(card_ids))
         assert all(entry["reversed"] is False for entry in created["cards"])
+        # до оплаты расклад — черновик, worker его не берёт
+        assert created["status"] == ReadingStatus.PENDING_PAYMENT
+
+
+class TestMarkReadingPaid:
+    async def test_moves_draft_to_pending_with_price(self):
+        session = AsyncMock()
+        reading = _reading_mock(status=ReadingStatus.PENDING_PAYMENT, paid_at=None)
+        await mark_reading_paid(session, reading, 50)
+        assert reading.status == ReadingStatus.PENDING
+        assert reading.price_stars == 50
+        assert reading.paid_at is not None
 
 
 class TestGenerateInterpretation:

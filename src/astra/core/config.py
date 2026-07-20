@@ -101,9 +101,10 @@ class Settings(BaseSettings):
     ai_chat_enabled: bool = False
     ai_chat_provider: str = "deepseek"
 
-    # Платные расклады таро (MVP: бесплатно с дневным лимитом)
+    # Платные расклады таро: оплата в Telegram Stars.
+    # Цены — в таблице product_prices; это значение — фолбэк, если строки нет.
     tarot_spreads_enabled: bool = True
-    tarot_spreads_daily_limit: int = 1
+    tarot_reading_price_stars: int = 50
 
     # PDF совместимости на volume (Docker: /data/compatibility)
     compatibility_pdf_dir: str = "data/compatibility_pdfs"

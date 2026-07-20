@@ -4,6 +4,7 @@ from enum import StrEnum
 
 
 class ReadingStatus(StrEnum):
+    PENDING_PAYMENT = "pending_payment"  # черновик: вопрос принят, ждём оплату Stars
     PENDING = "pending"
     GENERATING = "generating"
     TEXT_READY = "text_ready"

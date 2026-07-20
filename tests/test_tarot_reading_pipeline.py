@@ -75,6 +75,20 @@ class TestHandleGenerate:
         generate.assert_not_awaited()
         publish.assert_awaited_once_with(reading.id)
 
+    async def test_unpaid_draft_is_skipped(self):
+        session = AsyncMock()
+        reading = MagicMock(id=uuid4(), status=ReadingStatus.PENDING_PAYMENT)
+        with (
+            patch("astra.tarot.models.get_reading", AsyncMock(return_value=reading)),
+            patch(f"{_MODULE}.generate_reading_interpretation", AsyncMock()) as generate,
+            patch(f"{_MODULE}.publish_tarot_reading_send", AsyncMock()) as publish,
+        ):
+            await handle_tarot_reading_generate(
+                session, _task(TaskType.TAROT_READING_GENERATE, reading.id),
+            )
+        generate.assert_not_awaited()
+        publish.assert_not_awaited()
+
     async def test_failure_notifies_user(self):
         session = AsyncMock()
         reading = MagicMock(
@@ -87,12 +101,18 @@ class TestHandleGenerate:
             patch(f"{_MODULE}.generate_reading_interpretation", AsyncMock(return_value=None)),
             patch(f"{_MODULE}.notify_reading_failed", AsyncMock()) as notify,
             patch(f"{_MODULE}.publish_tarot_reading_send", AsyncMock()) as publish,
+            patch(
+                "astra.payments.service.refund_reading_payment",
+                AsyncMock(return_value=True),
+            ) as refund,
         ):
             await handle_tarot_reading_generate(
                 session, _task(TaskType.TAROT_READING_GENERATE, reading.id),
             )
-        session.commit.assert_awaited_once()  # failed-статус фиксируется
+        session.commit.assert_awaited_once()  # failed-статус и refund фиксируются
+        refund.assert_awaited_once()  # оплаченный фейл возвращает звёзды
         notify.assert_awaited_once()
+        assert notify.await_args.kwargs["refunded"] is True
         publish.assert_not_awaited()
 
 

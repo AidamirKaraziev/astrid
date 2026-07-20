@@ -5,7 +5,7 @@ from astra.telegram.keyboards import prediction_followup_keyboard
 
 def test_bot_commands_cover_main_actions() -> None:
     commands = {cmd.command for cmd in BOT_COMMANDS_RU}
-    assert commands == {"start", "help"}
+    assert commands == {"start", "help", "paysupport"}
     descriptions = {cmd.command: cmd.description for cmd in BOT_COMMANDS_RU}
     assert descriptions["start"] == "🏠 Главное меню"
     assert descriptions["help"] == "💌 Написать Астрид"

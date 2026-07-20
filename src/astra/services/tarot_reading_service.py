@@ -7,7 +7,7 @@ tarot_reading.generate; worker генерирует интерпретацию (
 
 from __future__ import annotations
 
-from datetime import date as date_type, datetime
+from datetime import UTC, date as date_type, datetime
 from uuid import UUID
 from zoneinfo import ZoneInfo
 
@@ -37,74 +37,17 @@ _GENERATE_ATTEMPTS = 2
 
 READING_FAILED_TEXT = (
     "Карты легли, но их голоса сегодня спутались — расклад не сложился 🌙\n"
-    "Эта попытка не считается: загляни через пару минут и спроси ещё раз."
+    "Загляни через пару минут и спроси ещё раз."
 )
 
-LIMIT_HIT_TEXT = (
-    "🎴 На сегодня карты уже разложены. Колоде нужно время, чтобы голоса карт "
-    "не смешивались ✨\n"
-    "Но если вопрос не ждёт — можно сделать ещё один расклад прямо сейчас 👇"
+READING_FAILED_REFUNDED_TEXT = (
+    "Карты легли, но их голоса сегодня спутались — расклад не сложился 🌙\n"
+    "Звёзды уже вернулись на твой баланс ⭐ Загляни через пару минут и спроси ещё раз."
 )
-
-# Бонусные расклады сверх дневного лимита (пока выдаются бесплатно по кнопке).
-# Живут в Redis до конца суток+, чтобы не плодить миграцию под временную механику.
-_BONUS_TTL_SEC = 60 * 60 * 48
-
-
-def _bonus_key(user_id: UUID, target: date_type) -> str:
-    return f"astra:tarot:reading:bonus:{user_id}:{target.isoformat()}"
 
 
 def local_today(user: User) -> date_type:
     return datetime.now(ZoneInfo(user.profile.timezone)).date()
-
-
-async def granted_bonus(
-    user_id: UUID,
-    target: date_type,
-    settings: Settings | None = None,
-) -> int:
-    """Сколько дополнительных раскладов уже выдано сверх лимита за этот день."""
-    cfg = settings or get_settings()
-    client = Redis.from_url(cfg.redis_url, decode_responses=True)
-    try:
-        value = await client.get(_bonus_key(user_id, target))
-        return int(value) if value else 0
-    finally:
-        await client.aclose()
-
-
-async def grant_bonus_reading(
-    user_id: UUID,
-    target: date_type,
-    settings: Settings | None = None,
-) -> int:
-    """Выдать ещё один расклад сверх лимита; возвращает новое число бонусов."""
-    cfg = settings or get_settings()
-    client = Redis.from_url(cfg.redis_url, decode_responses=True)
-    try:
-        key = _bonus_key(user_id, target)
-        new_value = await client.incr(key)
-        await client.expire(key, _BONUS_TTL_SEC)
-        return int(new_value)
-    finally:
-        await client.aclose()
-
-
-async def check_daily_limit(
-    session: AsyncSession,
-    user: User,
-    target: date_type,
-    settings: Settings | None = None,
-) -> bool:
-    """True — можно тянуть; failed-расклады попытку не съедают.
-
-    Эффективный лимит = базовый из конфига + бонусы, выданные по кнопке.
-    """
-    cfg = settings or get_settings()
-    used = await tarot_crud.count_readings_for_date(session, user.id, target)
-    bonus = await granted_bonus(user.id, target, cfg)
-    return used < cfg.tarot_spreads_daily_limit + bonus
 
 
 async def try_acquire_reading_lock(user_id: UUID, settings: Settings | None = None) -> bool:
@@ -133,13 +76,14 @@ async def release_reading_lock(user_id: UUID, settings: Settings | None = None) 
         await client.aclose()
 
 
-async def create_reading(
+async def create_reading_draft(
     session: AsyncSession,
     user: User,
     spread_type: SpreadType,
     question: str | None,
     target: date_type,
-) -> tuple[TarotReading, list[TarotCard]]:
+) -> TarotReading:
+    """Черновик расклада до оплаты: карты тянутся сразу, но не показываются."""
     spec = SPREADS[spread_type]
     drawn = draw_cards(spec.card_count)
     cards_json = [
@@ -158,6 +102,7 @@ async def create_reading(
         spread_type=spread_type,
         question=question,
         cards=cards_json,
+        status=ReadingStatus.PENDING_PAYMENT,
     )
     log.info(
         Event.TAROT_READING_CREATED,
@@ -165,7 +110,19 @@ async def create_reading(
         reading_id=reading.id,
         spread_type=str(spread_type),
     )
-    return reading, [item.card for item in drawn]
+    return reading
+
+
+async def mark_reading_paid(
+    session: AsyncSession,
+    reading: TarotReading,
+    price_stars: int,
+) -> None:
+    """Оплата получена: черновик становится обычным pending-раскладом."""
+    reading.status = ReadingStatus.PENDING
+    reading.price_stars = price_stars
+    reading.paid_at = datetime.now(UTC)
+    await session.flush()
 
 
 def reading_cards(reading: TarotReading) -> list[TarotCard]:
@@ -272,11 +229,14 @@ async def notify_reading_failed(
     session: AsyncSession,
     reading: TarotReading,
     settings: Settings | None = None,
+    *,
+    refunded: bool = False,
 ) -> None:
     user = await users_crud.get_user_by_id(session, reading.user_id)
     if user is None:
         return
-    await send_telegram_html(user.telegram_id, READING_FAILED_TEXT, settings)
+    text = READING_FAILED_REFUNDED_TEXT if refunded else READING_FAILED_TEXT
+    await send_telegram_html(user.telegram_id, text, settings)
 
 
 def format_reading_caption(spec: SpreadSpec, cards: list[TarotCard]) -> str:

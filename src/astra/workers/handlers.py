@@ -358,6 +358,10 @@ async def handle_tarot_reading_generate(session: AsyncSession, task: TaskMessage
     draft = await tarot_crud.get_reading(session, task.reading_id)
     if draft is None:
         return
+    if draft.status == ReadingStatus.PENDING_PAYMENT:
+        # Не должен попадать в очередь до оплаты; страховка от рассинхрона.
+        log.warning(Event.TASK_SKIPPED, reason="reading_not_paid", reading_id=draft.id)
+        return
     if draft.interpretation and draft.status in (ReadingStatus.TEXT_READY, ReadingStatus.READY):
         await publish_tarot_reading_send(draft.id)  # requeue после рестарта: LLM не повторяем
         return
@@ -368,8 +372,13 @@ async def handle_tarot_reading_generate(session: AsyncSession, task: TaskMessage
 
     reading = await generate_reading_interpretation(session, task.reading_id)
     if reading is None:
-        await session.commit()  # failed-статус фиксируем: лимит возвращён
-        await notify_reading_failed(session, draft)
+        from astra.payments.service import refund_reading_payment
+
+        refunded = False
+        if user is not None:
+            refunded = await refund_reading_payment(session, draft, user.telegram_id)
+        await session.commit()  # failed-статус и refund фиксируем вместе
+        await notify_reading_failed(session, draft, refunded=refunded)
         return
 
     await session.commit()

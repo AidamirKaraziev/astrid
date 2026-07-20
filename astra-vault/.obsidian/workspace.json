@@ -203,6 +203,8 @@
   },
   "active": "17f53c534db05e46",
   "lastOpenFiles": [
+    "knowledge/decisions/цены и скидки товаров в БД каталог товар на валюту со снапшотом в платеже.md",
+    "sessions/2026-07-21 оплата таро Telegram Stars каталог цен скидки.md",
     "Снимок экрана — 2026-07-09 в 20.54.20.png",
     "Без названия.canvas",
     "Без названия.md",
@@ -230,7 +232,6 @@
     "knowledge/business/портфель монетизации Astra.md",
     "knowledge/decisions/дедупликация ежедневного предсказания через Redis pending ключ.md",
     "knowledge/debugging/после рефакторинга забытые импорты date и dispatch_task.md",
-    "sessions/2026-07-03 caption tldr PDF и фиксы импортов worker бота.md",
-    "knowledge/decisions/structured logging structlog и event taxonomy Astra.md"
+    "sessions/2026-07-03 caption tldr PDF и фиксы импортов worker бота.md"
   ]
 }
