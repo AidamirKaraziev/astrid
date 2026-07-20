@@ -2,7 +2,7 @@ from astra.core.observability import Event, get_logger
 from astra.places import crud as places_crud
 from astra.users.gender import Gender
 from astra.users.models import Profile, User
-from datetime import date, datetime
+from datetime import UTC, date, datetime
 from uuid import UUID
 from zoneinfo import ZoneInfo
 
@@ -25,6 +25,25 @@ async def get_user_by_telegram_id(
         .options(selectinload(User.profile), selectinload(User.referral_code)),
     )
     return result.scalar_one_or_none()
+
+
+async def mark_bot_blocked(session: AsyncSession, telegram_id: int) -> None:
+    """403 от Bot API: рассылки этому пользователю скипаются до его /start."""
+    user = await get_user_by_telegram_id(session, telegram_id)
+    if user is None or user.bot_blocked_at is not None:
+        return
+    user.bot_blocked_at = datetime.now(UTC)
+    await session.flush()
+    log.warning(Event.TELEGRAM_BOT_BLOCKED, user_id=user.id, telegram_id=telegram_id)
+
+
+async def clear_bot_blocked(session: AsyncSession, user: User) -> None:
+    """Пользователь вернулся (/start): бот снова доступен, рассылки включаются."""
+    if user.bot_blocked_at is None:
+        return
+    user.bot_blocked_at = None
+    await session.flush()
+    log.info(Event.TELEGRAM_BOT_UNBLOCKED, user_id=user.id, telegram_id=user.telegram_id)
 
 
 async def get_user_by_id(session: AsyncSession, user_id: UUID) -> User | None:

@@ -17,7 +17,9 @@ from astra.messaging.queues import (
     QUEUE_REPORTS,
 )
 from astra.core.observability.tracing import instrument_sqlalchemy_engine
+from astra.users import crud as users_crud
 from astra.workers.handlers import dispatch_task
+from astra.workers.telegram_send import BotBlockedError
 
 log = get_logger(__name__)
 
@@ -38,8 +40,14 @@ async def _process_message(message: AbstractIncomingMessage) -> None:
 
         async def _run() -> None:
             async with factory() as session:
-                await dispatch_task(session, task)
-                await session.commit()
+                try:
+                    await dispatch_task(session, task)
+                    await session.commit()
+                except BotBlockedError as exc:
+                    # 403 — перманентно: помечаем пользователя, ack без requeue.
+                    await session.rollback()
+                    await users_crud.mark_bot_blocked(session, exc.telegram_id)
+                    await session.commit()
 
         await run_task_with_observability(message, task, _run)
 

@@ -21,6 +21,9 @@ class User(Base, TimestampMixin):
     username: Mapped[str | None] = mapped_column(String(255), nullable=True)
     language_code: Mapped[str | None] = mapped_column(String(16), nullable=True)
     onboarding_completed: Mapped[bool] = mapped_column(Boolean, default=False)
+    # 403 от Bot API: пользователь заблокировал бота. NULL = доступен.
+    # Ставится worker'ом при отправке, снимается на /start.
+    bot_blocked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     points: Mapped[int] = mapped_column(Integer, default=0)
     streak_current: Mapped[int] = mapped_column(Integer, default=0)
     streak_best: Mapped[int] = mapped_column(Integer, default=0)

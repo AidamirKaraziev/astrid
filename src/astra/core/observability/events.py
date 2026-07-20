@@ -22,6 +22,8 @@ class Event(StrEnum):
     TELEGRAM_POLLING_ERROR = "telegram.polling.error"
     TELEGRAM_BOT_MENU_CONFIGURED = "telegram.bot_menu.configured"
     TELEGRAM_API_FAILED = "telegram.api.failed"
+    TELEGRAM_BOT_BLOCKED = "telegram.bot_blocked"
+    TELEGRAM_BOT_UNBLOCKED = "telegram.bot_unblocked"
     TELEGRAM_PROGRESS_NOTIFY_FAILED = "telegram.progress.notify_failed"
 
     # Worker / RabbitMQ tasks

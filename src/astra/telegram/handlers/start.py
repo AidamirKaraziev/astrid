@@ -74,6 +74,8 @@ async def cmd_start(
             username=tg.username,
             language_code=tg.language_code,
         )
+        # Пользователь вернулся после блокировки бота — включаем рассылки обратно.
+        await users_crud.clear_bot_blocked(session, user)
 
     await register_daily_activity(session, user)
     await state.clear()

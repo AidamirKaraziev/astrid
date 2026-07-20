@@ -16,6 +16,24 @@ from astra.telegram.keyboards import prediction_followup_keyboard
 log = get_logger(__name__)
 
 
+class BotBlockedError(Exception):
+    """Telegram вернул 403: пользователь заблокировал бота.
+
+    Перманентная ошибка — ретраи бессмысленны; консьюмер помечает пользователя
+    (users.bot_blocked_at) и подтверждает задачу без requeue.
+    """
+
+    def __init__(self, telegram_id: int) -> None:
+        super().__init__(f"bot blocked by user {telegram_id}")
+        self.telegram_id = telegram_id
+
+
+def _raise_for_status(response: httpx.Response, telegram_id: int) -> None:
+    if response.status_code == 403:
+        raise BotBlockedError(telegram_id)
+    response.raise_for_status()
+
+
 def _inline_keyboard_to_api_payload(markup: InlineKeyboardMarkup) -> dict[str, Any]:
     return markup.model_dump(mode="json", exclude_none=True)
 
@@ -66,7 +84,7 @@ async def send_telegram_html(
         client_kwargs["proxy"] = proxy
     async with httpx.AsyncClient(**client_kwargs) as client:
         response = await client.post(url, json=payload)
-        response.raise_for_status()
+        _raise_for_status(response, telegram_id)
     log.info(Event.TELEGRAM_MESSAGE_SENT, telegram_id=telegram_id)
 
 
@@ -95,7 +113,7 @@ async def send_compatibility_pdf(
                 data={"chat_id": str(telegram_id), "caption": caption},
                 files={"document": (filename, pdf_file, "application/pdf")},
             )
-        response.raise_for_status()
+        _raise_for_status(response, telegram_id)
     log.info(Event.TELEGRAM_PDF_SENT, telegram_id=telegram_id, filename=filename)
 
 

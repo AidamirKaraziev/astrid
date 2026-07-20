@@ -47,6 +47,7 @@ async def process_scheduled_notifications(
     result = await session.execute(
         select(User)
         .where(User.onboarding_completed.is_(True))
+        .where(User.bot_blocked_at.is_(None))  # заблокировавшие бота — вне рассылки
         .options(selectinload(User.profile)),
     )
     users = result.scalars().all()

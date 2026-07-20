@@ -24,6 +24,7 @@ async def test_cmd_start_prompts_gender_for_legacy_profile() -> None:
     user = SimpleNamespace(
         id=1,
         onboarding_completed=True,
+        bot_blocked_at=None,
         profile=SimpleNamespace(gender=None),
     )
 
@@ -67,6 +68,7 @@ async def test_cmd_start_skips_gender_prompt_when_set() -> None:
     user = SimpleNamespace(
         id=1,
         onboarding_completed=True,
+        bot_blocked_at=None,
         profile=SimpleNamespace(gender="мужчина"),
     )
 
