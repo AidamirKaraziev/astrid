@@ -25,5 +25,5 @@ uv run fastapi dev main.py   # или uvicorn после рефакторинг�
 
 ## Связи
 
-- [[архитектура проекта Astra на старте scaffold]]
-- [[деплой пока не настроен]]
+- [[архитектура MVP monolith async 2026-05-16]]
+- [[деплой Docker Compose на домашнем сервере с mihomo для Telegram]]

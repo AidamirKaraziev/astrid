@@ -6,7 +6,7 @@ status: утверждено
 
 # Локальная LLM (Ollama) удалена, весь daily на DeepSeek
 
-Связано: [[пайплайн совместимости промпт LLM PDF worker]] · [[промпт Astrid v3 — вопрос дня gemma4 e2b]] (legacy) · [[деплой Docker Compose на домашнем сервере с mihomo для Telegram]]
+Связано: [[пайплайн совместимости промпт LLM PDF worker]] · [[промпт Astrid v4 — вопрос дня на DeepSeek с архетипами]] · [[деплой Docker Compose на домашнем сервере с mihomo для Telegram]]
 
 ## Решение
 

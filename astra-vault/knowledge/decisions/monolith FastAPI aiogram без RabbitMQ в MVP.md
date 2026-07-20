@@ -5,6 +5,8 @@ date: 2026-05-16
 
 # Monolith FastAPI + aiogram без RabbitMQ в MVP
 
+> **Частично superseded.** Пункт «когда пересмотреть» сработал: RabbitMQ подключён для тяжёлых LLM-задач (`src/astra/messaging/`, `src/astra/workers/`, сервисы `rabbitmq` и `worker` в compose) — см. [[correlation_id propagation через RabbitMQ и Telegram]]. Scheduler рассылки по-прежнему в процессе API ([[scheduler рассылки в том же процессе что API]]).
+
 ## Контекст
 
 В spec указаны Postgres, Redis, RabbitMQ, microservices «если нужно».

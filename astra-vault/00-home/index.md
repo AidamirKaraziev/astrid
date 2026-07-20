@@ -1,6 +1,6 @@
 ---
 tags: [home, index]
-date: 2026-07-03
+date: 2026-07-21
 ---
 
 # Astra — карта знаний
@@ -20,9 +20,8 @@ date: 2026-07-03
 | Тема | Заметка |
 |------|---------|
 | Архитектура MVP | [[архитектура MVP monolith async 2026-05-16]] |
-| Scaffold (устар.) | [[архитектура проекта Astra на старте scaffold]] |
 | Стек | [[стек Python 3.12 uv и FastAPI]] |
-| Деплой | [[деплой пока не настроен]] · [[деплой Docker Compose на домашнем сервере с mihomo для Telegram]] |
+| Деплой | [[деплой Docker Compose на домашнем сервере с mihomo для Telegram]] |
 
 ## Knowledge
 
@@ -30,6 +29,7 @@ date: 2026-07-03
 
 - [[uv выбран как менеджер зависимостей вместо pip]]
 - [[knowledge vault astra-vault внутри репозитория]]
+- [[MVP совместимость FSM история PDF DeepSeek]]
 - [[идентификация через telegram_id без fastapi-users в MVP]]
 - [[monolith FastAPI aiogram без RabbitMQ в MVP]]
 - [[scheduler рассылки в том же процессе что API]]
@@ -56,9 +56,8 @@ date: 2026-07-03
 
 ### Паттерны (`knowledge/patterns/`)
 
-- [[промпт Astrid v3 — вопрос дня gemma4 e2b]] (legacy, код удалён 2026-07-08)
+- [[промпт Astrid v4 — вопрос дня на DeepSeek с архетипами]]
 - [[промпт совместимости синастрия JSON для LLM]]
-- [[промпт Astrid v2 — 4 предложения gemma4 e2b]] (superseded)
 - [[имена заметок это утверждения а не категории]]
 - [[карточка профиля A2 сокращение названий GeoNames]]
 - [[reply-меню Telegram обновляется через AutoKeyboardMiddleware]]

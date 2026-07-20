@@ -7,7 +7,7 @@ date: 2026-05-31
 
 ## Контекст
 
-MVP на домашнем Linux без публичного IP. Нужен один стек: API + worker + postgres + redis + rabbitmq + ollama.
+MVP на домашнем Linux (deadtiger) без публичного IP. Один стек: API + worker + postgres + redis + rabbitmq (сервис ollama удалён 2026-07-08 — [[локальная LLM Ollama удалена весь daily на DeepSeek]]).
 
 ## Решение
 
@@ -15,6 +15,8 @@ MVP на домашнем Linux без публичного IP. Нужен од�
 - Запуск: `make up` (тесты в контейнере → сборка → `docker compose up`).
 - Telegram с хоста без VPN: **mihomo** на хосте, не в Compose (проще маршрутизация и обновление подписки).
 - Healthcheck api: `GET /health`.
+- **CI:** GitHub Actions pytest (`.github/workflows/ci.yml`).
+- **Prod/VPS:** не выбран — прод живёт на deadtiger.
 
 ## Ограничения
 
