@@ -53,6 +53,8 @@ class ProductPriceInfo:
     """Цена товара в валюте с учётом акции: base — «старая» цена, final — к оплате.
 
     Суммы — в минорных единицах валюты (Stars: 1 ⭐, RUB: копейки).
+    discount_percent = 100 — товар бесплатный: инвойс не выставляется вовсе
+    (Stars не позволяют сумму 0), продукт выдаётся сразу.
     """
 
     currency: str
@@ -60,14 +62,20 @@ class ProductPriceInfo:
     discount_percent: int = 0
 
     @property
+    def is_free(self) -> bool:
+        return self.discount_percent >= 100
+
+    @property
     def has_discount(self) -> bool:
         return 0 < self.discount_percent < 100
 
     @property
     def final_amount(self) -> int:
+        if self.is_free:
+            return 0
         if not self.has_discount:
             return self.base_amount
-        # Округляем до минорной единицы; акция не может обнулить цену — минимум 1.
+        # Округляем до минорной единицы; платная акция не обнуляет цену — минимум 1.
         return max(1, round(self.base_amount * (100 - self.discount_percent) / 100))
 
 

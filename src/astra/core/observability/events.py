@@ -75,6 +75,7 @@ class Event(StrEnum):
     TAROT_READING_GENERATED = "tarot_reading.generated"
     TAROT_READING_SENT = "tarot_reading.sent"
     TAROT_READING_FAILED = "tarot_reading.failed"
+    TAROT_READING_FREE_GRANTED = "tarot_reading.free_granted"
 
     # Payments (Telegram Stars) — воронка: invoice_sent → completed
     PAYMENT_INVOICE_SENT = "payment.invoice_sent"

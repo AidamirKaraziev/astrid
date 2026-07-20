@@ -135,6 +135,30 @@ class TestSpreadQuestion:
         # без скидки — стандартная кнопка Telegram, без кастомной клавиатуры
         assert "reply_markup" not in invoice
 
+    async def test_free_product_skips_invoice_and_reveals_cards(self):
+        message, state = _message("Хочу, чтобы мы с Сашей снова были вместе"), _state(self._DATA)
+        session = AsyncMock()
+        reading = MagicMock(id=uuid4(), spread_type="wish")
+        reading.cards = [
+            {"position": 1, "position_key": "heart", "card_id": "cups_06", "reversed": False},
+            {"position": 2, "position_key": "path", "card_id": "swords_03", "reversed": False},
+            {"position": 3, "position_key": "outcome", "card_id": "major_06", "reversed": False},
+        ]
+        mocks = _mocks(
+            get_tarot_price=AsyncMock(return_value=ProductPriceInfo("XTR", 50, 100)),
+            create_reading_draft=AsyncMock(return_value=reading),
+            mark_reading_paid=AsyncMock(),
+        )
+        await _run(spread_question, message, state, session, mocks)
+        # инвойса нет, расклад выдан сразу и ушёл в worker
+        message.answer_invoice.assert_not_awaited()
+        mocks["mark_reading_paid"].assert_awaited_once()
+        assert mocks["mark_reading_paid"].await_args.args[2] == 0  # price_stars = 0
+        session.commit.assert_awaited_once()
+        mocks["send_cards_album"].assert_awaited_once()
+        mocks["publish_tarot_reading_generate"].assert_awaited_once_with(reading.id)
+        state.clear.assert_awaited_once()
+
     async def test_discount_shows_crossed_price_on_pay_button(self):
         message, state = _message("Хочу, чтобы мы с Сашей снова были вместе"), _state(self._DATA)
         mocks = _mocks(get_tarot_price=AsyncMock(return_value=ProductPriceInfo("XTR", 50, 90)))

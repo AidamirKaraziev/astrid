@@ -90,6 +90,7 @@ def _strike_digits(value: int) -> str:
     return "".join(f"{char}̶" for char in str(value))
 _PAYMENT_STALE_TEXT = "Этот расклад уже оплачен или устарел — начни новый ✨"
 _PAID_THANKS_TEXT = "Оплата получена ⭐ Тяну карты…"
+_FREE_TODAY_TEXT = "Сегодня этот расклад — подарок от Астрид, бесплатно ✨ Тяну карты…"
 
 
 def _question_keyboard(question_required: bool) -> ReplyKeyboardMarkup:
@@ -148,6 +149,17 @@ async def start_relationship(message: Message, state: FSMContext, session: Async
 @router.message(F.text.in_(SPREAD_BUTTONS))
 async def spread_button(message: Message, state: FSMContext, session: AsyncSession) -> None:
     await _start_spread(message, state, session, SPREAD_BUTTONS[message.text or ""])
+
+
+async def _reveal_reading(message: Message, reading) -> None:
+    """Показать карты расклада; интерпретацию доставит worker."""
+    spec = SPREADS[SpreadType(reading.spread_type)]
+    cards = reading_cards(reading)
+    caption = format_reading_caption(spec, cards)
+    if len(cards) == 1:
+        await send_card_photo(message, cards[0], caption)
+    else:
+        await send_cards_album(message, cards, caption)
 
 
 async def send_reading_invoice(
@@ -220,14 +232,30 @@ async def spread_question(message: Message, state: FSMContext, session: AsyncSes
         await message.answer(_IN_PROGRESS_TEXT)
         return
     try:
+        # Цена — из БД на каждый товар; в текстах её нет, покажет кнопка инвойса.
+        price = await get_tarot_price(session, str(spread_type))
         reading = await create_reading_draft(
             session, user, spread_type, question, local_today(user),
         )
+
+        if price.is_free:
+            # discount_percent = 100 в БД: без инвойса, карты сразу.
+            await mark_reading_paid(session, reading, 0)
+            await session.commit()
+            await state.clear()
+            log.info(
+                Event.TAROT_READING_FREE_GRANTED,
+                user_id=user.id,
+                reading_id=reading.id,
+            )
+            await message.answer(_FREE_TODAY_TEXT, reply_markup=tarot_keyboard())
+            await _reveal_reading(message, reading)
+            await publish_tarot_reading_generate(reading.id)
+            return
+
         await session.commit()  # черновик должен пережить рестарт до оплаты
         await state.clear()
 
-        # Цена — из БД на каждый товар; в текстах её нет, покажет кнопка инвойса.
-        price = await get_tarot_price(session, str(spread_type))
         sent_text = _INVOICE_SENT_TEXT
         if price.has_discount:
             sent_text += _DISCOUNT_LINE.format(
@@ -323,13 +351,6 @@ async def spread_paid(message: Message, session: AsyncSession) -> None:
         await session.rollback()  # гонка двух повторных апдейтов — платёж уже записан
         return
 
-    spec = SPREADS[SpreadType(reading.spread_type)]
-    cards = reading_cards(reading)
     await message.answer(_PAID_THANKS_TEXT)
-    caption = format_reading_caption(spec, cards)
-    if len(cards) == 1:
-        await send_card_photo(message, cards[0], caption)
-    else:
-        await send_cards_album(message, cards, caption)
-
+    await _reveal_reading(message, reading)
     await publish_tarot_reading_generate(reading.id)

@@ -89,10 +89,16 @@ class TestProductPriceInfo:
         assert ProductPriceInfo("XTR", 1, 90).final_amount == 1
         assert ProductPriceInfo("XTR", 2, 99).final_amount == 1
 
-    def test_full_discount_is_ignored(self):
-        # 100% скидки бесплатный инвойс не создаёт — Stars требуют цену ≥ 1
-        assert ProductPriceInfo("XTR", 50, 100).has_discount is False
-        assert ProductPriceInfo("XTR", 50, 100).final_amount == 50
+    def test_full_discount_means_free(self):
+        # 100% скидки = бесплатный товар: инвойс не выставляется вовсе
+        price = ProductPriceInfo("XTR", 50, 100)
+        assert price.is_free is True
+        assert price.has_discount is False  # это не «акция», а бесплатная выдача
+        assert price.final_amount == 0
+
+    def test_paid_prices_are_not_free(self):
+        assert ProductPriceInfo("XTR", 50).is_free is False
+        assert ProductPriceInfo("XTR", 50, 99).is_free is False
 
 
 class TestRegisterTarotPayment:
