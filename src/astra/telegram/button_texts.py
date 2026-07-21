@@ -15,6 +15,7 @@ BTN_ASK_STARS = "🌟 Спросить звёзды"
 BTN_NATAL = "🌌 Разбор натала"
 BTN_MONTH_FORECAST = "📅 Прогноз на месяц"
 BTN_TAROT = "🔮 Карты Таро"
+BTN_WHEEL = "🎡 Колесо фортуны"
 
 BTN_TAROT_THREE = "🃏 Три карты"
 BTN_TAROT_RELATIONS = "💕 На отношения"
@@ -64,6 +65,13 @@ CB_PEOPLE_DELETE_CONFIRM_PREFIX = "people:del:yes:"
 CB_PEOPLE_DELETE_CANCEL_PREFIX = "people:del:no:"
 # Переиспользуемый пикер профиля в FSM-флоу (совместимость и будущие продукты)
 CB_PERSON_PICK_PREFIX = "person:pick:"
+# Колесо фортуны
+CB_WHEEL_SPIN_FREE = "wheel:spin:free"
+CB_WHEEL_SPIN_PAID = "wheel:spin:paid"
+CB_WHEEL_PRIZES = "wheel:prizes"
+CB_WHEEL_HOME = "wheel:home"
+CB_WHEEL_ACTIVATE_PREFIX = "wheel:use:"
+
 CB_COMPAT_NEW_PERSON = "compat:person:new"
 CB_COMPAT_PEOPLE_ALL = "compat:person:all"
 CB_COMPAT_SELF_FIRST = "compat:person:self"

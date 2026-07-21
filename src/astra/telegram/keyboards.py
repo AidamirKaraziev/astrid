@@ -17,6 +17,7 @@ from astra.telegram.button_texts import (
     BTN_TAROT_RELATIONS,
     BTN_TAROT_THREE,
     BTN_TAROT_WISH,
+    BTN_WHEEL,
     CB_COMPAT_CANCEL,
     CB_COMPAT_CONFIRM,
     CB_COMPAT_CONTEXT_PREFIX,
@@ -45,6 +46,7 @@ def main_menu_keyboard() -> ReplyKeyboardMarkup:
                 KeyboardButton(text=BTN_MONTH_FORECAST),
                 KeyboardButton(text=BTN_TAROT),
             ],
+            [KeyboardButton(text=BTN_WHEEL)],
             [
                 KeyboardButton(text=BTN_PROFILE),
                 KeyboardButton(text=BTN_INVITE),

@@ -79,6 +79,14 @@ class Event(StrEnum):
     TAROT_READING_FAILED = "tarot_reading.failed"
     TAROT_READING_FREE_GRANTED = "tarot_reading.free_granted"
 
+    # Колесо фортуны
+    WHEEL_SPIN = "wheel.spin"
+    WHEEL_POOL_EMPTY = "wheel.pool_empty"
+    WHEEL_FREE_SPIN_DUPLICATE = "wheel.free_spin_duplicate"
+    WHEEL_PRIZE_ACTIVATED = "wheel.prize_activated"
+    WHEEL_PRIZE_UNAVAILABLE = "wheel.prize_unavailable"
+    WHEEL_ANIMATION_FAILED = "wheel.animation_failed"
+
     # Payments (Telegram Stars) — воронка: invoice_sent → completed
     PAYMENT_INVOICE_SENT = "payment.invoice_sent"
     PAYMENT_PRE_CHECKOUT_REJECTED = "payment.pre_checkout_rejected"

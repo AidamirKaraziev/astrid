@@ -28,6 +28,10 @@ from astra.users.models import User
 log = get_logger(__name__)
 
 _TAROT_PAYLOAD_PREFIX = "tarot:"
+WHEEL_PAYLOAD_PREFIX = "wheel_spin:"
+WHEEL_SPIN_PRODUCT_CODE = "wheel_spin"
+
+TAROT_PAYLOAD_PREFIX = _TAROT_PAYLOAD_PREFIX  # для фильтров хендлеров
 
 
 def tarot_product_code(spread_type: str) -> str:
@@ -44,6 +48,20 @@ def parse_tarot_invoice_payload(payload: str | None) -> UUID | None:
         return None
     try:
         return UUID(payload.removeprefix(_TAROT_PAYLOAD_PREFIX))
+    except ValueError:
+        return None
+
+
+def wheel_spin_invoice_payload(nonce: UUID) -> str:
+    return f"{WHEEL_PAYLOAD_PREFIX}{nonce}"
+
+
+def parse_wheel_spin_invoice_payload(payload: str | None) -> UUID | None:
+    """Nonce вращения из payload инвойса колеса; None — чужой/битый payload."""
+    if not payload or not payload.startswith(WHEEL_PAYLOAD_PREFIX):
+        return None
+    try:
+        return UUID(payload.removeprefix(WHEEL_PAYLOAD_PREFIX))
     except ValueError:
         return None
 
@@ -95,6 +113,61 @@ async def get_tarot_price(
     if currency == CURRENCY_XTR:
         return ProductPriceInfo(CURRENCY_XTR, get_settings().tarot_reading_price_stars)
     raise ValueError(f"нет цены {currency} для {tarot_product_code(spread_type)}")
+
+
+async def get_wheel_spin_price(
+    session: AsyncSession,
+    currency: str = CURRENCY_XTR,
+) -> ProductPriceInfo | None:
+    """Цена вращения колеса из каталога; None — товар не заведён/выключен."""
+    row = await payments_crud.get_product_price(session, WHEEL_SPIN_PRODUCT_CODE, currency)
+    if row is None:
+        return None
+    return ProductPriceInfo(row.currency, row.amount, row.discount_percent)
+
+
+async def register_wheel_spin_payment(
+    session: AsyncSession,
+    *,
+    user: User,
+    provider_charge_id: str,
+    amount: int,
+    currency: str,
+) -> Payment | None:
+    """Записать оплату вращения колеса; None — этот charge_id уже обработан."""
+    provider = PaymentProvider.TELEGRAM_STARS
+    existing = await payments_crud.get_payment_by_charge(session, provider, provider_charge_id)
+    if existing is not None:
+        log.warning(Event.PAYMENT_DUPLICATE, user_id=user.id, charge_id=provider_charge_id)
+        return None
+
+    price = await get_wheel_spin_price(session, currency)
+    if price is not None and price.final_amount == amount:
+        base_amount, discount_percent = price.base_amount, price.discount_percent
+    else:
+        base_amount, discount_percent = amount, 0
+
+    payment = await payments_crud.create_payment(
+        session,
+        user_id=user.id,
+        product_code=WHEEL_SPIN_PRODUCT_CODE,
+        reading_id=None,
+        currency=currency,
+        amount=amount,
+        base_amount=base_amount,
+        discount_percent=discount_percent,
+        provider=provider,
+        provider_charge_id=provider_charge_id,
+    )
+    log.info(
+        Event.PAYMENT_COMPLETED,
+        user_id=user.id,
+        payment_id=payment.id,
+        product_code=WHEEL_SPIN_PRODUCT_CODE,
+        amount=amount,
+        currency=currency,
+    )
+    return payment
 
 
 async def register_tarot_payment(

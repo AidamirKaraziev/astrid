@@ -28,6 +28,7 @@ from astra.telegram.button_texts import (
     BTN_PREDICTION_TODAY,
     BTN_PROFILE,
     BTN_TAROT,
+    BTN_WHEEL,
     COMING_SOON_TEXT,
     PAID_PRODUCT_BUTTONS,
 )
@@ -36,6 +37,7 @@ from astra.telegram.handlers.compatibility import start_compatibility
 from astra.telegram.handlers.menu import invite_friend, show_profile, today_prediction
 from astra.telegram.handlers.natal import start_natal
 from astra.telegram.handlers.tarot_spreads import SPREAD_BUTTONS, spread_button
+from astra.telegram.handlers.wheel import open_wheel
 from astra.telegram.states import (
     AiChatStates,
     CompatibilityStates,
@@ -76,6 +78,11 @@ async def nav_tarot_menu(message: Message, state: FSMContext) -> None:
 @router.message(F.text.in_(SPREAD_BUTTONS))
 async def nav_tarot_spread(message: Message, state: FSMContext, session: AsyncSession) -> None:
     await spread_button(message, state, session)
+
+
+@router.message(F.text == BTN_WHEEL)
+async def nav_wheel(message: Message, state: FSMContext, session: AsyncSession) -> None:
+    await open_wheel(message, state, session)
 
 
 @router.message(F.text == BTN_COMPATIBILITY)

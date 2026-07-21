@@ -14,7 +14,7 @@ from astra.core.observability.middleware.telegram import TelegramObservabilityMi
 from astra.db.session import get_session_factory
 from astra.telegram.auto_keyboard_middleware import AutoKeyboardMiddleware
 from astra.telegram.bot_menu import setup_bot_menu
-from astra.telegram.handlers import catalog, commands, compatibility, menu, natal, navigation, onboarding, people, places, start, tarot_daily, tarot_spreads
+from astra.telegram.handlers import catalog, commands, compatibility, menu, natal, navigation, onboarding, people, places, start, tarot_daily, tarot_spreads, wheel
 from astra.telegram.middlewares import DbSessionMiddleware
 
 log = get_logger(__name__)
@@ -76,6 +76,9 @@ async def create_dispatcher(settings: Settings) -> Dispatcher:
     dp.include_router(navigation.router)  # до всех флоу: кнопки меню прерывают FSM
     dp.include_router(places.router)
     dp.include_router(onboarding.router)
+    # После onboarding (регистрацию не прерываем), но до флоу-роутеров:
+    # кнопка колеса и платежи wheel: не должны съедаться чужими FSM-хендлерами.
+    dp.include_router(wheel.router)
     dp.include_router(menu.router)
     dp.include_router(compatibility.router)
     dp.include_router(people.router)

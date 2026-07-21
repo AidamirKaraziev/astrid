@@ -1,8 +1,9 @@
 from aiogram import F, Router
 from aiogram.fsm.context import FSMContext
-from aiogram.types import CallbackQuery, Message
+from aiogram.types import CallbackQuery, Message, PreCheckoutQuery
 
 from astra.core.config import get_settings
+from astra.core.observability import Event, get_logger
 from astra.telegram.button_texts import (
     BTN_BACK_MENU,
     BTN_BACK_MENU_LEGACY,
@@ -19,6 +20,8 @@ from astra.telegram.help_text import (
     HELP_CARD_TEXT,
 )
 from astra.telegram.keyboards import help_keyboard, main_menu_keyboard, tarot_keyboard
+
+log = get_logger(__name__)
 
 router = Router(name="catalog")
 
@@ -63,3 +66,29 @@ async def cb_product_ask_stars(callback: CallbackQuery) -> None:
     await callback.answer()
     if callback.message:
         await callback.message.answer(COMING_SOON_TEXT)
+
+
+# Страховка: платёж с payload, который не подхватил ни один профильный хендлер
+# (таро, колесо…). До списания — отклоняем; после списания — возвращаем звёзды.
+
+
+@router.pre_checkout_query()
+async def pre_checkout_unknown_payload(query: PreCheckoutQuery) -> None:
+    log.warning(Event.PAYMENT_PRE_CHECKOUT_REJECTED, reason="unknown_payload")
+    await query.answer(ok=False, error_message="Платёж устарел — начни покупку заново ✨")
+
+
+@router.message(F.successful_payment)
+async def successful_payment_orphan(message: Message) -> None:
+    payment_info = message.successful_payment
+    if payment_info is None or message.from_user is None or message.bot is None:
+        return
+    log.error(
+        Event.PAYMENT_ORPHAN,
+        reason="unhandled_payload",
+        charge_id=payment_info.telegram_payment_charge_id,
+    )
+    await message.bot.refund_star_payment(
+        user_id=message.from_user.id,
+        telegram_payment_charge_id=payment_info.telegram_payment_charge_id,
+    )

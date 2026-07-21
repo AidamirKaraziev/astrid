@@ -9,6 +9,7 @@ from astra.telegram.button_texts import (
     BTN_PREDICTION_TODAY,
     BTN_PROFILE,
     BTN_TAROT,
+    BTN_WHEEL,
     PAID_PRODUCT_BUTTONS,
     TAROT_PRODUCT_BUTTONS,
 )
@@ -26,6 +27,7 @@ def test_main_menu_layout_variant_b() -> None:
         [BTN_PREDICTION_TODAY],
         [BTN_COMPATIBILITY, BTN_NATAL],
         [BTN_MONTH_FORECAST, BTN_TAROT],
+        [BTN_WHEEL],
         [BTN_PROFILE, BTN_INVITE],
     ]
 

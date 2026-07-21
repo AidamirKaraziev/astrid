@@ -56,6 +56,11 @@ def _mocks(**overrides) -> dict:
         "send_card_photo": AsyncMock(),
         "send_cards_album": AsyncMock(),
         "publish_tarot_reading_generate": AsyncMock(),
+        # По умолчанию расклад запущен без приза колеса.
+        "wheel_crud.get_win": AsyncMock(return_value=None),
+        "wheel_crud.get_pending_win_for_reading": AsyncMock(return_value=None),
+        "reserve_win_for_reading": AsyncMock(),
+        "mark_win_activated": AsyncMock(),
     }
     defaults.update(overrides)
     return defaults

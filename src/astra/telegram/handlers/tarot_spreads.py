@@ -7,6 +7,8 @@
 
 from __future__ import annotations
 
+from uuid import UUID
+
 from aiogram import F, Router
 from aiogram.fsm.context import FSMContext
 from aiogram.types import (
@@ -27,10 +29,12 @@ from astra.core.observability import Event, get_logger
 from astra.messaging.publisher import publish_tarot_reading_generate
 from astra.payments.service import (
     ProductPriceInfo,
+    TAROT_PAYLOAD_PREFIX,
     get_tarot_price,
     parse_tarot_invoice_payload,
     register_tarot_payment,
     tarot_invoice_payload,
+    tarot_product_code,
 )
 from astra.services.tarot_reading_service import (
     create_reading_draft,
@@ -58,6 +62,8 @@ from astra.telegram.keyboards import main_menu_keyboard, tarot_keyboard
 from astra.telegram.states import TarotStates
 from astra.telegram.tarot_media import send_card_photo, send_cards_album
 from astra.users import crud as users_crud
+from astra.wheel import crud as wheel_crud
+from astra.wheel.service import mark_win_activated, reserve_win_for_reading, win_is_available
 
 log = get_logger(__name__)
 
@@ -89,6 +95,7 @@ def _strike_digits(value: int) -> str:
     """Юникод-зачёркивание (U+0336) — для текста платёжной кнопки, где нет HTML."""
     return "".join(f"{char}̶" for char in str(value))
 _PAYMENT_STALE_TEXT = "Этот расклад уже оплачен или устарел — начни новый ✨"
+_PRIZE_GONE_TEXT = "Приз с колеса уже сгорел или использован — расклад по обычной цене 🕯"
 _PAID_THANKS_TEXT = "Оплата получена ⭐ Тяну карты…"
 _FREE_TODAY_TEXT = "Сегодня этот расклад — подарок от Астрид, бесплатно ✨ Тяну карты…"
 
@@ -116,7 +123,10 @@ async def _start_spread(
     state: FSMContext,
     session: AsyncSession,
     spread_type: SpreadType,
+    *,
+    wheel_win_id: UUID | None = None,
 ) -> None:
+    """wheel_win_id — расклад запущен призом колеса: цену пересчитаем по скидке приза."""
     if not get_settings().tarot_spreads_enabled:
         await message.answer(COMING_SOON_TEXT)
         return
@@ -127,6 +137,8 @@ async def _start_spread(
     await state.clear()
     await state.set_state(TarotStates.waiting_question)
     await state.update_data(tarot_spread_type=str(spread_type))
+    if wheel_win_id is not None:
+        await state.update_data(wheel_win_id=str(wheel_win_id))
     await message.answer(
         f"{spec.emoji} <b>{spec.title_ru}</b>\n\n{spec.question_hint}",
         parse_mode="HTML",
@@ -144,6 +156,17 @@ async def start_three_cards(message: Message, state: FSMContext, session: AsyncS
 
 async def start_relationship(message: Message, state: FSMContext, session: AsyncSession) -> None:
     await _start_spread(message, state, session, SpreadType.RELATIONSHIP)
+
+
+async def start_spread_with_prize(
+    message: Message,
+    state: FSMContext,
+    session: AsyncSession,
+    spread_type: SpreadType,
+    wheel_win_id: UUID,
+) -> None:
+    """Запуск расклада призом колеса (вызывается из хендлера колеса)."""
+    await _start_spread(message, state, session, spread_type, wheel_win_id=wheel_win_id)
 
 
 @router.message(F.text.in_(SPREAD_BUTTONS))
@@ -195,6 +218,29 @@ async def send_reading_invoice(
     )
 
 
+async def _wheel_win_for_spread(
+    session: AsyncSession,
+    user,
+    spread_type: SpreadType,
+    data: dict,
+):
+    """Приз колеса, которым запущен этот расклад; None — приза нет или он сгорел."""
+    raw_id = data.get("wheel_win_id")
+    if not raw_id:
+        return None
+    try:
+        win = await wheel_crud.get_win(session, UUID(str(raw_id)))
+    except ValueError:
+        return None
+    if win is None or win.user_id != user.id or not win_is_available(win):
+        log.warning(Event.WHEEL_PRIZE_UNAVAILABLE, user_id=user.id, win_id=raw_id)
+        return None
+    if win.product_code != tarot_product_code(str(spread_type)):
+        log.warning(Event.WHEEL_PRIZE_UNAVAILABLE, reason="product_mismatch", win_id=raw_id)
+        return None
+    return win
+
+
 @router.message(TarotStates.waiting_question, F.text)
 async def spread_question(message: Message, state: FSMContext, session: AsyncSession) -> None:
     text = (message.text or "").strip()
@@ -234,6 +280,13 @@ async def spread_question(message: Message, state: FSMContext, session: AsyncSes
     try:
         # Цена — из БД на каждый товар; в текстах её нет, покажет кнопка инвойса.
         price = await get_tarot_price(session, str(spread_type))
+        win = await _wheel_win_for_spread(session, user, spread_type, data)
+        if win is not None:
+            # Приз колеса перебивает акцию каталога: считаем от базовой цены.
+            price = ProductPriceInfo(price.currency, price.base_amount, win.discount_percent)
+        elif data.get("wheel_win_id"):
+            await message.answer(_PRIZE_GONE_TEXT)
+
         reading = await create_reading_draft(
             session, user, spread_type, question, local_today(user),
         )
@@ -241,18 +294,25 @@ async def spread_question(message: Message, state: FSMContext, session: AsyncSes
         if price.is_free:
             # discount_percent = 100 в БД: без инвойса, карты сразу.
             await mark_reading_paid(session, reading, 0)
+            if win is not None:
+                await reserve_win_for_reading(session, win, reading.id)
+                await mark_win_activated(session, win)
             await session.commit()
             await state.clear()
             log.info(
                 Event.TAROT_READING_FREE_GRANTED,
                 user_id=user.id,
                 reading_id=reading.id,
+                wheel_win_id=win.id if win else None,
             )
             await message.answer(_FREE_TODAY_TEXT, reply_markup=tarot_keyboard())
             await _reveal_reading(message, reading)
             await publish_tarot_reading_generate(reading.id)
             return
 
+        if win is not None:
+            # Приз тратится только вместе с оплатой — пока лишь резервируем.
+            await reserve_win_for_reading(session, win, reading.id)
         await session.commit()  # черновик должен пережить рестарт до оплаты
         await state.clear()
 
@@ -289,7 +349,7 @@ async def cb_legacy_unlock(callback: CallbackQuery) -> None:
         await callback.message.answer("Выбери расклад ✨", reply_markup=tarot_keyboard())
 
 
-@router.pre_checkout_query()
+@router.pre_checkout_query(F.invoice_payload.startswith(TAROT_PAYLOAD_PREFIX))
 async def pre_checkout(query: PreCheckoutQuery, session: AsyncSession) -> None:
     """Последняя проверка перед списанием звёзд: черновик существует и не оплачен."""
     reading_id = parse_tarot_invoice_payload(query.invoice_payload)
@@ -309,7 +369,7 @@ async def pre_checkout(query: PreCheckoutQuery, session: AsyncSession) -> None:
     await query.answer(ok=True)
 
 
-@router.message(F.successful_payment)
+@router.message(F.successful_payment.invoice_payload.startswith(TAROT_PAYLOAD_PREFIX))
 async def spread_paid(message: Message, session: AsyncSession) -> None:
     """Оплата прошла: фиксируем платёж, показываем карты, запускаем интерпретацию."""
     payment_info = message.successful_payment
@@ -346,6 +406,10 @@ async def spread_paid(message: Message, session: AsyncSession) -> None:
             return  # дубль successful_payment — уже обработан
         if reading.status == ReadingStatus.PENDING_PAYMENT:
             await mark_reading_paid(session, reading, payment_info.total_amount)
+        # Скидочный приз колеса тратится в момент оплаты расклада.
+        win = await wheel_crud.get_pending_win_for_reading(session, reading.id)
+        if win is not None:
+            await mark_win_activated(session, win)
         await session.commit()  # сначала commit, потом publish — worker должен видеть строку
     except IntegrityError:
         await session.rollback()  # гонка двух повторных апдейтов — платёж уже записан
