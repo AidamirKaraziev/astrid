@@ -10,6 +10,7 @@ class TaskType(StrEnum):
     DAILY_CONTEXT_BUILD = "daily_context.build"
     PREDICTION_GENERATE = "prediction.generate"
     PREDICTION_SEND = "prediction.send"
+    DAY_CARD_SEND = "day_card.send"
     SYNASTRY_BUILD = "synastry.build"
     COMPATIBILITY_GENERATE = "compatibility.generate"
     PDF_GENERATE = "pdf.generate"

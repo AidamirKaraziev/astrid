@@ -16,16 +16,12 @@ from aiogram.fsm.context import FSMContext
 from aiogram.types import Message
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from astra.core.config import get_settings
 from astra.telegram.button_texts import (
-    BTN_ASK_ASTRID,
-    BTN_ASK_ASTRID_LEGACY,
     BTN_BACK_MENU,
     BTN_BACK_MENU_LEGACY,
     BTN_COMPATIBILITY,
     BTN_INVITE,
     BTN_NATAL,
-    BTN_PREDICTION_TODAY,
     BTN_PROFILE,
     BTN_TAROT,
     BTN_WHEEL,
@@ -34,7 +30,8 @@ from astra.telegram.button_texts import (
 )
 from astra.telegram.handlers.catalog import back_to_main_menu, open_tarot_menu
 from astra.telegram.handlers.compatibility import start_compatibility
-from astra.telegram.handlers.menu import invite_friend, show_profile, today_prediction
+from astra.telegram.handlers.day_card import LEGACY_BUTTONS, legacy_button
+from astra.telegram.handlers.menu import invite_friend, show_profile
 from astra.telegram.handlers.natal import start_natal
 from astra.telegram.handlers.tarot_spreads import SPREAD_BUTTONS, spread_button
 from astra.telegram.handlers.wheel import open_wheel
@@ -95,12 +92,6 @@ async def nav_natal(message: Message, state: FSMContext, session: AsyncSession) 
     await start_natal(message, state, session)
 
 
-@router.message(F.text == BTN_PREDICTION_TODAY)
-async def nav_prediction(message: Message, state: FSMContext, session: AsyncSession) -> None:
-    await state.clear()
-    await today_prediction(message, session)
-
-
 @router.message(F.text == BTN_PROFILE)
 async def nav_profile(message: Message, state: FSMContext, session: AsyncSession) -> None:
     await state.clear()
@@ -113,16 +104,11 @@ async def nav_invite(message: Message, state: FSMContext, session: AsyncSession)
     await invite_friend(message, session)
 
 
-@router.message(F.text.in_({BTN_ASK_ASTRID, BTN_ASK_ASTRID_LEGACY}))
-async def nav_ask_astrid(message: Message, state: FSMContext) -> None:
-    if not get_settings().ai_chat_enabled:
-        await message.answer(COMING_SOON_TEXT)
-        return
-    # Ленивый импорт: модуль тянет LLM-стек и грузится только при включённом чате.
-    from astra.telegram.ai_chat.handler import ai_chat_enter
-
+@router.message(F.text.in_(LEGACY_BUTTONS))
+async def nav_legacy_button(message: Message, state: FSMContext) -> None:
+    # Удалённые кнопки меню (предсказание, чат с Астрид) прерывают сценарий.
     await state.clear()
-    await ai_chat_enter(message, state)
+    await legacy_button(message)
 
 
 @router.message(F.text.in_(_PAID_STUB_BUTTONS))

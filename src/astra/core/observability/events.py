@@ -72,6 +72,11 @@ class Event(StrEnum):
     TAROT_LIMIT_HIT = "tarot.limit_hit"
     TAROT_INTERPRET_FAILED = "tarot.interpret_failed"
 
+    # Карта дня (бесплатный ежедневный продукт)
+    DAY_CARD_SENT = "day_card.sent"
+    DAY_CARD_FORECAST_SENT = "day_card.forecast_sent"
+    DAY_CARD_FORECAST_FAILED = "day_card.forecast_failed"
+
     # Tarot readings pipeline (платные расклады)
     TAROT_READING_CREATED = "tarot_reading.created"
     TAROT_READING_GENERATED = "tarot_reading.generated"

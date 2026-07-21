@@ -1,8 +1,8 @@
 from astra.telegram.button_texts import (
-    BTN_ASK_ASTRID,
+    BTN_WHEEL,
     BTN_BACK_MENU,
     BTN_COMPATIBILITY,
-    BTN_PREDICTION_TODAY,
+    BTN_PREDICTION_TODAY_LEGACY,
     BTN_TAROT,
     BTN_TAROT_THREE,
 )
@@ -19,7 +19,7 @@ from astra.telegram.states import OnboardingStates, ProfileStates
 
 def test_main_menu_buttons_resolve_to_main_zone() -> None:
     zone = resolve_keyboard_zone(
-        incoming_text=BTN_PREDICTION_TODAY,
+        incoming_text=BTN_PREDICTION_TODAY_LEGACY,
         fsm_state=None,
     )
     assert zone is KeyboardZone.MAIN
@@ -45,7 +45,7 @@ def test_onboarding_fsm_suppresses_keyboard() -> None:
     assert is_fsm_keyboard_suppressed(OnboardingStates.gender.state)
     assert is_fsm_keyboard_suppressed(OnboardingStates.birth_date.state)
     zone = resolve_keyboard_zone(
-        incoming_text=BTN_PREDICTION_TODAY,
+        incoming_text=BTN_PREDICTION_TODAY_LEGACY,
         fsm_state=OnboardingStates.birth_date.state,
     )
     assert zone is None
@@ -69,7 +69,7 @@ def test_profile_name_edit_refreshes_main_menu() -> None:
 
 def test_skip_auto_keyboard_flag() -> None:
     zone = resolve_keyboard_zone(
-        incoming_text=BTN_PREDICTION_TODAY,
+        incoming_text=BTN_PREDICTION_TODAY_LEGACY,
         fsm_state=None,
         skip_auto_keyboard=True,
     )
@@ -79,15 +79,14 @@ def test_skip_auto_keyboard_flag() -> None:
 def test_reply_keyboard_api_payload_has_resize() -> None:
     payload = reply_keyboard_to_api_payload(main_menu_keyboard())
     assert payload["resize_keyboard"] is True
-    assert BTN_ASK_ASTRID in payload["keyboard"][0][0]["text"]
-    assert BTN_PREDICTION_TODAY in payload["keyboard"][1][0]["text"]
-    assert BTN_COMPATIBILITY in payload["keyboard"][2][0]["text"]
+    assert BTN_WHEEL in payload["keyboard"][0][0]["text"]
+    assert BTN_COMPATIBILITY in payload["keyboard"][1][0]["text"]
 
 
 def test_reply_keyboard_for_zone_main() -> None:
     keyboard = reply_keyboard_for_zone(KeyboardZone.MAIN)
     assert keyboard is not None
-    assert keyboard.keyboard[0][0].text == BTN_ASK_ASTRID
+    assert keyboard.keyboard[0][0].text == BTN_WHEEL
 
 
 def test_reply_keyboard_for_zone_tarot() -> None:

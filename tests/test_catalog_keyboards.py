@@ -1,12 +1,12 @@
 from astra.telegram.button_texts import (
-    BTN_ASK_ASTRID,
+    BTN_ASK_ASTRID_LEGACY,
     BTN_ASK_STARS,
     BTN_BACK_MENU,
     BTN_COMPATIBILITY,
     BTN_INVITE,
     BTN_MONTH_FORECAST,
     BTN_NATAL,
-    BTN_PREDICTION_TODAY,
+    BTN_PREDICTION_TODAY_LEGACY,
     BTN_PROFILE,
     BTN_TAROT,
     BTN_WHEEL,
@@ -20,16 +20,20 @@ def _reply_texts(keyboard) -> list[str]:
     return [btn.text for row in keyboard.keyboard for btn in row]
 
 
-def test_main_menu_layout_variant_b() -> None:
+def test_main_menu_layout_wheel_first() -> None:
     rows = [[btn.text for btn in row] for row in main_menu_keyboard().keyboard]
     assert rows == [
-        [BTN_ASK_ASTRID],
-        [BTN_PREDICTION_TODAY],
+        [BTN_WHEEL],
         [BTN_COMPATIBILITY, BTN_NATAL],
         [BTN_MONTH_FORECAST, BTN_TAROT],
-        [BTN_WHEEL],
         [BTN_PROFILE, BTN_INVITE],
     ]
+
+
+def test_main_menu_without_prediction_and_ai_chat() -> None:
+    texts = set(_reply_texts(main_menu_keyboard()))
+    assert BTN_PREDICTION_TODAY_LEGACY not in texts
+    assert BTN_ASK_ASTRID_LEGACY not in texts
 
 
 def test_main_menu_includes_reply_paid_products() -> None:

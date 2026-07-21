@@ -1,5 +1,4 @@
 from datetime import datetime
-from zoneinfo import ZoneInfo
 
 from aiogram import F, Router
 from aiogram.fsm.context import FSMContext
@@ -7,23 +6,10 @@ from aiogram.types import CallbackQuery, Message
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from astra.referrals.getters import get_referral_stats
-from astra.services.points_service import register_daily_activity
-from astra.services.prediction_service import (
-    PredictionRequestStatus,
-    format_prediction_for_user,
-    request_today_prediction,
-)
-from astra.telegram.progress import (
-    PredictionStage,
-    current_progress_message_id,
-    notify_prediction_stage,
-    prediction_job_key,
-)
 from astra.telegram.handlers.places import start_profile_notification_place_step
-from astra.telegram.button_texts import BTN_INVITE, BTN_PREDICTION_TODAY, BTN_PROFILE
+from astra.telegram.button_texts import BTN_INVITE, BTN_PROFILE
 from astra.telegram.keyboards import (
     main_menu_keyboard,
-    prediction_followup_keyboard,
     profile_gender_inline_keyboard,
     profile_menu_keyboard,
     share_keyboard,
@@ -60,58 +46,6 @@ async def cb_menu_home(callback: CallbackQuery, state: FSMContext) -> None:
     if callback.message:
         await callback.message.answer("Главное меню ✨", reply_markup=main_menu_keyboard())
     await callback.answer()
-
-
-@router.message(F.text == BTN_PREDICTION_TODAY)
-async def today_prediction(message: Message, session: AsyncSession) -> None:
-    tg_id = _telegram_id_from_message(message)
-    if tg_id is None:
-        return
-    user = await _get_user(session, tg_id)
-    if user is None or not user.onboarding_completed or user.profile is None:
-        await message.answer("Сначала пройди регистрацию: /start")
-        return
-    await register_daily_activity(session, user)
-    outcome = await request_today_prediction(
-        session,
-        user,
-        user.profile,
-    )
-    target = datetime.now(ZoneInfo(user.profile.timezone)).date()
-    job_key = prediction_job_key(target)
-
-    if outcome.status == PredictionRequestStatus.QUEUED:
-        await notify_prediction_stage(
-            message.chat.id,
-            user.id,
-            target,
-            PredictionStage.STARTED,
-        )
-        return
-    if outcome.status == PredictionRequestStatus.IN_PROGRESS:
-        if await current_progress_message_id(user.id, job_key) is None:
-            await notify_prediction_stage(
-                message.chat.id,
-                user.id,
-                target,
-                PredictionStage.STARTED,
-            )
-        return
-    if outcome.status == PredictionRequestStatus.FAILED:
-        return
-    if outcome.prediction is None:
-        await notify_prediction_stage(
-            message.chat.id,
-            user.id,
-            target,
-            PredictionStage.STARTED,
-        )
-        return
-    await message.answer(
-        format_prediction_for_user(outcome.prediction, user, user.profile),
-        parse_mode="HTML",
-        reply_markup=prediction_followup_keyboard(),
-    )
 
 
 @router.message(F.text == BTN_INVITE)

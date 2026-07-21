@@ -1,15 +1,18 @@
 """Тексты Reply-кнопок Telegram-бота — единый источник правды."""
 
-BTN_PREDICTION_TODAY = "🔮 Предсказание на сегодня"
+# Ежедневный прогноз заменён картой дня (приходит рассылкой). Кнопки нет в меню,
+# но у части пользователей клавиатура закэширована клиентом — текст ловим.
+BTN_PREDICTION_TODAY_LEGACY = "🔮 Предсказание на сегодня"
 BTN_PROFILE = "✨ Обо мне"
 BTN_INVITE = "🎁 Пригласить друга"
 BTN_BACK_MENU = "🔙 Назад"
 # Старый текст кнопки: у части пользователей клавиатура закэширована клиентом.
 BTN_BACK_MENU_LEGACY = "🔙 В меню"
 
-BTN_ASK_ASTRID = "💬 Написать Астрид"
-# Старый латинский текст: у части пользователей клавиатура закэширована клиентом.
-BTN_ASK_ASTRID_LEGACY = "💬 Написать Astrid"
+# AI-чат отключён вместе с ежедневным прогнозом: кнопки в меню нет, тексты
+# остались, чтобы ловить закэшированную у клиента клавиатуру.
+BTN_ASK_ASTRID_LEGACY = "💬 Написать Астрид"
+BTN_ASK_ASTRID_LEGACY_LATIN = "💬 Написать Astrid"
 BTN_COMPATIBILITY = "💕 Совместимость"
 BTN_ASK_STARS = "🌟 Спросить звёзды"
 BTN_NATAL = "🌌 Разбор натала"
@@ -42,6 +45,12 @@ TAROT_PRODUCT_BUTTONS = (
 )
 
 COMING_SOON_TEXT = "Скоро появится, выбери что-то другое."
+
+# Карта дня: кнопка под картинкой и переход к платным раскладам после прогноза
+BTN_DAY_CARD_FORECAST = "🔮 Что это значит для меня"
+BTN_TAROT_ASK_OWN = "🔮 Спросить карты о своём"
+CB_DAY_CARD_FORECAST = "daycard:forecast"
+CB_TAROT_SECTION = "tarot:section"
 
 CB_PRODUCT_ASK_STARS = "product:ask_stars"
 CB_PROFILE_REPORTS = "profile:reports"

@@ -17,7 +17,7 @@ from astra.telegram.handlers.navigation import (
     INTERRUPTIBLE_STATE_GROUPS,
     nav_back_to_menu,
     nav_paid_stub,
-    nav_prediction,
+    nav_legacy_button,
     nav_tarot_menu,
 )
 from astra.telegram.states import CompatibilityStates, OnboardingStates, TarotStates
@@ -77,20 +77,15 @@ async def test_back_button_clears_state_and_shows_main_menu() -> None:
 
 
 @pytest.mark.asyncio
-async def test_prediction_button_clears_state_before_delegating() -> None:
+async def test_legacy_prediction_button_clears_state_and_explains() -> None:
     state = await _fsm()
     await state.set_state(CompatibilityStates.collect_name)
     message = _message("🔮 Предсказание на сегодня")
-    session = AsyncMock()
 
-    with patch(
-        "astra.telegram.handlers.navigation.today_prediction",
-        new=AsyncMock(),
-    ) as prediction:
-        await nav_prediction(message, state, session)
+    await nav_legacy_button(message, state)
 
     assert await state.get_state() is None
-    prediction.assert_awaited_once_with(message, session)
+    assert "карту дня" in message.answer.await_args.args[0]
 
 
 @pytest.mark.asyncio

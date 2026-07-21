@@ -9,6 +9,7 @@ from astra.messaging.publisher import (
     publish_compatibility_generate,
     publish_compatibility_send,
     publish_daily_context_build,
+    publish_day_card_send,
     publish_natal_pdf_generate,
     publish_natal_send,
     publish_pdf_generate,
@@ -34,6 +35,7 @@ from astra.services.compatibility_service import (
     generate_compatibility_llm,
     generate_compatibility_pdf,
 )
+from astra.services.day_card_service import deliver_day_card
 from astra.services.prediction_generation import generate_daily_prediction_resilient
 from astra.services.tarot_reading_service import (
     deliver_reading,
@@ -46,13 +48,11 @@ from astra.telegram.progress.api import send_chat_action_typing
 from astra.telegram.progress import (
     CompatibilityStage,
     NatalStage,
-    PredictionStage,
     clear_progress,
     compatibility_job_key,
     natal_job_key,
     notify_compatibility_stage,
     notify_natal_stage,
-    notify_prediction_stage,
     prediction_job_key,
 )
 from astra.users import crud as users_crud
@@ -87,12 +87,7 @@ async def handle_natal_chart_generate(session: AsyncSession, task: TaskMessage) 
     await compute_and_store_natal_chart(session, user, user.profile)
     await session.commit()
 
-    await notify_prediction_stage(
-        user.telegram_id,
-        user.id,
-        target,
-        PredictionStage.NATAL_DONE,
-    )
+    # Карта дня приходит рассылкой: этапы пайплайна пользователю не показываем.
     await publish_daily_context_build(user.id, target)
     log.info(Event.PREDICTION_NATAL_STORED, user_id=task.user_id, prediction_date=str(target))
 
@@ -109,14 +104,33 @@ async def handle_daily_context_build(session: AsyncSession, task: TaskMessage) -
     await build_and_store_daily_context(session, user, user.profile, target)
     await session.commit()
 
-    await notify_prediction_stage(
-        user.telegram_id,
-        user.id,
-        target,
-        PredictionStage.CONTEXT_DONE,
-    )
-    await publish_prediction_generate(user.id, target)
+    # Астро-контекст дня — вход для прогноза по карте; текст прогноза v4.1
+    # больше не генерируется (продукт заменён картой дня).
+    await publish_day_card_send(user.id, target)
     log.info(Event.PREDICTION_CONTEXT_STORED, user_id=task.user_id, prediction_date=str(target))
+
+
+async def handle_day_card_send(session: AsyncSession, task: TaskMessage) -> None:
+    """Утренняя рассылка карты дня: фото + кнопка «Что это значит для меня»."""
+    if task.user_id is None:
+        return
+    user = await users_crud.get_user_by_id(session, task.user_id)
+    if user is None or user.profile is None:
+        log.warning(Event.TASK_SKIPPED, reason="profile_missing", user_id=task.user_id)
+        return
+
+    target = _target_date(task, user.profile)
+    prediction = await predictions_crud.get_prediction_for_date(session, user.id, target)
+    if prediction is not None and prediction.sent_at is not None:
+        await clear_prediction_pending(user.id, target)
+        return  # идемпотентность при requeue
+
+    await clear_progress(user.telegram_id, user.id, prediction_job_key(target))
+    await deliver_day_card(session, user, target)
+    if prediction is not None:
+        await mark_prediction_sent(session, prediction)
+    await session.commit()
+    await clear_prediction_pending(user.id, target)
 
 
 async def handle_prediction_generate(session: AsyncSession, task: TaskMessage) -> None:
@@ -403,6 +417,8 @@ async def dispatch_task(session: AsyncSession, task: TaskMessage) -> None:
         await handle_prediction_generate(session, task)
     elif task.type == TaskType.PREDICTION_SEND:
         await handle_prediction_send(session, task)
+    elif task.type == TaskType.DAY_CARD_SEND:
+        await handle_day_card_send(session, task)
     elif task.type == TaskType.SYNASTRY_BUILD:
         await handle_synastry_build(session, task)
     elif task.type == TaskType.COMPATIBILITY_GENERATE:

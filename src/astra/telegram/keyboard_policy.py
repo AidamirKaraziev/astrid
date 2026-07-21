@@ -10,8 +10,8 @@ from aiogram.types import ReplyKeyboardMarkup, ReplyKeyboardRemove
 from astra.telegram.button_texts import (
     BTN_BACK_MENU,
     BTN_INVITE,
-    BTN_PREDICTION_TODAY,
     BTN_PROFILE,
+    BTN_WHEEL,
     BTN_TAROT,
     PAID_PRODUCT_BUTTONS,
     TAROT_PRODUCT_BUTTONS,
@@ -57,7 +57,7 @@ _KEYBOARD_SUPPRESSED_FSM_STATES: frozenset[str] = frozenset(
 
 MAIN_MENU_BUTTONS: frozenset[str] = frozenset(
     {
-        BTN_PREDICTION_TODAY,
+        BTN_WHEEL,
         BTN_PROFILE,
         BTN_INVITE,
         *PAID_PRODUCT_BUTTONS,

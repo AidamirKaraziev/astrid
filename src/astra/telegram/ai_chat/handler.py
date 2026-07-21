@@ -22,7 +22,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from astra.core.observability import get_logger
 from astra.telegram.ai_chat.agent import run_astrid
 from astra.telegram.ai_chat.intents import Intent
-from astra.telegram.button_texts import BTN_ASK_ASTRID, BTN_ASK_ASTRID_LEGACY, BTN_BACK_MENU
+from astra.telegram.button_texts import (
+    BTN_ASK_ASTRID_LEGACY,
+    BTN_ASK_ASTRID_LEGACY_LATIN,
+    BTN_BACK_MENU,
+)
 from astra.telegram.states import AiChatStates
 from astra.users import crud as users_crud
 
@@ -59,7 +63,8 @@ def _flow_dispatch() -> dict[Intent, _FlowEntry]:
     """
     from astra.telegram.handlers.catalog import open_tarot_menu
     from astra.telegram.handlers.compatibility import start_compatibility
-    from astra.telegram.handlers.menu import invite_friend, show_profile, today_prediction
+    from astra.telegram.handlers.day_card import legacy_button
+    from astra.telegram.handlers.menu import invite_friend, show_profile
     from astra.telegram.handlers.natal import start_natal
     from astra.telegram.handlers.tarot_spreads import (
         start_relationship,
@@ -67,9 +72,10 @@ def _flow_dispatch() -> dict[Intent, _FlowEntry]:
         start_wish,
     )
 
-    async def _prediction(m: Message, s: FSMContext, db: AsyncSession) -> None:
+    async def _prediction(m: Message, s: FSMContext, _db: AsyncSession) -> None:
+        # Ежедневного прогноза больше нет: объясняем, что теперь приходит карта дня.
         await s.clear()  # one-shot действие: выходим из режима чата
-        await today_prediction(m, db)
+        await legacy_button(m)
 
     async def _tarot(m: Message, s: FSMContext, _db: AsyncSession) -> None:
         await s.clear()
@@ -97,7 +103,7 @@ def _flow_dispatch() -> dict[Intent, _FlowEntry]:
     }
 
 
-@router.message(F.text.in_({BTN_ASK_ASTRID, BTN_ASK_ASTRID_LEGACY}))
+@router.message(F.text.in_({BTN_ASK_ASTRID_LEGACY, BTN_ASK_ASTRID_LEGACY_LATIN}))
 async def ai_chat_enter(message: Message, state: FSMContext) -> None:
     """Вход в режим чата по кнопке «💬 Написать Астрид»."""
     await state.set_state(AiChatStates.chatting)

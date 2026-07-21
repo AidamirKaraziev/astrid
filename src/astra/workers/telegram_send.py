@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 from typing import Any
 
@@ -6,6 +7,7 @@ from aiogram.types import InlineKeyboardMarkup, ReplyKeyboardMarkup, ReplyKeyboa
 
 from astra.core.config import Settings, get_settings
 from astra.core.observability import Event, get_logger
+from astra.tarot.file_id_cache import cache_file_id, get_cached_file_id
 from astra.telegram.keyboard_policy import (
     KeyboardZone,
     reply_keyboard_for_zone,
@@ -115,6 +117,70 @@ async def send_compatibility_pdf(
             )
         _raise_for_status(response, telegram_id)
     log.info(Event.TELEGRAM_PDF_SENT, telegram_id=telegram_id, filename=filename)
+
+
+async def send_card_photo_to_telegram(
+    telegram_id: int,
+    card_id: str,
+    image: Path | None,
+    *,
+    caption: str,
+    reply_markup: InlineKeyboardMarkup | None = None,
+    settings: Settings | None = None,
+) -> None:
+    """Карта дня фото + inline-кнопка; без ассета — текстом (ритуал важнее картинки).
+
+    Первая отправка заливает файл, дальше — по file_id из общего кэша
+    (astra.tarot.file_id_cache), как в боте.
+    """
+    cfg = settings or get_settings()
+    if not cfg.telegram_bot_token:
+        raise RuntimeError("TELEGRAM_BOT_TOKEN is not set")
+    if image is None:
+        await send_telegram_html(
+            telegram_id,
+            caption,
+            cfg,
+            reply_markup=reply_markup,
+            keyboard_zone=None,
+        )
+        return
+
+    cached_file_id = await get_cached_file_id(card_id)
+    data: dict[str, Any] = {
+        "chat_id": str(telegram_id),
+        "caption": caption,
+        "parse_mode": "HTML",
+    }
+    if reply_markup is not None:
+        data["reply_markup"] = json.dumps(
+            _inline_keyboard_to_api_payload(reply_markup),
+            ensure_ascii=False,
+        )
+
+    url = f"https://api.telegram.org/bot{cfg.telegram_bot_token}/sendPhoto"
+    client_kwargs: dict[str, Any] = {"timeout": 60.0}
+    if proxy := cfg.telegram_proxy_url_effective:
+        client_kwargs["proxy"] = proxy
+
+    async with httpx.AsyncClient(**client_kwargs) as client:
+        if cached_file_id:
+            response = await client.post(url, data={**data, "photo": cached_file_id})
+        else:
+            with image.open("rb") as photo_file:
+                response = await client.post(
+                    url,
+                    data=data,
+                    files={"photo": (image.name, photo_file, "image/jpeg")},
+                )
+        _raise_for_status(response, telegram_id)
+        payload = response.json()
+
+    if not cached_file_id:
+        sizes = (payload.get("result") or {}).get("photo") or []
+        if sizes:
+            await cache_file_id(card_id, sizes[-1]["file_id"])
+    log.info(Event.TELEGRAM_MESSAGE_SENT, telegram_id=telegram_id)
 
 
 async def send_prediction_to_telegram(

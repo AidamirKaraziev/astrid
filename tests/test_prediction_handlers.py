@@ -33,10 +33,6 @@ async def test_handle_natal_chart_generate_publishes_daily_context() -> None:
             new=AsyncMock(),
         ),
         patch(
-            "astra.workers.handlers.notify_prediction_stage",
-            new=AsyncMock(),
-        ) as notify_mock,
-        patch(
             "astra.workers.handlers.publish_daily_context_build",
             new=AsyncMock(),
         ) as publish_mock,
@@ -44,12 +40,11 @@ async def test_handle_natal_chart_generate_publishes_daily_context() -> None:
         await handlers.handle_natal_chart_generate(session, task)
 
     session.commit.assert_awaited_once()
-    notify_mock.assert_awaited_once()
     publish_mock.assert_awaited_once_with(user_id, target)
 
 
 @pytest.mark.asyncio
-async def test_handle_daily_context_build_publishes_prediction_generate() -> None:
+async def test_handle_daily_context_build_publishes_day_card_send() -> None:
     user_id = uuid4()
     target = date(2026, 7, 2)
     user = MagicMock()
@@ -73,11 +68,7 @@ async def test_handle_daily_context_build_publishes_prediction_generate() -> Non
             new=AsyncMock(),
         ),
         patch(
-            "astra.workers.handlers.notify_prediction_stage",
-            new=AsyncMock(),
-        ),
-        patch(
-            "astra.workers.handlers.publish_prediction_generate",
+            "astra.workers.handlers.publish_day_card_send",
             new=AsyncMock(),
         ) as publish_mock,
     ):

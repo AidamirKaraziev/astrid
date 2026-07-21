@@ -14,7 +14,7 @@ from astra.core.observability.middleware.telegram import TelegramObservabilityMi
 from astra.db.session import get_session_factory
 from astra.telegram.auto_keyboard_middleware import AutoKeyboardMiddleware
 from astra.telegram.bot_menu import setup_bot_menu
-from astra.telegram.handlers import catalog, commands, compatibility, menu, natal, navigation, onboarding, people, places, start, tarot_daily, tarot_spreads, wheel
+from astra.telegram.handlers import catalog, commands, compatibility, day_card, menu, natal, navigation, onboarding, people, places, start, tarot_daily, tarot_spreads, wheel
 from astra.telegram.middlewares import DbSessionMiddleware
 
 log = get_logger(__name__)
@@ -83,17 +83,16 @@ async def create_dispatcher(settings: Settings) -> Dispatcher:
     dp.include_router(compatibility.router)
     dp.include_router(people.router)
     dp.include_router(natal.router)
+    dp.include_router(day_card.router)
+    # Старая CTA «Спросить карты» под прогнозами в истории чата продолжает работать.
     dp.include_router(tarot_daily.router)
     dp.include_router(tarot_spreads.router)  # до catalog: перехватывает кнопки раскладов
     dp.include_router(catalog.router)
 
-    # AI-чат Astrid — регистрируется ПОСЛЕДНИМ, чтобы кнопки/FSM ловились раньше.
-    if settings.ai_chat_enabled:
-        from astra.telegram.ai_chat import router as ai_chat_router
-
-        dp.include_router(ai_chat_router)
-        log.info("telegram.ai_chat.enabled", provider=settings.ai_chat_provider)
-
+    # AI-чат Astrid отключён вместе с ежедневным прогнозом: единственной точкой
+    # входа была кнопка «Написать Астрид», её в меню больше нет. Код модуля
+    # остался в репозитории — чтобы включить обратно, верните регистрацию
+    # роутера и кнопку в main_menu_keyboard().
     return dp
 
 

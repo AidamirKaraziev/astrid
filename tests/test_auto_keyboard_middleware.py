@@ -7,7 +7,7 @@ from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.types import Chat, Message, User
 
 from astra.telegram.auto_keyboard_middleware import AutoKeyboardMiddleware
-from astra.telegram.button_texts import BTN_COMPATIBILITY, BTN_PREDICTION_TODAY
+from astra.telegram.button_texts import BTN_COMPATIBILITY, BTN_WHEEL
 from astra.telegram.keyboards import main_menu_keyboard
 
 
@@ -44,7 +44,7 @@ async def _patch_and_answer(message: Message, data: dict) -> dict:
 
 @pytest.mark.asyncio
 async def test_middleware_attaches_main_menu_when_reply_markup_missing() -> None:
-    message = _message(BTN_PREDICTION_TODAY)
+    message = _message(BTN_WHEEL)
     fsm = _fsm()
     await fsm.clear()
 
@@ -56,7 +56,7 @@ async def test_middleware_attaches_main_menu_when_reply_markup_missing() -> None
 
 @pytest.mark.asyncio
 async def test_middleware_does_not_override_explicit_reply_markup() -> None:
-    message = _message(BTN_PREDICTION_TODAY)
+    message = _message(BTN_WHEEL)
     fsm = _fsm()
     custom_markup = main_menu_keyboard()
 

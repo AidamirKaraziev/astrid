@@ -18,6 +18,7 @@ from astra.messaging.queues import (
     ROUTING_COMPATIBILITY_GENERATE,
     ROUTING_COMPATIBILITY_SEND,
     ROUTING_DAILY_CONTEXT_BUILD,
+    ROUTING_DAY_CARD_SEND,
     ROUTING_NATAL_CHART,
     ROUTING_NATAL_GENERATE,
     ROUTING_NATAL_PDF_GENERATE,
@@ -61,6 +62,7 @@ async def _ensure_topology(channel: aio_pika.Channel) -> aio_pika.Exchange:
         (QUEUE_ASTRO, ROUTING_SYNASTRY_BUILD),
         (QUEUE_PREDICTIONS, ROUTING_PREDICTION_GENERATE),
         (QUEUE_NOTIFICATIONS, ROUTING_PREDICTION_SEND),
+        (QUEUE_NOTIFICATIONS, ROUTING_DAY_CARD_SEND),
         (QUEUE_NOTIFICATIONS, ROUTING_COMPATIBILITY_SEND),
         (QUEUE_COMPATIBILITY, ROUTING_COMPATIBILITY_GENERATE),
         (QUEUE_REPORTS, ROUTING_PDF_GENERATE),
@@ -157,9 +159,6 @@ async def publish_natal_chart(
 ) -> None:
     await _publish(
         ROUTING_NATAL_CHART,
-    ROUTING_NATAL_GENERATE,
-    ROUTING_NATAL_PDF_GENERATE,
-    ROUTING_NATAL_SEND,
         _task_message(
             type=TaskType.NATAL_CHART_GENERATE,
             user_id=user_id,
@@ -210,6 +209,22 @@ async def publish_prediction_send(
         ROUTING_PREDICTION_SEND,
         _task_message(
             type=TaskType.PREDICTION_SEND,
+            user_id=user_id,
+            prediction_date=prediction_date,
+        ),
+        settings,
+    )
+
+
+async def publish_day_card_send(
+    user_id: UUID,
+    prediction_date: date,
+    settings: Settings | None = None,
+) -> None:
+    await _publish(
+        ROUTING_DAY_CARD_SEND,
+        _task_message(
+            type=TaskType.DAY_CARD_SEND,
             user_id=user_id,
             prediction_date=prediction_date,
         ),

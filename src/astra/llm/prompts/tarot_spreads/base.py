@@ -45,6 +45,15 @@ PERSONA = dedent(
 
 _FENCE = re.compile(r"^```\w*\n?|\n?```$")
 
+
+def parse_json_into(schema: type[BaseModel], raw: str) -> BaseModel | None:
+    """JSON модели → схема продукта; None при невалидном JSON (повод для retry)."""
+    text = _FENCE.sub("", raw.strip()).strip()
+    try:
+        return schema.model_validate_json(text)
+    except (ValidationError, ValueError):
+        return None
+
 # Минимальные длины (символы) — защита от «пустых» полей LLM.
 MIN_FIELD_LEN = 40
 MIN_SUMMARY_LEN = 25
@@ -181,11 +190,7 @@ class TarotProduct(ABC):
 
     def parse(self, raw: str) -> BaseModel | None:
         """JSON → схема продукта; None при невалидном JSON (повод для retry)."""
-        text = _FENCE.sub("", raw.strip()).strip()
-        try:
-            return self.schema.model_validate_json(text)
-        except (ValidationError, ValueError):
-            return None
+        return parse_json_into(self.schema, raw)
 
     @abstractmethod
     def validate(self, data: BaseModel) -> str | None:

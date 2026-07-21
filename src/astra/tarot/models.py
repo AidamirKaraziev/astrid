@@ -25,6 +25,9 @@ from astra.db.base import Base, TimestampMixin
 from astra.tarot.enums import ReadingStatus
 
 CONTEXT_DAILY_CONFLICT = "daily_conflict"
+# Карта дня (бесплатный ежедневный продукт): приходит утром рассылкой,
+# прогноз по кнопке пишется в forecast.
+CONTEXT_DAY_CARD = "day_card"
 
 
 class TarotDraw(Base, TimestampMixin):
@@ -49,6 +52,12 @@ class TarotDraw(Base, TimestampMixin):
     reversed: Mapped[bool] = mapped_column(Boolean, default=False)
     conflict_text: Mapped[str | None] = mapped_column(Text, nullable=True)
     interpretation: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Готовое HTML-сообщение прогноза по карте дня (пишется при нажатии кнопки).
+    forecast: Mapped[str | None] = mapped_column(Text, nullable=True)
+    forecast_sent_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
 
 
 async def get_daily_draw(

@@ -9,35 +9,24 @@
 from __future__ import annotations
 
 from aiogram.types import FSInputFile, InputMediaPhoto, Message
-from redis.asyncio import Redis
 
-from astra.core.config import get_settings
 from astra.core.observability import get_logger
 from astra.tarot.deck import TarotCard
+from astra.tarot.file_id_cache import cache_file_id, get_cached_file_id
 from astra.tarot.images import image_path
 
 log = get_logger(__name__)
-
-_FILE_ID_KEY = "astra:telegram:tarot:file_id:{card_id}"
 
 # caption у альбома показывается, только когда он ровно у одного элемента
 ALBUM_CAPTION_LIMIT = 1024
 
 
 async def _get_cached_file_id(card_id: str) -> str | None:
-    client = Redis.from_url(get_settings().redis_url, decode_responses=True)
-    try:
-        return await client.get(_FILE_ID_KEY.format(card_id=card_id))
-    finally:
-        await client.aclose()
+    return await get_cached_file_id(card_id)
 
 
 async def _cache_file_id(card_id: str, file_id: str) -> None:
-    client = Redis.from_url(get_settings().redis_url, decode_responses=True)
-    try:
-        await client.set(_FILE_ID_KEY.format(card_id=card_id), file_id)
-    finally:
-        await client.aclose()
+    await cache_file_id(card_id, file_id)
 
 
 def _fallback_line(card: TarotCard) -> str:

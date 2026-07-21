@@ -2,17 +2,17 @@ from aiogram.enums import ButtonStyle
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, KeyboardButton, ReplyKeyboardMarkup
 
 from astra.telegram.button_texts import (
-    BTN_ASK_ASTRID,
     BTN_ASK_STARS,
     BTN_BACK_MENU,
     BTN_COMPATIBILITY,
+    BTN_DAY_CARD_FORECAST,
     BTN_GENDER_FEMALE,
     BTN_GENDER_MALE,
     BTN_INVITE,
     BTN_MONTH_FORECAST,
     BTN_NATAL,
-    BTN_PREDICTION_TODAY,
     BTN_PROFILE,
+    BTN_TAROT_ASK_OWN,
     BTN_TAROT,
     BTN_TAROT_RELATIONS,
     BTN_TAROT_THREE,
@@ -27,17 +27,48 @@ from astra.telegram.button_texts import (
     CB_COMPAT_DELETE_PREFIX,
     CB_COMPAT_DELETE_CONFIRM_PREFIX,
     CB_COMPAT_DELETE_CANCEL_PREFIX,
+    CB_DAY_CARD_FORECAST,
     CB_PRODUCT_ASK_STARS,
     CB_PROFILE_PEOPLE,
     CB_PROFILE_REPORTS,
+    CB_TAROT_SECTION,
 )
 
 
+def day_card_keyboard() -> InlineKeyboardMarkup:
+    """Кнопка под картой дня: прогноз пишется по нажатию."""
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text=BTN_DAY_CARD_FORECAST,
+                    callback_data=CB_DAY_CARD_FORECAST,
+                    style=ButtonStyle.PRIMARY,
+                ),
+            ],
+        ],
+    )
+
+
+def day_forecast_followup_keyboard() -> InlineKeyboardMarkup:
+    """CTA под готовым прогнозом: бесплатная карта дня ведёт к платным раскладам."""
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text=BTN_TAROT_ASK_OWN,
+                    callback_data=CB_TAROT_SECTION,
+                ),
+            ],
+        ],
+    )
+
+
 def main_menu_keyboard() -> ReplyKeyboardMarkup:
+    """Колесо первым: единственная механика, куда возвращаются каждый день."""
     return ReplyKeyboardMarkup(
         keyboard=[
-            [KeyboardButton(text=BTN_ASK_ASTRID)],
-            [KeyboardButton(text=BTN_PREDICTION_TODAY)],
+            [KeyboardButton(text=BTN_WHEEL)],
             [
                 KeyboardButton(text=BTN_COMPATIBILITY),
                 KeyboardButton(text=BTN_NATAL),
@@ -46,7 +77,6 @@ def main_menu_keyboard() -> ReplyKeyboardMarkup:
                 KeyboardButton(text=BTN_MONTH_FORECAST),
                 KeyboardButton(text=BTN_TAROT),
             ],
-            [KeyboardButton(text=BTN_WHEEL)],
             [
                 KeyboardButton(text=BTN_PROFILE),
                 KeyboardButton(text=BTN_INVITE),
