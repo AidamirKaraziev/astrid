@@ -384,7 +384,8 @@ async def cb_activate_prize(
     if callback.from_user is None:
         return
     user = await users_crud.get_user_by_telegram_id(session, callback.from_user.id)
-    if user is None:
+    if user is None or not user.onboarding_completed or user.profile is None:
+        await callback.message.answer("Сначала пройди регистрацию: /start")
         return
     try:
         win_id = UUID(callback.data.removeprefix(CB_WHEEL_ACTIVATE_PREFIX))
@@ -400,6 +401,7 @@ async def cb_activate_prize(
     if spread_type is None:
         await callback.message.answer(COMING_SOON_TEXT)
         return
-    await start_spread_with_prize(callback.message, state, session, spread_type, win.id)
+    # user передаём явно: callback.message — сообщение бота, from_user там бот.
+    await start_spread_with_prize(callback.message, state, session, spread_type, win.id, user)
 
 

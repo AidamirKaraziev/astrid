@@ -125,12 +125,17 @@ async def _start_spread(
     spread_type: SpreadType,
     *,
     wheel_win_id: UUID | None = None,
+    actor=None,
 ) -> None:
-    """wheel_win_id — расклад запущен призом колеса: цену пересчитаем по скидке приза."""
+    """wheel_win_id — расклад запущен призом колеса: цену пересчитаем по скидке приза.
+
+    actor — пользователь, когда расклад запускается из callback'а: там message
+    принадлежит боту, и определять пользователя по message.from_user нельзя.
+    """
     if not get_settings().tarot_spreads_enabled:
         await message.answer(COMING_SOON_TEXT)
         return
-    user = await _require_user(message, session)
+    user = actor if actor is not None else await _require_user(message, session)
     if user is None:
         return
     spec = SPREADS[spread_type]
@@ -164,9 +169,20 @@ async def start_spread_with_prize(
     session: AsyncSession,
     spread_type: SpreadType,
     wheel_win_id: UUID,
+    actor,
 ) -> None:
-    """Запуск расклада призом колеса (вызывается из хендлера колеса)."""
-    await _start_spread(message, state, session, spread_type, wheel_win_id=wheel_win_id)
+    """Запуск расклада призом колеса (вызывается из хендлера колеса).
+
+    actor обязателен: message здесь — сообщение бота, у него from_user это бот.
+    """
+    await _start_spread(
+        message,
+        state,
+        session,
+        spread_type,
+        wheel_win_id=wheel_win_id,
+        actor=actor,
+    )
 
 
 @router.message(F.text.in_(SPREAD_BUTTONS))

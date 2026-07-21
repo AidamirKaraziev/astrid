@@ -277,6 +277,36 @@ class TestPrizeActivation:
         args = mocks["start_spread_with_prize"].await_args.args
         assert str(args[3]) == "three_cards"
         assert args[4] == win.id
+        assert args[5] is user  # пользователя передаём явно, см. тест ниже
+
+    async def test_activation_does_not_look_user_up_by_bot_message(self) -> None:
+        """Регрессия: сообщение под кнопкой принадлежит боту, а не игроку.
+
+        Раньше расклад искал пользователя по callback.message.from_user (это бот)
+        и отвечал «Сначала пройди регистрацию: /start» вместо запроса вопроса.
+        """
+        user = _user()
+        win = _win(user.id, code="tarot_wish", discount=100)
+        bot_id = 777_000_777
+        callback = _callback()
+        callback.data = f"wheel:use:{win.id}"
+        callback.message.from_user = MagicMock(id=bot_id, is_bot=True)  # сообщение бота
+
+        # users_crud — общий модуль для обоих хендлеров, поэтому различаем по id:
+        # игрок есть в базе, бот — нет.
+        async def lookup(_session, telegram_id):
+            return user if telegram_id == user.telegram_id else None
+
+        wheel_mocks = _wheel_mocks(
+            **{"users_crud.get_user_by_telegram_id": AsyncMock(side_effect=lookup)},
+            **{"wheel_crud.get_win": AsyncMock(return_value=win)},
+        )
+        # start_spread_with_prize не мокаем — проверяем реальный путь до таро
+        await _run_wheel(cb_activate_prize, wheel_mocks, callback, AsyncMock(), AsyncMock())
+
+        answers = [str(c.args[0]) for c in callback.message.answer.call_args_list]
+        assert not any("регистрацию" in text for text in answers), answers
+        assert any("Загадай желание" in text for text in answers), answers
 
     async def test_burned_prize_is_refused(self) -> None:
         user = _user()
