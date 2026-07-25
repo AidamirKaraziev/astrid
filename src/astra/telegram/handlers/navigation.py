@@ -20,6 +20,7 @@ from astra.telegram.button_texts import (
     BTN_BACK_MENU,
     BTN_BACK_MENU_LEGACY,
     BTN_COMPATIBILITY,
+    BTN_HELP,
     BTN_INVITE,
     BTN_NATAL,
     BTN_PROFILE,
@@ -29,6 +30,7 @@ from astra.telegram.button_texts import (
     PAID_PRODUCT_BUTTONS,
 )
 from astra.telegram.handlers.catalog import back_to_main_menu, open_tarot_menu
+from astra.telegram.handlers.support import open_support_hub
 from astra.telegram.handlers.compatibility import start_compatibility
 from astra.telegram.handlers.day_card import LEGACY_BUTTONS, legacy_button
 from astra.telegram.handlers.menu import invite_friend, show_profile
@@ -41,6 +43,7 @@ from astra.telegram.states import (
     NatalStates,
     PeopleStates,
     ProfileStates,
+    SupportStates,
     TarotStates,
 )
 
@@ -53,6 +56,7 @@ INTERRUPTIBLE_STATE_GROUPS = (
     NatalStates,
     PeopleStates,
     ProfileStates,
+    SupportStates,
     TarotStates,
 )
 
@@ -90,6 +94,12 @@ async def nav_compatibility(message: Message, state: FSMContext, session: AsyncS
 @router.message(F.text == BTN_NATAL)
 async def nav_natal(message: Message, state: FSMContext, session: AsyncSession) -> None:
     await start_natal(message, state, session)
+
+
+@router.message(F.text == BTN_HELP)
+async def nav_help(message: Message, state: FSMContext) -> None:
+    await state.clear()
+    await open_support_hub(message)
 
 
 @router.message(F.text == BTN_PROFILE)

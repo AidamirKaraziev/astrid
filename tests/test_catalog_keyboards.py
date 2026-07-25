@@ -3,6 +3,7 @@ from astra.telegram.button_texts import (
     BTN_ASK_STARS,
     BTN_BACK_MENU,
     BTN_COMPATIBILITY,
+    BTN_HELP,
     BTN_INVITE,
     BTN_MONTH_FORECAST,
     BTN_NATAL,
@@ -27,6 +28,7 @@ def test_main_menu_layout_wheel_first() -> None:
         [BTN_COMPATIBILITY, BTN_NATAL],
         [BTN_MONTH_FORECAST, BTN_TAROT],
         [BTN_PROFILE, BTN_INVITE],
+        [BTN_HELP],
     ]
 
 

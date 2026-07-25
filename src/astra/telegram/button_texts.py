@@ -19,6 +19,7 @@ BTN_NATAL = "🌌 Разбор натала"
 BTN_MONTH_FORECAST = "📅 Прогноз на месяц"
 BTN_TAROT = "🔮 Карты Таро"
 BTN_WHEEL = "🎡 Колесо фортуны"
+BTN_HELP = "💬 Помощь"
 
 BTN_TAROT_THREE = "🃏 Три карты"
 BTN_TAROT_RELATIONS = "💕 На отношения"
@@ -84,3 +85,14 @@ CB_WHEEL_ACTIVATE_PREFIX = "wheel:use:"
 CB_COMPAT_NEW_PERSON = "compat:person:new"
 CB_COMPAT_PEOPLE_ALL = "compat:person:all"
 CB_COMPAT_SELF_FIRST = "compat:person:self"
+
+# Служба заботы: хаб помощи, FAQ-темы и вход в релей к живому оператору
+CB_SUPPORT_HUB = "support:hub"
+CB_SUPPORT_FAQ_PREFIX = "support:faq:"  # + ключ темы (payment/reading/profile/notify)
+CB_SUPPORT_WRITE = "support:write"
+CB_SUPPORT_CLOSE = "support:close"
+
+SUPPORT_FAQ_PAYMENT = "payment"
+SUPPORT_FAQ_READING = "reading"
+SUPPORT_FAQ_PROFILE = "profile"
+SUPPORT_FAQ_NOTIFY = "notify"

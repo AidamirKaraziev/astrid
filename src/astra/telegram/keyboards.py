@@ -8,6 +8,7 @@ from astra.telegram.button_texts import (
     BTN_DAY_CARD_FORECAST,
     BTN_GENDER_FEMALE,
     BTN_GENDER_MALE,
+    BTN_HELP,
     BTN_INVITE,
     BTN_MONTH_FORECAST,
     BTN_NATAL,
@@ -31,6 +32,10 @@ from astra.telegram.button_texts import (
     CB_PRODUCT_ASK_STARS,
     CB_PROFILE_PEOPLE,
     CB_PROFILE_REPORTS,
+    CB_SUPPORT_CLOSE,
+    CB_SUPPORT_FAQ_PREFIX,
+    CB_SUPPORT_HUB,
+    CB_SUPPORT_WRITE,
     CB_TAROT_SECTION,
 )
 
@@ -81,6 +86,7 @@ def main_menu_keyboard() -> ReplyKeyboardMarkup:
                 KeyboardButton(text=BTN_PROFILE),
                 KeyboardButton(text=BTN_INVITE),
             ],
+            [KeyboardButton(text=BTN_HELP)],
         ],
         resize_keyboard=True,
     )
@@ -269,16 +275,57 @@ def prediction_followup_keyboard() -> InlineKeyboardMarkup:
     )
 
 
-def help_keyboard(support_username: str) -> InlineKeyboardMarkup:
-    username = support_username.strip().lstrip("@")
-    return InlineKeyboardMarkup(
-        inline_keyboard=[
+def support_hub_keyboard(can_write: bool) -> InlineKeyboardMarkup:
+    """Хаб помощи: темы FAQ + вход к живому оператору."""
+    from astra.telegram.support_text import FAQ_BUTTONS
+
+    rows: list[list[InlineKeyboardButton]] = [
+        [InlineKeyboardButton(text=label, callback_data=f"{CB_SUPPORT_FAQ_PREFIX}{key}")]
+        for key, label in FAQ_BUTTONS
+    ]
+    if can_write:
+        rows.append(
             [
                 InlineKeyboardButton(
-                    text="💌 Написать Астрид",
-                    url=f"https://t.me/{username}",
+                    text="✍️ Написать в Службу заботы",
+                    callback_data=CB_SUPPORT_WRITE,
                     style=ButtonStyle.PRIMARY,
                 ),
             ],
+        )
+    rows.append([InlineKeyboardButton(text="✖️ Закрыть", callback_data=CB_SUPPORT_CLOSE)])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def support_faq_keyboard(can_write: bool) -> InlineKeyboardMarkup:
+    """Под ответом FAQ: написать человеку (если можно) + назад к темам."""
+    rows: list[list[InlineKeyboardButton]] = []
+    if can_write:
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    text="✍️ Это не помогло — написать человеку",
+                    callback_data=CB_SUPPORT_WRITE,
+                    style=ButtonStyle.PRIMARY,
+                ),
+            ],
+        )
+    rows.append([InlineKeyboardButton(text="⬅️ Другие темы", callback_data=CB_SUPPORT_HUB)])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def support_writing_keyboard() -> ReplyKeyboardMarkup:
+    """Режим написания обращения: только выход, текст — обычным сообщением."""
+    return ReplyKeyboardMarkup(
+        keyboard=[[KeyboardButton(text=BTN_BACK_MENU)]],
+        resize_keyboard=True,
+    )
+
+
+def support_contextual_keyboard() -> InlineKeyboardMarkup:
+    """Ненавязчивая подсказка «Нужна помощь?» в точках сбоя (оплата и т.п.)."""
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="💬 Нужна помощь?", callback_data=CB_SUPPORT_HUB)],
         ],
     )

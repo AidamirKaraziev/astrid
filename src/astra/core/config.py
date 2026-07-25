@@ -31,8 +31,12 @@ class Settings(BaseSettings):
 
     telegram_bot_token: str = ""
     telegram_bot_username: str = "AstraBot"
-    # Личный аккаунт Astrid для поддержки (без @)
+    # Личный аккаунт Astrid для поддержки (без @) — «Служба заботы»
     telegram_support_username: str = ""
+    # Закрытая группа операторов: бот кидает сюда обращения и доставляет ответы.
+    # 0 — релей выключен (кнопка «написать человеку» ведёт в личный аккаунт).
+    # Обычно отрицательное число (супергруппа), например -1001234567890.
+    telegram_admin_group_id: int = 0
     telegram_mode: str = "polling"
     telegram_webhook_url: str | None = None
     telegram_webhook_secret: str | None = None

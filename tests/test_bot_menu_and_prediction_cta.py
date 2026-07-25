@@ -8,16 +8,7 @@ def test_bot_commands_cover_main_actions() -> None:
     assert commands == {"start", "help", "paysupport"}
     descriptions = {cmd.command: cmd.description for cmd in BOT_COMMANDS_RU}
     assert descriptions["start"] == "🏠 Главное меню"
-    assert descriptions["help"] == "💌 Написать Астрид"
-
-
-def test_help_keyboard_links_to_support() -> None:
-    from astra.telegram.keyboards import help_keyboard
-
-    button = help_keyboard("AstridSupport").inline_keyboard[0][0]
-    assert button.text == "💌 Написать Астрид"
-    assert button.url == "https://t.me/AstridSupport"
-    assert button.style == "primary"
+    assert descriptions["help"] == "💬 Помощь и поддержка"
 
 
 def test_prediction_followup_has_tarot_and_ask_stars_cta() -> None:

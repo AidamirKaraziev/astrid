@@ -24,6 +24,7 @@ from astra.telegram.states import (
     OnboardingStates,
     PeopleStates,
     ProfileStates,
+    SupportStates,
     TarotStates,
 )
 
@@ -52,6 +53,8 @@ _KEYBOARD_SUPPRESSED_FSM_STATES: frozenset[str] = frozenset(
         NatalStates.new_birth_place_query.state,
         # Ввод вопроса к раскладу: своя клавиатура (Назад/Пропустить)
         TarotStates.waiting_question.state,
+        # Служба заботы: пишем обращение, держим свою «Назад»-клавиатуру.
+        SupportStates.writing.state,
     },
 )
 

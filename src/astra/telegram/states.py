@@ -49,6 +49,12 @@ class TarotStates(StatesGroup):
     waiting_question = State()
 
 
+class SupportStates(StatesGroup):
+    """Служба заботы: ждём текст обращения для релея живому оператору."""
+
+    writing = State()
+
+
 class PeopleStates(StatesGroup):
     """Редактирование сохранённого натального профиля («Мои люди»)."""
 

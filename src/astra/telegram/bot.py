@@ -14,7 +14,7 @@ from astra.core.observability.middleware.telegram import TelegramObservabilityMi
 from astra.db.session import get_session_factory
 from astra.telegram.auto_keyboard_middleware import AutoKeyboardMiddleware
 from astra.telegram.bot_menu import setup_bot_menu
-from astra.telegram.handlers import catalog, commands, compatibility, day_card, menu, natal, navigation, onboarding, people, places, start, tarot_daily, tarot_spreads, wheel
+from astra.telegram.handlers import catalog, commands, compatibility, day_card, menu, natal, navigation, onboarding, people, places, start, support, support_relay, tarot_daily, tarot_spreads, wheel
 from astra.telegram.middlewares import DbSessionMiddleware
 
 log = get_logger(__name__)
@@ -74,6 +74,7 @@ async def create_dispatcher(settings: Settings) -> Dispatcher:
     dp.include_router(start.router)
     dp.include_router(commands.router)
     dp.include_router(navigation.router)  # до всех флоу: кнопки меню прерывают FSM
+    dp.include_router(support.router)  # хаб помощи и FAQ (кнопка «Помощь», callbacks)
     dp.include_router(places.router)
     dp.include_router(onboarding.router)
     # После onboarding (регистрацию не прерываем), но до флоу-роутеров:
@@ -88,6 +89,10 @@ async def create_dispatcher(settings: Settings) -> Dispatcher:
     dp.include_router(tarot_daily.router)
     dp.include_router(tarot_spreads.router)  # до catalog: перехватывает кнопки раскладов
     dp.include_router(catalog.router)
+    # Релей службы заботы: приём обращений (SupportStates.writing) и ответы
+    # операторов из админ-группы. Последним — ловит свободный текст в своём
+    # состоянии и reply-сообщения в группе, не мешая продуктовым флоу.
+    dp.include_router(support_relay.router)
 
     # AI-чат Astrid отключён вместе с ежедневным прогнозом: единственной точкой
     # входа была кнопка «Написать Астрид», её в меню больше нет. Код модуля

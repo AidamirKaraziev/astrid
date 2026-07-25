@@ -2,7 +2,6 @@ from aiogram import F, Router
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message, PreCheckoutQuery
 
-from astra.core.config import get_settings
 from astra.core.observability import Event, get_logger
 from astra.telegram.button_texts import (
     BTN_BACK_MENU,
@@ -14,35 +13,17 @@ from astra.telegram.button_texts import (
     COMING_SOON_TEXT,
     PAID_PRODUCT_BUTTONS,
 )
-from astra.telegram.help_text import (
-    HELP_CARD_FOOTER_WITH_SUPPORT,
-    HELP_CARD_NO_SUPPORT,
-    HELP_CARD_TEXT,
+from astra.telegram.keyboards import (
+    main_menu_keyboard,
+    support_contextual_keyboard,
+    tarot_keyboard,
 )
-from astra.telegram.keyboards import help_keyboard, main_menu_keyboard, tarot_keyboard
 
 log = get_logger(__name__)
 
 router = Router(name="catalog")
 
 _PAID_STUB_BUTTONS = frozenset(PAID_PRODUCT_BUTTONS) - {BTN_TAROT, BTN_COMPATIBILITY, BTN_NATAL}
-
-
-async def show_help(message: Message) -> None:
-    """Помощь — только через /help (Menu Button)."""
-    username = get_settings().telegram_support_username.strip().lstrip("@")
-    if username:
-        text = HELP_CARD_TEXT + HELP_CARD_FOOTER_WITH_SUPPORT
-        await message.answer(
-            text,
-            parse_mode="HTML",
-            reply_markup=help_keyboard(username),
-        )
-        return
-    await message.answer(
-        HELP_CARD_TEXT + HELP_CARD_NO_SUPPORT,
-        parse_mode="HTML",
-    )
 
 
 @router.message(F.text.in_({BTN_BACK_MENU, BTN_BACK_MENU_LEGACY}))
@@ -91,4 +72,9 @@ async def successful_payment_orphan(message: Message) -> None:
     await message.bot.refund_star_payment(
         user_id=message.from_user.id,
         telegram_payment_charge_id=payment_info.telegram_payment_charge_id,
+    )
+    await message.answer(
+        "Кажется, покупка не завершилась — мы вернули звёзды ⭐\n"
+        "Если что-то не так, мы рядом:",
+        reply_markup=support_contextual_keyboard(),
     )

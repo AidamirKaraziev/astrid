@@ -101,6 +101,12 @@ class Event(StrEnum):
     PAYMENT_REFUNDED = "payment.refunded"
     PAYMENT_REFUND_FAILED = "payment.refund_failed"
 
+    # Служба заботы (релей обращений через админ-группу)
+    SUPPORT_TICKET_CREATED = "support.ticket_created"
+    SUPPORT_TICKET_CARD_FAILED = "support.ticket_card_failed"
+    SUPPORT_REPLY_DELIVERED = "support.reply_delivered"
+    SUPPORT_REPLY_DELIVER_FAILED = "support.reply_deliver_failed"
+
     # Natal report pipeline
     NATAL_REPORT_CREATED = "natal_report.created"
     NATAL_REPORT_LLM_DONE = "natal_report.llm_done"
