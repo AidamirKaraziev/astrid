@@ -1,4 +1,5 @@
 from astra.telegram.button_texts import (
+    BTN_ASK_ASTRID,
     BTN_ASK_ASTRID_LEGACY,
     BTN_ASK_STARS,
     BTN_BACK_MENU,
@@ -25,6 +26,7 @@ def test_main_menu_layout_wheel_first() -> None:
     rows = [[btn.text for btn in row] for row in main_menu_keyboard().keyboard]
     assert rows == [
         [BTN_WHEEL],
+        [BTN_ASK_ASTRID],
         [BTN_COMPATIBILITY, BTN_NATAL],
         [BTN_MONTH_FORECAST, BTN_TAROT],
         [BTN_PROFILE, BTN_INVITE],

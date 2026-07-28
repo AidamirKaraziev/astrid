@@ -14,7 +14,7 @@ from astra.core.observability.middleware.telegram import TelegramObservabilityMi
 from astra.db.session import get_session_factory
 from astra.telegram.auto_keyboard_middleware import AutoKeyboardMiddleware
 from astra.telegram.bot_menu import setup_bot_menu
-from astra.telegram.handlers import catalog, commands, compatibility, day_card, menu, natal, navigation, onboarding, people, places, start, support, support_relay, tarot_daily, tarot_spreads, wheel
+from astra.telegram.handlers import ask_astrid, catalog, commands, compatibility, day_card, menu, natal, navigation, onboarding, people, places, start, support, support_relay, tarot_daily, tarot_spreads, wheel
 from astra.telegram.middlewares import DbSessionMiddleware
 
 log = get_logger(__name__)
@@ -81,6 +81,7 @@ async def create_dispatcher(settings: Settings) -> Dispatcher:
     # кнопка колеса и платежи wheel: не должны съедаться чужими FSM-хендлерами.
     dp.include_router(wheel.router)
     dp.include_router(menu.router)
+    dp.include_router(ask_astrid.router)  # раздел «Спроси Астрид»: темы вопросов
     dp.include_router(compatibility.router)
     dp.include_router(people.router)
     dp.include_router(natal.router)

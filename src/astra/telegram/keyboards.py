@@ -2,6 +2,7 @@ from aiogram.enums import ButtonStyle
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, KeyboardButton, ReplyKeyboardMarkup
 
 from astra.telegram.button_texts import (
+    BTN_ASK_ASTRID,
     BTN_ASK_STARS,
     BTN_BACK_MENU,
     BTN_COMPATIBILITY,
@@ -27,6 +28,10 @@ from astra.telegram.button_texts import (
     CB_COMPAT_REPORTS_LIST,
     CB_COMPAT_DELETE_PREFIX,
     CB_COMPAT_DELETE_CONFIRM_PREFIX,
+    CB_ASK_CLOSE,
+    CB_ASK_HOME,
+    CB_ASK_OWN,
+    CB_ASK_TOPIC_PREFIX,
     CB_COMPAT_DELETE_CANCEL_PREFIX,
     CB_DAY_CARD_FORECAST,
     CB_PRODUCT_ASK_STARS,
@@ -74,6 +79,7 @@ def main_menu_keyboard() -> ReplyKeyboardMarkup:
     return ReplyKeyboardMarkup(
         keyboard=[
             [KeyboardButton(text=BTN_WHEEL)],
+            [KeyboardButton(text=BTN_ASK_ASTRID)],
             [
                 KeyboardButton(text=BTN_COMPATIBILITY),
                 KeyboardButton(text=BTN_NATAL),
@@ -310,7 +316,7 @@ def support_faq_keyboard(can_write: bool) -> InlineKeyboardMarkup:
                 ),
             ],
         )
-    rows.append([InlineKeyboardButton(text="⬅️ Другие темы", callback_data=CB_SUPPORT_HUB)])
+    rows.append([InlineKeyboardButton(text="🔙 Назад", callback_data=CB_SUPPORT_HUB)])
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
@@ -319,6 +325,38 @@ def support_writing_keyboard() -> ReplyKeyboardMarkup:
     return ReplyKeyboardMarkup(
         keyboard=[[KeyboardButton(text=BTN_BACK_MENU)]],
         resize_keyboard=True,
+    )
+
+
+def ask_astrid_keyboard() -> InlineKeyboardMarkup:
+    """Верхний уровень «Спроси Астрид»: темы, свой вопрос, закрыть."""
+    from astra.telegram import ask_text as A
+
+    rows: list[list[InlineKeyboardButton]] = [
+        [InlineKeyboardButton(text=label, callback_data=f"{CB_ASK_TOPIC_PREFIX}{key}")]
+        for key, label in A.ASK_TOPICS
+    ]
+    rows.append(
+        [
+            InlineKeyboardButton(
+                text=A.BTN_ASK_OWN_QUESTION,
+                callback_data=CB_ASK_OWN,
+                style=ButtonStyle.PRIMARY,
+            ),
+        ],
+    )
+    rows.append([InlineKeyboardButton(text=A.BTN_ASK_CLOSE, callback_data=CB_ASK_CLOSE)])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def ask_topic_keyboard() -> InlineKeyboardMarkup:
+    """Под темой: пока вопросов нет — только возврат к списку тем."""
+    from astra.telegram import ask_text as A
+
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text=A.BTN_ASK_TOPICS_BACK, callback_data=CB_ASK_HOME)],
+        ],
     )
 
 

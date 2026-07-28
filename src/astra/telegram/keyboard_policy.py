@@ -8,6 +8,7 @@ from typing import Any
 from aiogram.types import ReplyKeyboardMarkup, ReplyKeyboardRemove
 
 from astra.telegram.button_texts import (
+    BTN_ASK_ASTRID,
     BTN_BACK_MENU,
     BTN_INVITE,
     BTN_PROFILE,
@@ -60,6 +61,7 @@ _KEYBOARD_SUPPRESSED_FSM_STATES: frozenset[str] = frozenset(
 
 MAIN_MENU_BUTTONS: frozenset[str] = frozenset(
     {
+        BTN_ASK_ASTRID,
         BTN_WHEEL,
         BTN_PROFILE,
         BTN_INVITE,

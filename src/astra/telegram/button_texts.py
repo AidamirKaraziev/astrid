@@ -20,6 +20,8 @@ BTN_MONTH_FORECAST = "📅 Прогноз на месяц"
 BTN_TAROT = "🔮 Карты Таро"
 BTN_WHEEL = "🎡 Колесо фортуны"
 BTN_HELP = "💬 Помощь"
+# Раздел готовых вопросов к своей карте (не путать со «Службой заботы» — там FAQ о боте).
+BTN_ASK_ASTRID = "✨ Спроси Астрид"
 
 BTN_TAROT_THREE = "🃏 Три карты"
 BTN_TAROT_RELATIONS = "💕 На отношения"
@@ -91,6 +93,12 @@ CB_SUPPORT_HUB = "support:hub"
 CB_SUPPORT_FAQ_PREFIX = "support:faq:"  # + ключ темы (payment/reading/profile/notify)
 CB_SUPPORT_WRITE = "support:write"
 CB_SUPPORT_CLOSE = "support:close"
+
+# «Спроси Астрид»: верхний уровень — темы. Вопросы внутри темы придут отдельно.
+CB_ASK_TOPIC_PREFIX = "ask:topic:"  # + ключ темы (love/money/path/…)
+CB_ASK_OWN = "ask:own"
+CB_ASK_HOME = "ask:home"
+CB_ASK_CLOSE = "ask:close"
 
 SUPPORT_FAQ_PAYMENT = "payment"
 SUPPORT_FAQ_READING = "reading"

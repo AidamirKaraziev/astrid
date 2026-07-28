@@ -17,6 +17,7 @@ from aiogram.types import Message
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from astra.telegram.button_texts import (
+    BTN_ASK_ASTRID,
     BTN_BACK_MENU,
     BTN_BACK_MENU_LEGACY,
     BTN_COMPATIBILITY,
@@ -29,6 +30,7 @@ from astra.telegram.button_texts import (
     COMING_SOON_TEXT,
     PAID_PRODUCT_BUTTONS,
 )
+from astra.telegram.handlers.ask_astrid import open_ask_hub
 from astra.telegram.handlers.catalog import back_to_main_menu, open_tarot_menu
 from astra.telegram.handlers.support import open_support_hub
 from astra.telegram.handlers.compatibility import start_compatibility
@@ -94,6 +96,12 @@ async def nav_compatibility(message: Message, state: FSMContext, session: AsyncS
 @router.message(F.text == BTN_NATAL)
 async def nav_natal(message: Message, state: FSMContext, session: AsyncSession) -> None:
     await start_natal(message, state, session)
+
+
+@router.message(F.text == BTN_ASK_ASTRID)
+async def nav_ask_astrid(message: Message, state: FSMContext) -> None:
+    await state.clear()
+    await open_ask_hub(message)
 
 
 @router.message(F.text == BTN_HELP)

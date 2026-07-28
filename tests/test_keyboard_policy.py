@@ -80,7 +80,7 @@ def test_reply_keyboard_api_payload_has_resize() -> None:
     payload = reply_keyboard_to_api_payload(main_menu_keyboard())
     assert payload["resize_keyboard"] is True
     assert BTN_WHEEL in payload["keyboard"][0][0]["text"]
-    assert BTN_COMPATIBILITY in payload["keyboard"][1][0]["text"]
+    assert BTN_COMPATIBILITY in payload["keyboard"][2][0]["text"]
 
 
 def test_reply_keyboard_for_zone_main() -> None:
