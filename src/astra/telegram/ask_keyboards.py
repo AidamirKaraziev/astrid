@@ -78,7 +78,7 @@ def ask_answer_keyboard(reading: AskReading, *, referral_code: str | None) -> In
     rows.append(
         [
             InlineKeyboardButton(
-                text="🔁 Сделать разбор заново",
+                text="🌀 Сделать разбор заново",
                 callback_data=f"{CB_ASK_REDO_PREFIX}{reading.question_key}",
             ),
         ],
@@ -119,7 +119,7 @@ def ask_archive_keyboard(question_key: str) -> InlineKeyboardMarkup:
             ],
             [
                 InlineKeyboardButton(
-                    text="🔁 Сделать разбор заново",
+                    text="🌀 Сделать разбор заново",
                     callback_data=f"{CB_ASK_REDO_PREFIX}{question_key}",
                 ),
             ],
