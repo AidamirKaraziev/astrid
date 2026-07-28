@@ -51,6 +51,7 @@ from astra.telegram.button_texts import (
     BTN_ASK_ASTRID,
     CB_ASK_ARCHIVE_PREFIX,
     CB_ASK_CALIB_PREFIX,
+    CB_ASK_REDO_PREFIX,
     CB_ASK_CLOSE,
     CB_ASK_COMPAT_CROSSSELL,
     CB_ASK_GATE_SKIP,
@@ -168,17 +169,26 @@ async def _start_paid_question(
     session: AsyncSession,
     *,
     question_key: str,
+    skip_archive: bool = False,
 ) -> None:
-    """Купленный ответ из архива, иначе — экран уточнения времени рождения."""
+    """Купленный ответ из архива, иначе — экран уточнения времени рождения.
+
+    `skip_archive` — человек сам попросил разбор заново: архив не показываем,
+    ведём в обычную покупку.
+    """
     user = await _current_user(callback, session)
     if user is None or user.profile is None or user.profile.birth_date is None:
         await _edit_or_answer(callback, A.ASK_NEED_PROFILE_TEXT, ask_back_keyboard())
         return
 
-    archived = await ask_crud.get_ready_reading(
-        session,
-        user_id=user.id,
-        question_key=question_key,
+    archived = (
+        None
+        if skip_archive
+        else await ask_crud.get_ready_reading(
+            session,
+            user_id=user.id,
+            question_key=question_key,
+        )
     )
     if archived is not None:
         log.info(Event.ASK_ANSWER_FROM_ARCHIVE, reading_id=archived.id, user_id=user.id)
@@ -197,6 +207,22 @@ async def _start_paid_question(
         await _edit_or_answer(callback, A.ASK_GATE_TIME_TEXT, ask_gate_keyboard())
         return
     await _edit_or_answer(callback, product.calibration_text, ask_status_keyboard(product))
+
+
+@router.callback_query(F.data.startswith(CB_ASK_REDO_PREFIX))
+async def cb_ask_redo(callback: CallbackQuery, state: FSMContext, session: AsyncSession) -> None:
+    """«Сделать разбор заново» — новая покупка, архив не подставляем."""
+    await callback.answer()
+    question_key = (callback.data or "").removeprefix(CB_ASK_REDO_PREFIX)
+    if not is_ready(question_key):
+        return
+    await _start_paid_question(
+        callback,
+        state,
+        session,
+        question_key=question_key,
+        skip_archive=True,
+    )
 
 
 @router.callback_query(F.data == CB_ASK_GATE_TIME)

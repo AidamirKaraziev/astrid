@@ -105,6 +105,7 @@ CB_ASK_GATE_SKIP = "ask:gate:skip"
 # экранами (рестарт, очистка Redis), а платный флоу не должен упираться в тупик.
 CB_ASK_CALIB_PREFIX = "ask:calib:"  # + <ключ вопроса>:yes|no
 CB_ASK_ARCHIVE_PREFIX = "ask:archive:"  # + <ключ вопроса>
+CB_ASK_REDO_PREFIX = "ask:redo:"  # + <ключ вопроса>: заказать разбор заново
 # Старые кнопки без ключа: у части людей висят в истории чата.
 CB_ASK_STATUS_TAKEN = "ask:status:taken"
 CB_ASK_STATUS_FREE = "ask:status:free"

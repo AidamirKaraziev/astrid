@@ -14,9 +14,11 @@ from aiogram.types import CallbackQuery, Message
 from astra.ask.fated_partners import render_card
 from astra.ask.fated_partners import FatedPartnersFactors, FatedPartnersResult
 from astra.llm.prompts.ask import fated_partners as product
+from astra.telegram.ask_keyboards import ask_answer_keyboard
 from astra.telegram.button_texts import (
     CB_ASK_ARCHIVE_PREFIX,
     CB_ASK_CALIB_PREFIX,
+    CB_ASK_REDO_PREFIX,
     CB_ASK_GATE_SKIP,
     CB_ASK_GATE_TIME,
     CB_ASK_QUESTION_PREFIX,
@@ -326,3 +328,57 @@ def test_user_message_carries_numbers_and_factors() -> None:
     assert "десцендент в знаке Водолей" in message  # факторы идут по-русски
     assert "exactly 3 items" in message
     assert "first 1 already lived, then 2 still ahead" in message
+
+
+# ─────────────────────────── повтор разбора ───────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_redo_skips_archive_and_starts_new_purchase() -> None:
+    """«Сделать заново» ведёт в покупку, даже когда готовый ответ есть."""
+    callback = _callback(f"{CB_ASK_REDO_PREFIX}{QUESTION}")
+    archived = SimpleNamespace(id=uuid4(), answer={"html": "старый разбор"})
+    user_patch, archive_patch = _patch_user(
+        _user(birth_time=datetime(1990, 3, 15, 14, 30)),
+        archived=archived,
+    )
+
+    with user_patch, archive_patch:
+        await ask_astrid.cb_ask_redo(callback, await _fsm(), MagicMock())
+
+    shown = callback.message.edit_text.await_args.args[0]
+    assert shown != A.ASK_ARCHIVE_TEXT
+    assert shown == get_product(QUESTION).calibration_text
+
+
+@pytest.mark.asyncio
+async def test_redo_of_unknown_question_does_nothing() -> None:
+    callback = _callback(f"{CB_ASK_REDO_PREFIX}money_income_ceiling")
+
+    await ask_astrid.cb_ask_redo(callback, await _fsm(), MagicMock())
+
+    callback.message.edit_text.assert_not_awaited()
+
+
+def test_redo_button_is_offered_in_archive_and_under_the_answer() -> None:
+    from astra.telegram.ask_keyboards import ask_archive_keyboard
+
+    archive = [
+        btn.callback_data
+        for row in ask_archive_keyboard(QUESTION).inline_keyboard
+        for btn in row
+    ]
+    assert f"{CB_ASK_REDO_PREFIX}{QUESTION}" in archive
+
+    reading = SimpleNamespace(question_key=QUESTION)
+    under_answer = [
+        btn.callback_data
+        for row in ask_answer_keyboard(reading, referral_code=None).inline_keyboard
+        for btn in row
+    ]
+    assert f"{CB_ASK_REDO_PREFIX}{QUESTION}" in under_answer
+
+
+def test_archive_text_warns_that_numbers_will_not_change() -> None:
+    """Человек платит второй раз — он должен знать, что расчёт тот же."""
+    assert "не изменятся" in A.ASK_ARCHIVE_TEXT

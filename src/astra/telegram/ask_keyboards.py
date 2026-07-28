@@ -11,6 +11,7 @@ from astra.ask.models import AskReading
 from astra.core.config import get_settings
 from astra.telegram.button_texts import (
     CB_ASK_ARCHIVE_PREFIX,
+    CB_ASK_REDO_PREFIX,
     CB_ASK_CALIB_PREFIX,
     CB_ASK_COMPAT_CROSSSELL,
     CB_ASK_GATE_SKIP,
@@ -77,6 +78,14 @@ def ask_answer_keyboard(reading: AskReading, *, referral_code: str | None) -> In
     rows.append(
         [
             InlineKeyboardButton(
+                text="🔁 Сделать разбор заново",
+                callback_data=f"{CB_ASK_REDO_PREFIX}{reading.question_key}",
+            ),
+        ],
+    )
+    rows.append(
+        [
+            InlineKeyboardButton(
                 text="💕 А что чувствует конкретный человек",
                 callback_data=CB_ASK_COMPAT_CROSSSELL,
             ),
@@ -106,6 +115,12 @@ def ask_archive_keyboard(question_key: str) -> InlineKeyboardMarkup:
                     text="📖 Показать мой ответ",
                     callback_data=f"{CB_ASK_ARCHIVE_PREFIX}{question_key}",
                     style=ButtonStyle.PRIMARY,
+                ),
+            ],
+            [
+                InlineKeyboardButton(
+                    text="🔁 Сделать разбор заново",
+                    callback_data=f"{CB_ASK_REDO_PREFIX}{question_key}",
                 ),
             ],
             [InlineKeyboardButton(text="🔙 Назад", callback_data=CB_ASK_HOME)],
