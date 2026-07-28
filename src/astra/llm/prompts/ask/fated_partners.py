@@ -16,7 +16,8 @@ from textwrap import dedent
 
 from pydantic import BaseModel, Field
 
-from astra.ask.schemas import FatedPartnersResult, PartnershipWindow
+from astra.ask.fated_partners import FatedPartnersResult
+from astra.ask.windows import TransitWindow
 from astra.llm.prompts.ask.base import PERSONA, find_banned_phrase, parse_json_into, too_short
 
 MAX_TOKENS = 2600
@@ -59,6 +60,11 @@ class FatedPartnersAnswer(BaseModel):
     already_lived: str = Field(description="что из этого уже прожито и как это выглядело")
     what_you_miss: str = Field(description="что человек делает не так и как из-за этого теряет")
     closing: str = Field(description="итог + одно конкретное действие")
+
+
+def expected_blocks(result: FatedPartnersResult) -> int:
+    """Блоков в ответе столько же, сколько судьбоносных партнёров."""
+    return result.total
 
 
 def validate(answer: FatedPartnersAnswer, expected_partners: int) -> str | None:
@@ -126,7 +132,7 @@ _METHOD = dedent(
 SYSTEM_PROMPT = f"{PERSONA}\n\n{_METHOD}"
 
 
-def _window_line(window: PartnershipWindow) -> str:
+def _window_line(window: TransitWindow) -> str:
     return (
         f"{window.transit} к точке «{window.target}», пик "
         f"{_MONTHS_RU[window.peak.month - 1]} {window.peak.year}, возраст {window.age}"

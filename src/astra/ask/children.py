@@ -14,12 +14,53 @@ from __future__ import annotations
 
 from datetime import date
 
-from astra.ask.schemas import ChildrenFactors, ChildrenResult, PartnershipWindow
-from astra.ask.windows import find_windows, merge_overlapping
+from pydantic import BaseModel, Field
+
+from astra.ask.windows import TransitWindow, find_windows, merge_overlapping, window_period
 from astra.astro.constants import SIGN_RU_TO_CLASSIC_RULER
 from astra.astro.schemas import ChartPoint, FullNatalChart
 
 METHODOLOGY_VERSION = 1
+
+class ChildrenFactors(BaseModel):
+    """Факторы темы детей. Идут в промпт как есть и называются в ответе вслух."""
+
+    has_time: bool
+    fifth_sign: str | None = None
+    fifth_fertility: str | None = None  # плодородный / нейтральный / сухой
+    planets_in_fifth: list[str] = Field(default_factory=list)
+    ruler_fifth: str | None = None
+    ruler_fifth_sign: str | None = None
+    ruler_fifth_house: int | None = None
+    ruler_fifth_aspects: list[str] = Field(default_factory=list)
+    moon_sign: str | None = None
+    moon_house: int | None = None
+    moon_aspects: list[str] = Field(default_factory=list)
+    jupiter_aspects: list[str] = Field(default_factory=list)
+    north_node_house: int | None = None
+    score: float = 0.0
+    notes: list[str] = Field(default_factory=list)
+
+
+class ChildrenResult(BaseModel):
+    """Тема родительства в карте: сценарий, сколько показывает карта, окна.
+
+    Вердикта «детей не будет» здесь нет и быть не может: карта не видит
+    фертильность, а такой ответ человек может принять за медицинский.
+    """
+
+    methodology_version: int
+    theme: str  # ранняя / поздняя / через усилие / центральная / спокойная
+    count_hint: int  # сколько показывает карта, минимум 1
+    age: int
+    has_children: bool  # ответ человека перед покупкой
+    parenting_age_passed: bool  # окна деторождения уже позади — тема звучит иначе
+    factors: ChildrenFactors
+    windows: list[TransitWindow] = Field(default_factory=list)  # лучшие впереди
+    best_window: TransitWindow | None = None
+
+
+RESULT_MODEL = ChildrenResult
 
 # Окна деторождения дальше этого возраста не обещаем: тема переходит в другую
 # фазу (внуки, приёмные дети, дети в жизни через других людей).
@@ -279,11 +320,11 @@ def _targets(chart: FullNatalChart) -> dict[str, float]:
     return targets
 
 
-def compute_children_theme(
+def compute(
     chart: FullNatalChart,
     *,
     birth_date: date,
-    has_children: bool,
+    calibration: bool,
     today: date | None = None,
 ) -> ChildrenResult:
     """Тема родительства: сценарий, сколько показывает карта, лучшие окна."""
@@ -314,9 +355,24 @@ def compute_children_theme(
         theme=theme,
         count_hint=_count_hint(factors),
         age=age,
-        has_children=has_children,
+        has_children=calibration,
         parenting_age_passed=age >= MAX_PARENTING_AGE,
         factors=factors,
         windows=sorted(best_first, key=lambda w: w.peak),
         best_window=best_window,
+    )
+
+
+def render_card(result: ChildrenResult) -> bytes:
+    """Карточка продукта: годы лучшего окна крупно."""
+    from astra.ask.card import render_card as draw
+    from astra.llm.prompts.ask.children import count_words
+
+    footnote = f"карта показывает {count_words(result.count_hint)}"
+    if result.best_window is None:
+        return draw(hero="✨", label="тема детей\nв твоей карте", footnote=footnote)
+    return draw(
+        hero=window_period(result.best_window),
+        label="лучшее окно\nдля темы детей",
+        footnote=footnote,
     )

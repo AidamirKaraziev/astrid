@@ -16,7 +16,8 @@ from textwrap import dedent
 
 from pydantic import BaseModel, Field
 
-from astra.ask.schemas import ChildrenResult, PartnershipWindow
+from astra.ask.children import ChildrenResult
+from astra.ask.windows import TransitWindow, window_period
 from astra.llm.prompts.ask.base import PERSONA, find_banned_phrase, parse_json_into, too_short
 
 MAX_TOKENS = 2200
@@ -47,6 +48,11 @@ class ChildrenAnswer(BaseModel):
     role_of_children: str = Field(description="какую роль дети играют именно в этой жизни")
     what_to_know: str = Field(description="где напряжение в теме: мягко, без вины и без диагнозов")
     closing: str = Field(description="итог + одно тёплое конкретное действие")
+
+
+def expected_blocks(result: ChildrenResult) -> int:
+    """Блоков в ответе столько же, сколько лучших окон."""
+    return len(result.windows)
 
 
 def validate(answer: ChildrenAnswer, expected_windows: int) -> str | None:
@@ -145,14 +151,7 @@ _MONTHS_RU = (
 )
 
 
-def window_period(window: PartnershipWindow) -> str:
-    """Период окна человеческими словами: «2029» или «2029–2030»."""
-    if window.start.year == window.end.year:
-        return str(window.peak.year)
-    return f"{window.start.year}–{window.end.year}"
-
-
-def _window_data(window: PartnershipWindow) -> str:
+def _window_data(window: TransitWindow) -> str:
     return (
         f"{window_period(window)}, транзит: {window.transit} к точке «{window.target}», "
         f"пик {_MONTHS_RU[window.peak.month - 1]} {window.peak.year}, возраст {window.age}"

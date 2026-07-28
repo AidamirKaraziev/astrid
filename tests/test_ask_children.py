@@ -4,17 +4,18 @@ from datetime import date, datetime
 
 import pytest
 
-from astra.ask.card import render_children_card
 from astra.ask.children import (
     MAX_PARENTING_AGE,
     THEME_EFFORT,
     THEME_LATE,
-    compute_children_theme,
+    compute,
+    render_card,
 )
-from astra.ask.products import PRODUCTS, QUESTION_CHILDREN, get_product
-from astra.ask.schemas import PartnershipWindow
+from astra.ask.products import SPECS, QUESTION_CHILDREN, get_product
+from astra.ask.windows import TransitWindow
 from astra.astro.calculator import build_full_natal_chart, kerykeion_available
 from astra.astro.schemas import ChartPoint, FullNatalChart, HouseCusp, NatalAspect
+from astra.ask.windows import window_period
 from astra.llm.prompts.ask import children as product
 
 TODAY = date(2026, 7, 28)
@@ -93,10 +94,10 @@ def _aspect(p1: str, p1_ru: str, p2: str, p2_ru: str, name: str = "квадра�
 
 def _result(**kwargs):
     chart = kwargs.pop("chart", None) or _chart()
-    return compute_children_theme(
+    return compute(
         chart,
         birth_date=kwargs.pop("birth_date", date(1990, 3, 15)),
-        has_children=kwargs.pop("has_children", False),
+        calibration=kwargs.pop("has_children", False),
         today=TODAY,
     )
 
@@ -173,7 +174,7 @@ def test_after_parenting_age_no_windows_are_promised() -> None:
 
 
 def test_window_period_reads_as_years() -> None:
-    same_year = PartnershipWindow(
+    same_year = TransitWindow(
         start=date(2029, 3, 1),
         peak=date(2029, 5, 1),
         end=date(2029, 8, 31),
@@ -183,8 +184,8 @@ def test_window_period_reads_as_years() -> None:
         age=39,
     )
     crossing = same_year.model_copy(update={"end": date(2030, 2, 28)})
-    assert product.window_period(same_year) == "2029"
-    assert product.window_period(crossing) == "2029–2030"
+    assert window_period(same_year) == "2029"
+    assert window_period(crossing) == "2029–2030"
 
 
 def test_without_birth_time_falls_back_to_moon() -> None:
@@ -204,7 +205,7 @@ def test_real_chart_names_its_factors() -> None:
         lon=37.61,
         timezone="Europe/Moscow",
     )
-    result = compute_children_theme(chart, birth_date=birth, has_children=False, today=TODAY)
+    result = compute(chart, birth_date=birth, calibration=False, today=TODAY)
     assert result.factors.notes
     assert any("5 дом" in note or "Луна" in note for note in result.factors.notes)
 
@@ -249,7 +250,7 @@ def test_card_caption_and_png() -> None:
     caption = product.card_caption(result)
     assert "Карта показывает" in caption
     assert "Лучшее окно" in caption
-    png = render_children_card(result)
+    png = render_card(result)
     assert png.startswith(b"\x89PNG")
 
 
@@ -265,9 +266,14 @@ def test_children_product_is_registered_with_its_own_calibration() -> None:
 
 
 def test_every_registered_product_has_full_contract() -> None:
-    for key, entry in PRODUCTS.items():
+    """Каждый продукт из реестра грузится и выполняет общий контракт."""
+    for key in SPECS:
+        entry = get_product(key)
+        assert entry is not None, key
         assert entry.key == key
         assert entry.prompt.SYSTEM_PROMPT
         assert entry.invoice_title and entry.teaser
         assert entry.calibration_yes and entry.calibration_no
         assert callable(entry.compute)
+        assert isinstance(entry.methodology_version, int)
+        assert callable(entry.prompt.expected_blocks)

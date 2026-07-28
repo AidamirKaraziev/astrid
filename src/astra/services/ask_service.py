@@ -20,7 +20,7 @@ from pydantic import BaseModel
 from astra.ask import models as ask_crud
 from astra.ask.enums import AskStatus
 from astra.ask.models import AskReading
-from astra.ask.products import get_product
+from astra.ask.products import LEGACY_CALIBRATION_PRODUCT, get_product
 from astra.core.config import Settings, get_settings
 from astra.core.observability import Event, get_logger
 from astra.llm.types import ChatMessage, CompletionRequest
@@ -54,7 +54,9 @@ def calibration_answer(reading: AskReading) -> bool:
         value = reading.context.get(product.calibration_field)
         if value is not None:
             return bool(value)
-    return bool(reading.in_relationship)
+    if reading.question_key == LEGACY_CALIBRATION_PRODUCT:
+        return bool(reading.in_relationship)
+    return False
 
 
 async def compute_for_reading(

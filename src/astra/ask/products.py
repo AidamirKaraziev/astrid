@@ -1,96 +1,144 @@
 """Реестр продуктов раздела «Спроси Астрид».
 
-Один вопрос = одна запись здесь. Хендлер, сервис и worker не знают ни про
-партнёров, ни про детей — они работают через этот реестр, поэтому новый вопрос
-добавляется записью, а не правкой пайплайна.
+Один вопрос = одна запись здесь + два файла (расчёт и промпт). Хендлер, сервис
+и worker не знают ни про партнёров, ни про детей — они работают через реестр.
 
-У каждого продукта своя структура ответа: она проектируется под тему вопроса,
-а не копируется у соседнего продукта.
+**Продукты изолированы друг от друга.** Реестр хранит только пути к модулям и
+подтягивает их по требованию: если модуль продукта удалён или в нём ошибка,
+падает ровно этот вопрос (человек видит «скоро»), а остальные продолжают
+работать и продаваться. Поэтому здесь нет импортов конкретных продуктов —
+и добавлять их сюда нельзя, это вернёт связанность.
+
+Контракт модуля расчёта:
+    METHODOLOGY_VERSION: int
+    RESULT_MODEL: type[BaseModel]
+    compute(chart, *, birth_date, calibration, today=None) -> RESULT_MODEL
+    render_card(result) -> bytes            # необязательно
+
+Контракт модуля промпта:
+    SYSTEM_PROMPT, TEMPERATURE, MAX_TOKENS
+    build_user_message(result, *, user_name, gender) -> str
+    parse(raw) -> answer | None
+    validate(answer, expected) -> str | None
+    expected_blocks(result) -> int
+    render_answer(answer, result) -> str
+    card_caption(result) -> str
 """
 
 from __future__ import annotations
 
-from collections.abc import Callable
+import importlib
 from dataclasses import dataclass
 from datetime import date
+from functools import lru_cache
 from types import ModuleType
 from typing import Any
 
-from pydantic import BaseModel
+from astra.core.observability import get_logger
 
-from astra.ask import children as children_calc
-from astra.ask import fated_partners as partners_calc
-from astra.ask import card
-from astra.ask.schemas import ChildrenResult, FatedPartnersResult
-from astra.astro.schemas import FullNatalChart
-from astra.llm.prompts.ask import children as children_prompt
-from astra.llm.prompts.ask import fated_partners as partners_prompt
+log = get_logger(__name__)
 
 QUESTION_FATED_COUNT = "love_fated_count"
 QUESTION_CHILDREN = "love_kids"
 
+# Первый продукт писал ответ на калибрующий вопрос в отдельную колонку —
+# у строк, созданных до миграции 020, поля `context` нет.
+LEGACY_CALIBRATION_PRODUCT = QUESTION_FATED_COUNT
+
 
 @dataclass(frozen=True, slots=True)
-class AskProduct:
-    """Всё, что отличает один вопрос раздела от другого."""
+class AskProductSpec:
+    """Описание продукта: пути к модулям и тексты вокруг покупки."""
 
     key: str
-    # Расчёт: карта + дата рождения + ответ человека на калибрующий вопрос
-    compute: Callable[[FullNatalChart, date, bool, date | None], BaseModel]
-    result_model: type[BaseModel]
-    methodology_version: int
-    # Промпт-модуль: SYSTEM_PROMPT, build_user_message, parse, validate,
-    # render_answer, card_caption
-    prompt: ModuleType
-    render_card: Callable[[Any], bytes] | None
-    # Калибрующий вопрос перед покупкой: то, что нельзя посчитать по карте
+    calc_module: str
+    prompt_module: str
+    # Калибрующий вопрос: то, что нельзя посчитать по карте
     calibration_text: str
     calibration_yes: str
     calibration_no: str
-    # Ключ, под которым ответ ложится в ask_readings.context
-    calibration_field: str
+    calibration_field: str  # ключ в ask_readings.context
     invoice_title: str
     invoice_description: str
     teaser: str
-    validate_expected: Callable[[BaseModel], int]
 
 
-def _compute_partners(
-    chart: FullNatalChart,
-    birth_date: date,
-    calibration: bool,
-    today: date | None,
-) -> FatedPartnersResult:
-    return partners_calc.compute_fated_partners(
-        chart,
-        birth_date=birth_date,
-        in_relationship=calibration,
-        today=today,
-    )
+@dataclass(frozen=True, slots=True)
+class AskProduct:
+    """Загруженный продукт: спецификация + его модули."""
+
+    spec: AskProductSpec
+    calc: ModuleType
+    prompt: ModuleType
+
+    @property
+    def key(self) -> str:
+        return self.spec.key
+
+    @property
+    def methodology_version(self) -> int:
+        return self.calc.METHODOLOGY_VERSION
+
+    @property
+    def result_model(self) -> type:
+        return self.calc.RESULT_MODEL
+
+    @property
+    def render_card(self):  # noqa: ANN201 — Callable | None
+        return getattr(self.calc, "render_card", None)
+
+    @property
+    def calibration_text(self) -> str:
+        return self.spec.calibration_text
+
+    @property
+    def calibration_yes(self) -> str:
+        return self.spec.calibration_yes
+
+    @property
+    def calibration_no(self) -> str:
+        return self.spec.calibration_no
+
+    @property
+    def calibration_field(self) -> str:
+        return self.spec.calibration_field
+
+    @property
+    def invoice_title(self) -> str:
+        return self.spec.invoice_title
+
+    @property
+    def invoice_description(self) -> str:
+        return self.spec.invoice_description
+
+    @property
+    def teaser(self) -> str:
+        return self.spec.teaser
+
+    def compute(
+        self,
+        chart: Any,
+        birth_date: date,
+        calibration: bool,
+        today: date | None = None,
+    ) -> Any:
+        return self.calc.compute(
+            chart,
+            birth_date=birth_date,
+            calibration=calibration,
+            today=today,
+        )
+
+    def validate_expected(self, result: Any) -> int:
+        """Сколько блоков ответа ждём от модели — считает сам продукт."""
+        return self.prompt.expected_blocks(result)
 
 
-def _compute_children(
-    chart: FullNatalChart,
-    birth_date: date,
-    calibration: bool,
-    today: date | None,
-) -> ChildrenResult:
-    return children_calc.compute_children_theme(
-        chart,
-        birth_date=birth_date,
-        has_children=calibration,
-        today=today,
-    )
-
-
-PRODUCTS: dict[str, AskProduct] = {
-    QUESTION_FATED_COUNT: AskProduct(
+SPECS: dict[str, AskProductSpec] = {
+    QUESTION_FATED_COUNT: AskProductSpec(
         key=QUESTION_FATED_COUNT,
-        compute=_compute_partners,
-        result_model=FatedPartnersResult,
-        methodology_version=partners_calc.METHODOLOGY_VERSION,
-        prompt=partners_prompt,
-        render_card=card.render_fated_partners_card,
+        calc_module="astra.ask.fated_partners",
+        prompt_module="astra.llm.prompts.ask.fated_partners",
         calibration_text=(
             "Один вопрос перед ответом — от него зависит, как читать твою карту.\n\n"
             "<b>Сейчас ты в отношениях?</b>\n\n"
@@ -108,15 +156,11 @@ PRODUCTS: dict[str, AskProduct] = {
             "Смотрю твой седьмой дом, его управителя и Венеру — считаю, "
             "сколько по-настоящему поворотных историй в твоей карте ✨"
         ),
-        validate_expected=lambda result: result.total,
     ),
-    QUESTION_CHILDREN: AskProduct(
+    QUESTION_CHILDREN: AskProductSpec(
         key=QUESTION_CHILDREN,
-        compute=_compute_children,
-        result_model=ChildrenResult,
-        methodology_version=children_calc.METHODOLOGY_VERSION,
-        prompt=children_prompt,
-        render_card=card.render_children_card,
+        calc_module="astra.ask.children",
+        prompt_module="astra.llm.prompts.ask.children",
         calibration_text=(
             "Один вопрос перед ответом — от него зависит, как читать твою карту.\n\n"
             "<b>У тебя уже есть дети?</b>"
@@ -134,15 +178,35 @@ PRODUCTS: dict[str, AskProduct] = {
             "Смотрю твой пятый дом, Луну и Юпитер — ищу, как в твоей карте "
             "устроена тема детей и когда её лучшие окна ✨"
         ),
-        validate_expected=lambda result: len(result.windows),
     ),
 }
 
 
+@lru_cache(maxsize=None)
+def _load(question_key: str) -> AskProduct | None:
+    """Подтянуть модули продукта. None — продукт сломан или удалён."""
+    spec = SPECS.get(question_key)
+    if spec is None:
+        return None
+    try:
+        calc = importlib.import_module(spec.calc_module)
+        prompt = importlib.import_module(spec.prompt_module)
+    except Exception as exc:
+        # Соседние продукты от этого не страдают: вопрос просто показывает «скоро».
+        log.error(
+            "ask.product_unavailable",
+            question_key=question_key,
+            error_type=type(exc).__name__,
+            error=str(exc),
+        )
+        return None
+    return AskProduct(spec=spec, calc=calc, prompt=prompt)
+
+
 def get_product(question_key: str) -> AskProduct | None:
-    return PRODUCTS.get(question_key)
+    return _load(question_key)
 
 
 def is_ready(question_key: str) -> bool:
     """Готов ли вопрос к покупке (иначе показываем заглушку «скоро»)."""
-    return question_key in PRODUCTS
+    return get_product(question_key) is not None

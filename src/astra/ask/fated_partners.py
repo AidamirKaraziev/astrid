@@ -24,15 +24,13 @@ from __future__ import annotations
 
 from datetime import date
 
-from astra.ask.schemas import (
-    FatedPartnersFactors,
-    FatedPartnersResult,
-    PartnershipWindow,
-)
+from pydantic import BaseModel, Field
+
 from astra.ask.windows import (
     MIN_AGE,
     STRONG_WEIGHT,
-    find_partnership_windows,
+    TransitWindow,
+    find_windows,
     merge_overlapping,
 )
 from astra.astro.constants import (
@@ -43,6 +41,46 @@ from astra.astro.constants import (
 from astra.astro.schemas import ChartPoint, FullNatalChart
 
 METHODOLOGY_VERSION = 1
+
+class FatedPartnersFactors(BaseModel):
+    """Факторы карты, из которых выведено число. Идут в промпт как есть.
+
+    LLM обязана называть их вслух — иначе ответ скатывается в гороскоп из паблика.
+    """
+
+    has_time: bool
+    dsc_sign: str | None = None
+    dsc_modality: str | None = None
+    double_bodied_dsc: bool = False
+    planets_in_seventh: list[str] = Field(default_factory=list)
+    ruler_seventh: str | None = None
+    ruler_seventh_sign: str | None = None
+    ruler_seventh_modality: str | None = None
+    ruler_seventh_aspects: list[str] = Field(default_factory=list)
+    venus_sign: str | None = None
+    venus_modality: str | None = None
+    venus_retrograde: bool = False
+    venus_aspects: list[str] = Field(default_factory=list)
+    north_node_house: int | None = None
+    score: float = 0.0
+    notes: list[str] = Field(default_factory=list)  # человеческие формулировки для промпта
+
+
+class FatedPartnersResult(BaseModel):
+    """Ответ расчёта: два числа + чем они обоснованы."""
+
+    methodology_version: int
+    total: int
+    past: int
+    future: int
+    age: int
+    in_relationship: bool
+    factors: FatedPartnersFactors
+    windows_past: list[TransitWindow] = Field(default_factory=list)
+    windows_future: list[TransitWindow] = Field(default_factory=list)
+
+
+RESULT_MODEL = FatedPartnersResult
 
 _MIN_TOTAL = 1
 _MAX_TOTAL = 4
@@ -89,6 +127,20 @@ _NODE_IN_FIRST_SCORE = 0.2
 _NO_TIME_MODALITY_FACTOR = 0.5
 
 _PERSONAL_POINTS = ("Sun", "Moon", "Mercury", "Venus", "Mars")
+
+# Вес пары «транзит × точка»: Сатурн к десценденту — главное событие
+# партнёрства, Уран к Венере приносит внезапные встречи и разрывы.
+_WINDOW_WEIGHTS: dict[tuple[str, str], float] = {
+    ("Сатурн", "десцендент"): 1.0,
+    ("Сатурн", "управитель 7 дома"): 0.8,
+    ("Сатурн", "Венера"): 0.7,
+    ("Юпитер", "десцендент"): 0.8,
+    ("Юпитер", "управитель 7 дома"): 0.6,
+    ("Юпитер", "Венера"): 0.6,
+    ("Уран", "Венера"): 0.9,
+    ("Уран", "десцендент"): 0.8,
+    ("Уран", "управитель 7 дома"): 0.5,
+}
 
 
 def _point(chart: FullNatalChart, name: str) -> ChartPoint | None:
@@ -293,22 +345,28 @@ def _targets(chart: FullNatalChart) -> dict[str, float]:
     return targets
 
 
-def compute_fated_partners(
+def compute(
     chart: FullNatalChart,
     *,
     birth_date: date,
-    in_relationship: bool,
+    calibration: bool,
     today: date | None = None,
 ) -> FatedPartnersResult:
     """Два числа — сколько судьбоносных союзов уже было и сколько впереди."""
     today = today or date.today()
     age = _age(birth_date, today)
+    in_relationship = calibration
 
     factors = _collect_factors(chart)
     total = _total_from_score(factors.score)
 
     windows = merge_overlapping(
-        find_partnership_windows(_targets(chart), birth_date=birth_date, today=today),
+        find_windows(
+            _targets(chart),
+            weights=_WINDOW_WEIGHTS,
+            birth_date=birth_date,
+            today=today,
+        ),
     )
     strong = [w for w in windows if w.weight >= STRONG_WEIGHT and w.age >= MIN_AGE]
     past_windows = [w for w in strong if w.end < today]
@@ -346,16 +404,35 @@ def compute_fated_partners(
         past=past,
         future=future,
         age=age,
-        in_relationship=in_relationship,
+        in_relationship=calibration,
         factors=factors,
         windows_past=_trim(past_windows, past),
         windows_future=_trim(future_windows, future),
     )
 
 
-def _trim(windows: list[PartnershipWindow], limit: int) -> list[PartnershipWindow]:
+def _trim(windows: list[TransitWindow], limit: int) -> list[TransitWindow]:
     """Оставить самые весомые окна, но в хронологическом порядке."""
     if limit <= 0:
         return []
     strongest = sorted(windows, key=lambda w: (-w.weight, w.peak))[:limit]
     return sorted(strongest, key=lambda w: w.peak)
+
+
+def render_card(result: FatedPartnersResult) -> bytes:
+    """Карточка продукта: число судьбоносных партнёров крупно."""
+    from astra.ask.card import render_card as draw
+
+    return draw(
+        hero=str(result.total),
+        label=_plural(result.total),
+        footnote=f"уже было {result.past}   ·   впереди {result.future}",
+    )
+
+
+def _plural(count: int) -> str:
+    if count % 10 == 1 and count % 100 != 11:
+        return "судьбоносный\nпартнёр"
+    if count % 10 in (2, 3, 4) and count % 100 not in (12, 13, 14):
+        return "судьбоносных\nпартнёра"
+    return "судьбоносных\nпартнёров"

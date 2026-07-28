@@ -6,13 +6,14 @@ import pytest
 
 from astra.ask.fated_partners import (
     METHODOLOGY_VERSION,
-    compute_fated_partners,
+    _WINDOW_WEIGHTS,
     _max_past_for_age,
     _total_from_score,
+    compute,
 )
 from astra.ask.windows import (
-    PartnershipWindow,
-    find_partnership_windows,
+    TransitWindow,
+    find_windows,
     merge_overlapping,
     split_by_today,
 )
@@ -135,16 +136,16 @@ def _aspect(p1: str, p1_ru: str, p2: str, p2_ru: str, name: str = "квадра�
 
 def test_fixed_descendant_gives_fewer_partners_than_mutable() -> None:
     birth = date(1990, 3, 15)
-    fixed = compute_fated_partners(
+    fixed = compute(
         _chart(dsc_sign="Телец"),
         birth_date=birth,
-        in_relationship=False,
+        calibration=False,
         today=TODAY,
     )
-    mutable = compute_fated_partners(
+    mutable = compute(
         _chart(dsc_sign="Близнецы"),
         birth_date=birth,
-        in_relationship=False,
+        calibration=False,
         today=TODAY,
     )
     assert fixed.total < mutable.total
@@ -153,22 +154,22 @@ def test_fixed_descendant_gives_fewer_partners_than_mutable() -> None:
 
 def test_saturn_on_venus_compresses_uranus_multiplies() -> None:
     birth = date(1990, 3, 15)
-    saturn = compute_fated_partners(
+    saturn = compute(
         _chart(
             dsc_sign="Весы",
             aspects=[_aspect("Venus", "Венера", "Saturn", "Сатурн")],
         ),
         birth_date=birth,
-        in_relationship=False,
+        calibration=False,
         today=TODAY,
     )
-    uranus = compute_fated_partners(
+    uranus = compute(
         _chart(
             dsc_sign="Весы",
             aspects=[_aspect("Venus", "Венера", "Uranus", "Уран")],
         ),
         birth_date=birth,
-        in_relationship=False,
+        calibration=False,
         today=TODAY,
     )
     assert saturn.factors.score < uranus.factors.score
@@ -183,10 +184,10 @@ def test_total_thresholds_are_monotonic() -> None:
 
 
 def test_planets_in_seventh_are_collected() -> None:
-    result = compute_fated_partners(
+    result = compute(
         _chart(dsc_sign="Весы", planets_in_seventh=2),
         birth_date=date(1990, 3, 15),
-        in_relationship=False,
+        calibration=False,
         today=TODAY,
     )
     assert len(result.factors.planets_in_seventh) == 2
@@ -199,10 +200,10 @@ def test_planets_in_seventh_are_collected() -> None:
 def test_numbers_always_add_up_and_stay_in_range() -> None:
     for dsc in ("Телец", "Близнецы", "Весы", "Рыбы", "Козерог"):
         for status in (True, False):
-            result = compute_fated_partners(
+            result = compute(
                 _chart(dsc_sign=dsc),
                 birth_date=date(1988, 6, 1),
-                in_relationship=status,
+                calibration=status,
                 today=TODAY,
             )
             assert result.past + result.future == result.total
@@ -211,10 +212,10 @@ def test_numbers_always_add_up_and_stay_in_range() -> None:
 
 
 def test_person_in_relationship_always_has_one_behind() -> None:
-    result = compute_fated_partners(
+    result = compute(
         _chart(dsc_sign="Телец"),
         birth_date=date(2004, 6, 1),  # 22 года: окон в прошлом почти нет
-        in_relationship=True,
+        calibration=True,
         today=TODAY,
     )
     assert result.past >= 1
@@ -226,10 +227,10 @@ def test_young_person_cannot_have_many_behind() -> None:
     assert _max_past_for_age(34) == 3
     assert _max_past_for_age(45) == 4
 
-    result = compute_fated_partners(
+    result = compute(
         _chart(dsc_sign="Рыбы"),
         birth_date=date(2005, 1, 10),
-        in_relationship=False,
+        calibration=False,
         today=TODAY,
     )
     assert result.age == 21
@@ -238,10 +239,10 @@ def test_young_person_cannot_have_many_behind() -> None:
 
 def test_free_person_is_not_told_everything_is_behind() -> None:
     """Свободному человеку с открытым окном впереди всегда есть что обещать."""
-    result = compute_fated_partners(
+    result = compute(
         _chart(dsc_sign="Весы"),
         birth_date=date(1975, 9, 20),
-        in_relationship=False,
+        calibration=False,
         today=TODAY,
     )
     assert result.future >= 1
@@ -259,16 +260,16 @@ def test_same_input_gives_same_answer() -> None:
         lon=37.61,
         timezone="Europe/Moscow",
     )
-    first = compute_fated_partners(
+    first = compute(
         chart,
         birth_date=date(1990, 3, 15),
-        in_relationship=False,
+        calibration=False,
         today=TODAY,
     )
-    second = compute_fated_partners(
+    second = compute(
         chart,
         birth_date=date(1990, 3, 15),
-        in_relationship=False,
+        calibration=False,
         today=TODAY,
     )
     assert (first.total, first.past, first.future) == (second.total, second.past, second.future)
@@ -285,7 +286,7 @@ def test_real_chart_names_its_factors() -> None:
         lon=37.61,
         timezone="Europe/Moscow",
     )
-    result = compute_fated_partners(chart, birth_date=birth, in_relationship=False, today=TODAY)
+    result = compute(chart, birth_date=birth, calibration=False, today=TODAY)
 
     assert result.factors.dsc_sign
     assert result.factors.ruler_seventh
@@ -300,10 +301,10 @@ def test_real_chart_names_its_factors() -> None:
 
 
 def test_without_birth_time_houses_are_not_used() -> None:
-    result = compute_fated_partners(
+    result = compute(
         _chart(dsc_sign="Телец", has_time=False),
         birth_date=date(1990, 3, 15),
-        in_relationship=False,
+        calibration=False,
         today=TODAY,
     )
     assert result.factors.has_time is False
@@ -318,8 +319,9 @@ def test_without_birth_time_houses_are_not_used() -> None:
 
 
 def test_windows_are_found_and_ordered() -> None:
-    windows = find_partnership_windows(
+    windows = find_windows(
         {"десцендент": 315.6, "Венера": 309.1},
+        weights=_WINDOW_WEIGHTS,
         birth_date=date(1990, 3, 15),
         today=TODAY,
     )
@@ -329,8 +331,8 @@ def test_windows_are_found_and_ordered() -> None:
 
 
 def test_overlapping_windows_are_one_story() -> None:
-    def _window(peak: date, weight: float, transit: str) -> PartnershipWindow:
-        return PartnershipWindow(
+    def _window(peak: date, weight: float, transit: str) -> TransitWindow:
+        return TransitWindow(
             start=peak,
             peak=peak,
             end=peak,
@@ -352,7 +354,7 @@ def test_overlapping_windows_are_one_story() -> None:
 
 
 def test_split_by_today_counts_current_window_as_ahead() -> None:
-    current = PartnershipWindow(
+    current = TransitWindow(
         start=date(2026, 6, 1),
         peak=date(2026, 8, 1),
         end=date(2026, 10, 31),

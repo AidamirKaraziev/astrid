@@ -82,14 +82,18 @@ def ask_answer_keyboard(reading: AskReading, *, referral_code: str | None) -> In
             ),
         ],
     )
-    rows.append(
-        [
-            InlineKeyboardButton(
-                text="🔙 Другие вопросы",
-                callback_data=f"{CB_ASK_TOPIC_PREFIX}love",
-            ),
-        ],
-    )
+    from astra.telegram.ask_text import ASK_QUESTION_TOPIC
+
+    topic = ASK_QUESTION_TOPIC.get(reading.question_key)
+    if topic:
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    text="🔙 Другие вопросы",
+                    callback_data=f"{CB_ASK_TOPIC_PREFIX}{topic}",
+                ),
+            ],
+        )
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 

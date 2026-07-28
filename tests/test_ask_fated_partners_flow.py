@@ -11,8 +11,8 @@ from aiogram.fsm.storage.base import StorageKey
 from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.types import CallbackQuery, Message
 
-from astra.ask.card import render_fated_partners_card
-from astra.ask.schemas import FatedPartnersFactors, FatedPartnersResult
+from astra.ask.fated_partners import render_card
+from astra.ask.fated_partners import FatedPartnersFactors, FatedPartnersResult
 from astra.llm.prompts.ask import fated_partners as product
 from astra.telegram.button_texts import (
     CB_ASK_ARCHIVE_PREFIX,
@@ -260,7 +260,7 @@ def test_card_caption_when_everything_is_ahead() -> None:
 
 
 def test_card_is_rendered_as_png_without_personal_data() -> None:
-    png = render_fated_partners_card(_result())
+    png = render_card(_result())
     assert png.startswith(b"\x89PNG")
     assert len(png) > 5000
 

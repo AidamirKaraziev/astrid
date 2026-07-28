@@ -1,4 +1,7 @@
-"""Карточка с числом: картинка, которую пересылают друзьям.
+"""Общий каркас карточки: картинка, которую пересылают друзьям.
+
+Что именно выносить на карточку — решает продукт (`render_card` в его модуле):
+у партнёров это число, у детей — годы лучшего окна. Здесь только рисование.
 
 Формат сторис (1080×1350), тёмный фон в тон боту, крупное число по центру.
 Личных данных на карточке нет намеренно — ни имени, ни даты рождения: её
@@ -14,7 +17,6 @@ import random
 from io import BytesIO
 from pathlib import Path
 
-from astra.ask.schemas import ChildrenResult, FatedPartnersResult
 
 WIDTH = 1080
 HEIGHT = 1350
@@ -83,32 +85,6 @@ def render_card(*, hero: str, label: str, footnote: str) -> bytes:
     buffer = BytesIO()
     image.save(buffer, format="PNG", optimize=True)
     return buffer.getvalue()
-
-
-def render_fated_partners_card(result: FatedPartnersResult) -> bytes:
-    """PNG с числом судьбоносных партнёров."""
-    return render_card(
-        hero=str(result.total),
-        label=_plural(result.total),
-        footnote=f"уже было {result.past}   ·   впереди {result.future}",
-    )
-
-
-def render_children_card(result: ChildrenResult) -> bytes:
-    """PNG с лучшим окном темы детей: годы крупно."""
-    from astra.llm.prompts.ask.children import count_words, window_period
-
-    if result.best_window is None:
-        return render_card(
-            hero="✨",
-            label="тема детей\nв твоей карте",
-            footnote=f"карта показывает {count_words(result.count_hint)}",
-        )
-    return render_card(
-        hero=window_period(result.best_window),
-        label="лучшее окно\nдля темы детей",
-        footnote=f"карта показывает {count_words(result.count_hint)}",
-    )
 
 
 def _centered(draw, text: str, *, y: int, font, fill, spacing: int = 8) -> None:

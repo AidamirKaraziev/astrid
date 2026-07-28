@@ -346,7 +346,12 @@ async def _fulfill_reading(
     await message.answer(product.teaser)
     await message.chat.do("typing")
 
-    result = await compute_for_reading(session, reading, user)
+    try:
+        result = await compute_for_reading(session, reading, user)
+    except Exception:
+        # Ошибка расчёта одного продукта не должна стоить человеку денег.
+        log.exception("ask.compute_failed", question_key=reading.question_key)
+        result = None
     if result is None:
         await session.rollback()
         refunded = False

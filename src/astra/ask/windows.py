@@ -1,14 +1,13 @@
-"""Окна активации партнёрства: транзиты медленных планет к точкам 7 дома.
+"""Транзитные окна: когда медленная планета подходит к точке карты.
 
-Считаем прямо через swisseph (эфемериды Moshier — файлы не нужны): помесячно
-идём по жизни человека и ищем, когда Сатурн, Юпитер или Уран подходят к
-десценденту, Венере или управителю 7 дома. Соседние месяцы схлопываются в
-одно окно с пиком — это и есть «период, когда приходит важный человек».
+Общий движок раздела «Спроси Астрид», продуктонезависимый. Считаем прямо через
+swisseph (эфемериды Moshier — файлы не нужны): помесячно идём по жизни человека
+и ищем, когда Сатурн, Юпитер или Уран подходят к заданным точкам. Соседние
+месяцы схлопываются в одно окно с пиком.
 
-Почему именно эти три планеты: Сатурн даёт долгие обязывающие союзы (цикл
-29.5 года — редко больше двух-трёх заходов за жизнь), Юпитер открывает
-7 дом каждые ~12 лет, Уран приносит внезапные встречи и разрывы. Быстрые
-планеты для «судьбоносности» не годятся — они активируют карту ежемесячно.
+Какие точки и с каким весом смотреть — решает продукт: у партнёрства это
+десцендент и Венера, у детей — 5 дом и Луна. Быстрые планеты не берём вовсе:
+они активируют карту ежемесячно и «событием» быть не могут.
 """
 
 from __future__ import annotations
@@ -16,9 +15,29 @@ from __future__ import annotations
 from calendar import monthrange
 from datetime import date
 
-from astra.ask.schemas import PartnershipWindow
+from pydantic import BaseModel
 
-# Раньше этого возраста союз не считаем судьбоносным даже при точном транзите.
+
+class TransitWindow(BaseModel):
+    """Окно активации: транзит медленной планеты к точке карты."""
+
+    start: date
+    peak: date
+    end: date
+    transit: str  # «Сатурн», «Юпитер», «Уран»
+    target: str  # что именно активируется: «десцендент», «5 дом», «Луна»
+    weight: float  # вклад окна: чем выше, тем крупнее событие
+    age: int  # возраст человека на пике окна
+
+
+def window_period(window: TransitWindow) -> str:
+    """Период окна человеческими словами: «2029» или «2029–2030»."""
+    if window.start.year == window.end.year:
+        return str(window.peak.year)
+    return f"{window.start.year}–{window.end.year}"
+
+
+# Раньше этого возраста событие не считаем значимым даже при точном транзите.
 MIN_AGE = 16
 # Насколько вперёд смотрим будущие окна.
 FUTURE_YEARS = 15
@@ -31,19 +50,6 @@ _TRANSIT_PLANETS: tuple[tuple[str, str], ...] = (
     ("JUPITER", "Юпитер"),
     ("URANUS", "Уран"),
 )
-
-# Вес пары «транзит × точка»: чем выше, тем крупнее история.
-_WEIGHTS: dict[tuple[str, str], float] = {
-    ("Сатурн", "десцендент"): 1.0,
-    ("Сатурн", "управитель 7 дома"): 0.8,
-    ("Сатурн", "Венера"): 0.7,
-    ("Юпитер", "десцендент"): 0.8,
-    ("Юпитер", "управитель 7 дома"): 0.6,
-    ("Юпитер", "Венера"): 0.6,
-    ("Уран", "Венера"): 0.9,
-    ("Уран", "десцендент"): 0.8,
-    ("Уран", "управитель 7 дома"): 0.5,
-}
 
 # Окно считается сильным (=«полноценная история»), если вес пика не ниже.
 STRONG_WEIGHT = 0.8
@@ -82,16 +88,6 @@ def _last_day(moment: date) -> date:
     return moment.replace(day=monthrange(moment.year, moment.month)[1])
 
 
-def find_partnership_windows(
-    targets: dict[str, float],
-    *,
-    birth_date: date,
-    today: date,
-) -> list[PartnershipWindow]:
-    """Окна партнёрства: транзиты к десценденту, Венере и управителю 7 дома."""
-    return find_windows(targets, weights=_WEIGHTS, birth_date=birth_date, today=today)
-
-
 def find_windows(
     targets: dict[str, float],
     *,
@@ -100,7 +96,7 @@ def find_windows(
     today: date,
     min_age: int = MIN_AGE,
     future_years: int = FUTURE_YEARS,
-) -> list[PartnershipWindow]:
+) -> list[TransitWindow]:
     """Окна за прожитую жизнь и вперёд, отсортированные по времени.
 
     `targets` — подпись точки → её долгота; `weights` — вес пары
@@ -115,7 +111,7 @@ def find_windows(
     end = date(today.year + future_years, today.month, 1)
     months = _month_ends(start, end)
 
-    windows: list[PartnershipWindow] = []
+    windows: list[TransitWindow] = []
     for planet, planet_ru in _TRANSIT_PLANETS:
         longitudes = [(moment, _longitude(planet, moment)) for moment in months]
         if any(lon is None for _, lon in longitudes):
@@ -148,9 +144,9 @@ def _windows_for_pair(
     planet_ru: str,
     weight: float,
     birth_date: date,
-) -> list[PartnershipWindow]:
+) -> list[TransitWindow]:
     """Слепить подряд идущие месяцы «в орбисе» в одно окно с пиком."""
-    windows: list[PartnershipWindow] = []
+    windows: list[TransitWindow] = []
     run: list[tuple[date, float]] = []  # (месяц, расстояние до точки)
 
     def _flush() -> None:
@@ -158,7 +154,7 @@ def _windows_for_pair(
             return
         peak_month, _ = min(run, key=lambda item: item[1])
         windows.append(
-            PartnershipWindow(
+            TransitWindow(
                 start=run[0][0],
                 peak=peak_month,
                 end=_last_day(run[-1][0]),
@@ -188,23 +184,23 @@ def _age_at(birth_date: date, moment: date) -> int:
 
 
 def split_by_today(
-    windows: list[PartnershipWindow],
+    windows: list[TransitWindow],
     *,
     today: date,
-) -> tuple[list[PartnershipWindow], list[PartnershipWindow]]:
+) -> tuple[list[TransitWindow], list[TransitWindow]]:
     """Разделить окна на прожитые и предстоящие. Текущее окно — предстоящее."""
     past = [w for w in windows if w.end < today]
     future = [w for w in windows if w.end >= today]
     return past, future
 
 
-def merge_overlapping(windows: list[PartnershipWindow]) -> list[PartnershipWindow]:
+def merge_overlapping(windows: list[TransitWindow]) -> list[TransitWindow]:
     """Схлопнуть пересекающиеся окна разных планет в одну историю.
 
     Сатурн к десценденту и Юпитер к Венере в один и тот же год — это один
     человек, а не двое. Оставляем окно с большим весом.
     """
-    merged: list[PartnershipWindow] = []
+    merged: list[TransitWindow] = []
     for window in sorted(windows, key=lambda w: w.peak):
         if merged and (window.peak - merged[-1].peak).days <= 365:
             if window.weight > merged[-1].weight:
