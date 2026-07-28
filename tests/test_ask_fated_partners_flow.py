@@ -141,7 +141,7 @@ async def test_status_answer_creates_draft_and_sends_invoice() -> None:
     session = MagicMock()
     session.commit = AsyncMock()
     draft = SimpleNamespace(id=uuid4())
-    price = SimpleNamespace(currency="XTR", final_amount=1)
+    price = SimpleNamespace(currency="XTR", final_amount=1, is_free=False)
 
     with (
         patch.object(ask_astrid.users_crud, "get_user_by_telegram_id", AsyncMock(return_value=user)),
@@ -154,6 +154,61 @@ async def test_status_answer_creates_draft_and_sends_invoice() -> None:
     invoice = callback.message.answer_invoice.await_args.kwargs
     assert invoice["currency"] == "XTR"
     assert invoice["prices"][0].amount == 1
+
+
+@pytest.mark.asyncio
+async def test_hundred_percent_discount_skips_invoice_and_answers_at_once() -> None:
+    """Скидка 100%: инвойс на 0 звёзд Telegram не примет — выдаём сразу."""
+    callback = _callback(CB_ASK_STATUS_TAKEN)
+    session = MagicMock()
+    session.commit = AsyncMock()
+    free_price = SimpleNamespace(currency="XTR", final_amount=0, is_free=True)
+
+    with (
+        patch.object(
+            ask_astrid.users_crud,
+            "get_user_by_telegram_id",
+            AsyncMock(return_value=_user(birth_time=datetime(1990, 3, 15, 14, 30))),
+        ),
+        patch.object(ask_astrid, "get_ask_price", AsyncMock(return_value=free_price)),
+        patch.object(
+            ask_astrid.ask_crud,
+            "create_draft",
+            AsyncMock(return_value=SimpleNamespace(id=uuid4())),
+        ),
+        patch.object(ask_astrid, "_fulfill_reading", AsyncMock()) as fulfill,
+    ):
+        await ask_astrid.cb_ask_status(callback, await _fsm(), session)
+
+    callback.message.answer_invoice.assert_not_awaited()
+    assert fulfill.await_args.kwargs == {"amount": 0, "charge_id": None}
+
+
+@pytest.mark.asyncio
+async def test_paid_price_still_sends_invoice() -> None:
+    callback = _callback(CB_ASK_STATUS_TAKEN)
+    session = MagicMock()
+    session.commit = AsyncMock()
+    price = SimpleNamespace(currency="XTR", final_amount=1, is_free=False)
+
+    with (
+        patch.object(
+            ask_astrid.users_crud,
+            "get_user_by_telegram_id",
+            AsyncMock(return_value=_user(birth_time=None)),
+        ),
+        patch.object(ask_astrid, "get_ask_price", AsyncMock(return_value=price)),
+        patch.object(
+            ask_astrid.ask_crud,
+            "create_draft",
+            AsyncMock(return_value=SimpleNamespace(id=uuid4())),
+        ),
+        patch.object(ask_astrid, "_fulfill_reading", AsyncMock()) as fulfill,
+    ):
+        await ask_astrid.cb_ask_status(callback, await _fsm(), session)
+
+    callback.message.answer_invoice.assert_awaited_once()
+    fulfill.assert_not_awaited()
 
 
 @pytest.mark.asyncio
@@ -171,7 +226,7 @@ async def test_free_status_is_recorded_as_not_in_relationship() -> None:
         patch.object(
             ask_astrid,
             "get_ask_price",
-            AsyncMock(return_value=SimpleNamespace(currency="XTR", final_amount=1)),
+            AsyncMock(return_value=SimpleNamespace(currency="XTR", final_amount=1, is_free=False)),
         ),
         patch.object(
             ask_astrid.ask_crud,

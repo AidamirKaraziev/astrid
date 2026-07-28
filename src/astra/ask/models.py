@@ -96,7 +96,7 @@ async def mark_paid(
     reading: AskReading,
     *,
     amount: int,
-    charge_id: str,
+    charge_id: str | None,
     computed: dict[str, Any],
     methodology_version: int,
 ) -> None:

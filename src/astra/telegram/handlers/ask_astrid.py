@@ -37,6 +37,7 @@ from astra.payments.service import (
 )
 from astra.services.ask_service import (
     ASK_FAILED_REFUNDED_TEXT,
+    ASK_FAILED_TEXT,
     QUESTION_FATED_COUNT,
     compute_for_reading,
     result_from_reading,
@@ -240,6 +241,13 @@ async def cb_ask_status(callback: CallbackQuery, state: FSMContext, session: Asy
     await session.commit()
     log.info(Event.ASK_ANSWER_CREATED, reading_id=reading.id, user_id=user.id)
 
+    if price.is_free:
+        # discount_percent = 100 в БД: инвойс на 0 звёзд Telegram не примет,
+        # поэтому выдаём ответ сразу, без оплаты.
+        log.info(Event.ASK_ANSWER_FREE_GRANTED, reading_id=reading.id, user_id=user.id)
+        await _fulfill_reading(msg, session, reading, user, amount=0, charge_id=None)
+        return
+
     await msg.answer_invoice(
         title=A.ASK_INVOICE_TITLE[:32],
         description=A.ASK_INVOICE_DESCRIPTION,
@@ -294,24 +302,50 @@ async def ask_paid(message: Message, session: AsyncSession) -> None:
     if payment is None:
         return  # дубль successful_payment
 
+    await _fulfill_reading(
+        message,
+        session,
+        reading,
+        user,
+        amount=payment_info.total_amount,
+        charge_id=charge_id,
+    )
+
+
+async def _fulfill_reading(
+    message: Message,
+    session: AsyncSession,
+    reading,
+    user: User,
+    *,
+    amount: int,
+    charge_id: str | None,
+) -> None:
+    """Выдача ответа после оплаты (или сразу, если товар бесплатный).
+
+    Расчёт идёт синхронно — он быстрый; карточка уходит до разбора и закрывает
+    паузу ожидания LLM. Если посчитать не удалось, звёзды возвращаются.
+    """
     await message.answer(A.ASK_TEASER_TEXT)
     await message.chat.do("typing")
 
     result = await compute_for_reading(session, reading, user)
     if result is None:
         await session.rollback()
-        if message.bot is not None:
+        refunded = False
+        if charge_id and message.bot is not None:
             await message.bot.refund_star_payment(
-                user_id=message.from_user.id,
+                user_id=user.telegram_id,
                 telegram_payment_charge_id=charge_id,
             )
-        await message.answer(ASK_FAILED_REFUNDED_TEXT)
+            refunded = True
+        await message.answer(ASK_FAILED_REFUNDED_TEXT if refunded else ASK_FAILED_TEXT)
         return
 
     await ask_crud.mark_paid(
         session,
         reading,
-        amount=payment_info.total_amount,
+        amount=amount,
         charge_id=charge_id,
         computed=result.model_dump(mode="json"),
         methodology_version=result.methodology_version,

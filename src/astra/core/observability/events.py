@@ -91,6 +91,7 @@ class Event(StrEnum):
     ASK_ANSWER_SENT = "ask_answer.sent"
     ASK_ANSWER_FAILED = "ask_answer.failed"
     ASK_ANSWER_FROM_ARCHIVE = "ask_answer.from_archive"
+    ASK_ANSWER_FREE_GRANTED = "ask_answer.free_granted"
 
     # Колесо фортуны
     WHEEL_SPIN = "wheel.spin"
