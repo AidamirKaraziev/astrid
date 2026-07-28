@@ -55,7 +55,11 @@ def expected_blocks(result: ChildrenResult) -> int:
     return len(result.windows)
 
 
-def validate(answer: ChildrenAnswer, expected_windows: int) -> str | None:
+def validate(
+    answer: ChildrenAnswer,
+    expected_windows: int,
+    result: ChildrenResult | None = None,  # noqa: ARG001 — контракт раздела
+) -> str | None:
     """Причина retry или None, если ответ годится."""
     if len(answer.windows) != expected_windows:
         return "windows_count_mismatch"

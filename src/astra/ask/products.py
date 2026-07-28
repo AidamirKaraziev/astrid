@@ -19,7 +19,7 @@
     SYSTEM_PROMPT, TEMPERATURE, MAX_TOKENS
     build_user_message(result, *, user_name, gender) -> str
     parse(raw) -> answer | None
-    validate(answer, expected) -> str | None
+    validate(answer, expected, result) -> str | None
     expected_blocks(result) -> int
     render_answer(answer, result) -> str
     card_caption(result) -> str

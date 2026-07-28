@@ -62,7 +62,7 @@ def _result(**kwargs):
     return compute(
         chart,
         birth_date=kwargs.pop("birth_date", date(1990, 3, 15)),
-        calibration=kwargs.pop("has_children", False),
+        calibration=kwargs.pop("has_children", True),
         today=TODAY,
     )
 
@@ -149,6 +149,58 @@ def _answer(**overrides) -> product.KidsBondAnswer:
     }
     data.update(overrides)
     return product.KidsBondAnswer(**data)
+
+
+def test_childless_branch_forbids_instructions_about_a_child() -> None:
+    """Человеку без детей не выдаём «поиграй с ребёнком» — его нет."""
+    childless = _result(has_children=False)
+    answer = _answer(
+        when_it_starts="В момент, когда ребёнок появится, ты включишь режим охраны. " * 3,
+        actions=[
+            "Составь список из трёх вещей, которые тебе запрещали в детстве, и сделай их.",
+            "Каждый вечер записывай момент, когда ты испугалась за будущее.",
+        ],
+    )
+    assert product.validate(answer, product.ACTIONS_EXPECTED, childless) is None
+
+    with_child = answer.model_copy(
+        update={"actions": ["Проведи с ребёнком двадцать минут молча, просто рядом.", answer.actions[1]]},
+    )
+    assert (
+        product.validate(with_child, product.ACTIONS_EXPECTED, childless)
+        == "action_about_missing_child"
+    )
+
+
+def test_childless_branch_requires_the_switch_on_block() -> None:
+    childless = _result(has_children=False)
+    assert (
+        product.validate(_answer(), product.ACTIONS_EXPECTED, childless)
+        == "when_it_starts_missing"
+    )
+
+
+def test_parent_branch_keeps_actions_with_the_child() -> None:
+    parent = _result(has_children=True)
+    assert product.validate(_answer(), product.ACTIONS_EXPECTED, parent) is None
+
+
+def test_rendered_answer_differs_by_branch() -> None:
+    parent_html = product.render_answer(_answer(), _result(has_children=True))
+    assert "Что делать" in parent_html
+    assert "Что включится" not in parent_html
+
+    childless = _result(has_children=False)
+    answer = _answer(
+        when_it_starts="В момент, когда ребёнок появится, ты включишь режим охраны. " * 3,
+        actions=[
+            "Составь список из трёх вещей, которые тебе запрещали в детстве, и сделай их.",
+            "Каждый вечер записывай момент, когда ты испугалась за будущее.",
+        ],
+    )
+    childless_html = product.render_answer(answer, childless)
+    assert "Что включится, когда ребёнок появится" in childless_html
+    assert "Что сделать до этого" in childless_html
 
 
 def test_hedging_word_sends_answer_to_retry() -> None:

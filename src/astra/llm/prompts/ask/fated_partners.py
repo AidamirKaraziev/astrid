@@ -67,7 +67,11 @@ def expected_blocks(result: FatedPartnersResult) -> int:
     return result.total
 
 
-def validate(answer: FatedPartnersAnswer, expected_partners: int) -> str | None:
+def validate(
+    answer: FatedPartnersAnswer,
+    expected_partners: int,
+    result: FatedPartnersResult | None = None,  # noqa: ARG001 — контракт раздела
+) -> str | None:
     """Причина retry или None, если ответ годится."""
     if len(answer.partners) != expected_partners:
         return "partners_count_mismatch"

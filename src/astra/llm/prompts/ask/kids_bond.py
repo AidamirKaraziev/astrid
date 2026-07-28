@@ -60,6 +60,10 @@ class KidsBondAnswer(BaseModel):
     tension: str = Field(description="где связь ломается: механизм, а не вина")
     inherited: str = Field(description="что человек повторяет за своими родителями")
     childs_view: str = Field(description="каким ребёнок видит его изнутри, словами ребёнка")
+    when_it_starts: str | None = Field(
+        default=None,
+        description="только для бездетных: что включится в момент, когда ребёнок появится",
+    )
     actions: list[str] = Field(description="ровно два проверяемых действия")
 
 
@@ -73,10 +77,22 @@ def find_hedging(*texts: str) -> str | None:
     return next((word for word in HEDGING_WORDS if word in joined), None)
 
 
-def validate(answer: KidsBondAnswer, expected_actions: int) -> str | None:
+def validate(
+    answer: KidsBondAnswer,
+    expected_actions: int,
+    result: KidsBondResult | None = None,
+) -> str | None:
     """Причина retry или None. Смягчители — тоже причина: тон утверждён жёстким."""
     if len(answer.actions) != expected_actions:
         return "actions_count_mismatch"
+
+    has_children = bool(result.has_children) if result is not None else True
+    if not has_children:
+        # Бездетному не выдаём инструкций про ребёнка, которого нет.
+        if answer.when_it_starts is None or too_short(answer.when_it_starts, _MIN_SECTION):
+            return "when_it_starts_missing"
+        if any("ребёнк" in action.lower() or "ребенк" in action.lower() for action in answer.actions):
+            return "action_about_missing_child"
     if any(too_short(action, _MIN_ACTION) for action in answer.actions):
         return "action_too_short"
     for field in (answer.why_in_chart, answer.strength, answer.tension, answer.inherited):
@@ -132,6 +148,10 @@ SYSTEM_PROMPT = dedent(
     «возможно», «может быть», «вероятно», «скорее всего», «наверное»,
     «склонна», «склонен», «иногда», «порой», «как правило», «в целом», «часто».
     No conditional mood («был бы», «могла бы»). No questions to the reader.
+    This is checked automatically: one hedging word anywhere and the whole
+    answer is thrown away. Whenever you are about to write «склонна» or
+    «часто», write the behaviour itself instead: not «ты склонна опекать», but
+    «ты опекаешь».
 
     WHAT YOU MAY NOT BE CATEGORICAL ABOUT — hard limit: never state anything
     about the child's fate, health, lifespan, talents, or future circumstances.
@@ -161,6 +181,21 @@ SYSTEM_PROMPT = dedent(
       answer — make it precise.
     - `actions` — exactly two actions, each verifiable and doable this week.
       No «полюби себя», no «будь внимательнее».
+
+    TWO BRANCHES, decided by `already_has_children` in the data:
+
+    1) already_has_children = true — the child exists. `when_it_starts` must be
+       null. `actions` are things to do WITH the child this week.
+
+    2) already_has_children = false — there is no child yet. Then:
+       - fill `when_it_starts`: what switches on in this person the moment a
+         child appears. Name the first thing that will show up, and the exact
+         situation where their type will surface. Categorical, 3–4 sentences.
+       - `actions` are about the PERSON THEMSELVES, not about a child: their
+         own parents, their boundaries, what they rehearse now and will bring
+         into parenthood. The word «ребёнок» must not appear in the actions at
+         all — the answer is rejected if it does. These are things to do this
+         week without any child around.
 
     Barnum statements are forbidden — anything true for any parent («ты хочешь
     для ребёнка лучшего»). Every paragraph must be impossible to transfer to a
@@ -243,10 +278,34 @@ def render_answer(answer: KidsBondAnswer, result: KidsBondResult) -> str:
         "",
         "👀 <b>Каким тебя видит ребёнок</b>",
         f"<i>{html.escape(answer.childs_view.strip())}</i>",
-        "",
-        "✅ <b>Что делать</b>",
-        *[f"• {html.escape(action.strip())}" for action in answer.actions],
     ]
+
+    if result.has_children:
+        blocks.extend(
+            [
+                "",
+                "✅ <b>Что делать</b>",
+                *[f"• {html.escape(action.strip())}" for action in answer.actions],
+            ],
+        )
+    else:
+        # Ребёнка ещё нет: вместо инструкций «поиграй с ним» — момент включения
+        # сценария и то, что можно сделать с собой уже сейчас.
+        if answer.when_it_starts:
+            blocks.extend(
+                [
+                    "",
+                    "🔮 <b>Что включится, когда ребёнок появится</b>",
+                    html.escape(answer.when_it_starts.strip()),
+                ],
+            )
+        blocks.extend(
+            [
+                "",
+                "✅ <b>Что сделать до этого</b>",
+                *[f"• {html.escape(action.strip())}" for action in answer.actions],
+            ],
+        )
     if not result.factors.has_time:
         blocks.extend(
             [

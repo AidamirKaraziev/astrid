@@ -146,7 +146,7 @@ async def generate_ask_answer(
         if answer is None:
             last_error = "json_invalid"
             continue
-        validation_error = prompt.validate(answer, expected)
+        validation_error = prompt.validate(answer, expected, result)
         if validation_error is not None:
             last_error = validation_error
             continue
