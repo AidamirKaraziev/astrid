@@ -318,7 +318,7 @@ def test_user_message_carries_numbers_and_factors() -> None:
     result = _result()
     result.factors.notes = ["десцендент в знаке Водолей (фиксированный)"]
     message = product.build_user_message(result, user_name="Аня", gender="женщина")
-    assert '"судьбоносных_всего": 3' in message
-    assert "десцендент в знаке Водолей" in message
-    assert "ровно 3 элементов" in message  # столько же, сколько судьбоносных
-    assert "сначала 1 уже прожитых, затем 2 впереди" in message
+    assert '"fated_partners_total": 3' in message
+    assert "десцендент в знаке Водолей" in message  # факторы идут по-русски
+    assert "exactly 3 items" in message
+    assert "first 1 already lived, then 2 still ahead" in message

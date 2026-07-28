@@ -141,21 +141,22 @@ def build_user_message(
 ) -> str:
     """Данные для модели: посчитанные числа + факторы карты + окна времени."""
     payload = {
-        "имя": user_name or "не указано",
-        "пол": gender or "не указан",
-        "возраст": result.age,
-        "сейчас_в_отношениях": "да" if result.in_relationship else "нет",
-        "судьбоносных_всего": result.total,
-        "уже_было": result.past,
-        "впереди": result.future,
-        "время_рождения_известно": "да" if result.factors.has_time else "нет",
-        "факторы_карты": result.factors.notes,
-        "окна_в_прошлом": [_window_line(w) for w in result.windows_past],
-        "окна_впереди": [_window_line(w) for w in result.windows_future],
+        "name": user_name or "unknown",
+        "gender": gender or "unknown",
+        "age": result.age,
+        "in_relationship_now": result.in_relationship,
+        "fated_partners_total": result.total,
+        "already_happened": result.past,
+        "still_ahead": result.future,
+        "birth_time_known": result.factors.has_time,
+        # Факторы и окна — по-русски: они попадают в ответ как есть.
+        "chart_factors": result.factors.notes,
+        "past_windows": [_window_line(w) for w in result.windows_past],
+        "future_windows": [_window_line(w) for w in result.windows_future],
     }
     schema_hint = dedent(
         """\
-        Схема ответа (JSON):
+        Response schema (JSON):
         {
           "opening": "...",
           "verdict": "...",
@@ -171,9 +172,10 @@ def build_user_message(
     ).strip()
     data = json.dumps(payload, ensure_ascii=False, indent=2)
     return (
-        f"Данные расчёта:\n{data}\n\n"
-        f"В массиве partners ровно {result.total} элементов: "
-        f"сначала {result.past} уже прожитых, затем {result.future} впереди.\n\n"
+        f"Computed data:\n{data}\n\n"
+        f"The partners array holds exactly {result.total} items: "
+        f"first {result.past} already lived, then {result.future} still ahead.\n"
+        f"Remember: all string values in Russian.\n\n"
         f"{schema_hint}"
     )
 
