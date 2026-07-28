@@ -110,6 +110,17 @@ class Settings(BaseSettings):
     tarot_spreads_enabled: bool = True
     tarot_reading_price_stars: int = 50
 
+    # Админ-панель /admin: правка цен, скидок и призов колеса без релиза.
+    # Пустой admin_password = панель выключена целиком (все роуты отвечают 404).
+    admin_username: str = "astrid"
+    admin_password: str = ""
+    # Ключ подписи куки сессии. Пустой — выводим из пароля: смена пароля
+    # разлогинивает всех, что для одной админки и нужно.
+    admin_session_secret: str = ""
+    admin_session_hours: int = 12
+    # true — кука только по HTTPS. Включать, как только панель за доменом с TLS.
+    admin_cookie_secure: bool = False
+
     # PDF совместимости на volume (Docker: /data/compatibility)
     compatibility_pdf_dir: str = "data/compatibility_pdfs"
 

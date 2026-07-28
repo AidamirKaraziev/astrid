@@ -4,6 +4,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from astra.admin import router as admin_router
 from astra.core.config import get_settings
 from astra.core.observability import Event, configure_observability, get_logger
 from astra.core.observability.middleware.http import HttpObservabilityMiddleware
@@ -142,6 +143,8 @@ def create_app(*, with_lifespan: bool = True) -> FastAPI:
     app.include_router(points_router, prefix="/v1")
     app.include_router(referrals_router, prefix="/v1")
     app.include_router(telegram_webhook_router, prefix="/v1")
+    # Панель — не часть API: без префикса версии и без OpenAPI.
+    app.include_router(admin_router)
     instrument_fastapi_app(settings, app)
     return app
 
