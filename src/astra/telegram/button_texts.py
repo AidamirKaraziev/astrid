@@ -96,7 +96,15 @@ CB_SUPPORT_CLOSE = "support:close"
 
 # «Спроси Астрид»: верхний уровень — темы. Вопросы внутри темы придут отдельно.
 CB_ASK_TOPIC_PREFIX = "ask:topic:"  # + ключ темы (love/money/path/…)
+CB_ASK_QUESTION_PREFIX = "ask:q:"  # + ключ вопроса (love_marriage/…)
 CB_ASK_OWN = "ask:own"
+# Покупка ответа: уточнение времени рождения → статус отношений → инвойс
+CB_ASK_GATE_TIME = "ask:gate:time"
+CB_ASK_GATE_SKIP = "ask:gate:skip"
+CB_ASK_STATUS_TAKEN = "ask:status:taken"
+CB_ASK_STATUS_FREE = "ask:status:free"
+CB_ASK_ANSWER_ARCHIVE = "ask:archive"
+CB_ASK_COMPAT_CROSSSELL = "ask:compat"
 CB_ASK_HOME = "ask:home"
 CB_ASK_CLOSE = "ask:close"
 

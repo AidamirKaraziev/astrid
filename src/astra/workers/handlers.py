@@ -408,6 +408,46 @@ async def handle_tarot_reading_send(session: AsyncSession, task: TaskMessage) ->
         await session.commit()
 
 
+async def handle_ask_answer_generate(session: AsyncSession, task: TaskMessage) -> None:
+    """Разбор ответа «Спроси Астрид»: числа уже в БД, пишем текст и шлём."""
+    if task.reading_id is None:
+        log.warning(Event.TASK_SKIPPED, reason="missing_reading_id")
+        return
+
+    from astra.ask import models as ask_crud
+    from astra.ask.enums import AskStatus
+    from astra.services.ask_service import (
+        deliver_ask_answer,
+        generate_ask_answer,
+        notify_ask_failed,
+        refund_ask_payment,
+    )
+
+    draft = await ask_crud.get_reading(session, task.reading_id)
+    if draft is None:
+        return
+    if draft.status == AskStatus.PENDING_PAYMENT:
+        log.warning(Event.TASK_SKIPPED, reason="ask_not_paid", reading_id=draft.id)
+        return
+
+    user = await users_crud.get_user_by_id(session, draft.user_id)
+    if user is not None:
+        await send_chat_action_typing(user.telegram_id)
+
+    reading = await generate_ask_answer(session, task.reading_id)
+    if reading is None:
+        refunded = False
+        if user is not None:
+            refunded = await refund_ask_payment(session, draft, user.telegram_id)
+        await session.commit()  # failed-статус и refund фиксируем вместе
+        await notify_ask_failed(session, draft, refunded=refunded)
+        return
+
+    await session.commit()
+    if await deliver_ask_answer(session, reading):
+        await session.commit()
+
+
 async def dispatch_task(session: AsyncSession, task: TaskMessage) -> None:
     if task.type == TaskType.NATAL_CHART_GENERATE:
         await handle_natal_chart_generate(session, task)
@@ -437,5 +477,7 @@ async def dispatch_task(session: AsyncSession, task: TaskMessage) -> None:
         await handle_tarot_reading_generate(session, task)
     elif task.type == TaskType.TAROT_READING_SEND:
         await handle_tarot_reading_send(session, task)
+    elif task.type == TaskType.ASK_ANSWER_GENERATE:
+        await handle_ask_answer_generate(session, task)
     else:
         log.warning(Event.TASK_SKIPPED, reason="unknown_task_type", task_type=str(task.type))

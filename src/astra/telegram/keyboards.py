@@ -1,6 +1,7 @@
 from aiogram.enums import ButtonStyle
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, KeyboardButton, ReplyKeyboardMarkup
 
+from astra.users.gender import Gender
 from astra.telegram.button_texts import (
     BTN_ASK_ASTRID,
     BTN_ASK_STARS,
@@ -31,6 +32,7 @@ from astra.telegram.button_texts import (
     CB_ASK_CLOSE,
     CB_ASK_HOME,
     CB_ASK_OWN,
+    CB_ASK_QUESTION_PREFIX,
     CB_ASK_TOPIC_PREFIX,
     CB_COMPAT_DELETE_CANCEL_PREFIX,
     CB_DAY_CARD_FORECAST,
@@ -349,13 +351,39 @@ def ask_astrid_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
-def ask_topic_keyboard() -> InlineKeyboardMarkup:
-    """Под темой: пока вопросов нет — только возврат к списку тем."""
+def ask_questions_keyboard(topic_key: str, gender: Gender | None) -> InlineKeyboardMarkup:
+    """Вопросы темы: подписи с подставленным родом, внизу свой вопрос и назад."""
+    from astra.telegram import ask_text as A
+
+    rows: list[list[InlineKeyboardButton]] = [
+        [
+            InlineKeyboardButton(
+                text=A.render_question(question.label, gender),
+                callback_data=f"{CB_ASK_QUESTION_PREFIX}{question.key}",
+            ),
+        ]
+        for question in A.ASK_QUESTIONS.get(topic_key, ())
+    ]
+    rows.append(
+        [
+            InlineKeyboardButton(
+                text=A.BTN_ASK_OWN_QUESTION,
+                callback_data=CB_ASK_OWN,
+                style=ButtonStyle.PRIMARY,
+            ),
+        ],
+    )
+    rows.append([InlineKeyboardButton(text=A.BTN_ASK_TOPICS_BACK, callback_data=CB_ASK_HOME)])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def ask_back_keyboard(callback_data: str = CB_ASK_HOME) -> InlineKeyboardMarkup:
+    """Только возврат: к темам или к вопросам темы."""
     from astra.telegram import ask_text as A
 
     return InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text=A.BTN_ASK_TOPICS_BACK, callback_data=CB_ASK_HOME)],
+            [InlineKeyboardButton(text=A.BTN_ASK_TOPICS_BACK, callback_data=callback_data)],
         ],
     )
 

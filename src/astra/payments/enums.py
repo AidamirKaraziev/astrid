@@ -15,6 +15,7 @@ class PaymentProvider(StrEnum):
 
 class ProductKind(StrEnum):
     TAROT_READING = "tarot_reading"
+    ASK_ANSWER = "ask_answer"  # ответ на вопрос в разделе «Спроси Астрид»
 
 
 CURRENCY_XTR = "XTR"  # Telegram Stars

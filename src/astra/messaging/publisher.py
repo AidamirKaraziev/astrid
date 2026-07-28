@@ -27,6 +27,7 @@ from astra.messaging.queues import (
     ROUTING_PREDICTION_GENERATE,
     ROUTING_PREDICTION_SEND,
     ROUTING_SYNASTRY_BUILD,
+    ROUTING_ASK_ANSWER_GENERATE,
     ROUTING_TAROT_READING_GENERATE,
     ROUTING_TAROT_READING_SEND,
 )
@@ -71,6 +72,7 @@ async def _ensure_topology(channel: aio_pika.Channel) -> aio_pika.Exchange:
         (QUEUE_NOTIFICATIONS, ROUTING_NATAL_SEND),
         (QUEUE_PREDICTIONS, ROUTING_TAROT_READING_GENERATE),
         (QUEUE_NOTIFICATIONS, ROUTING_TAROT_READING_SEND),
+        (QUEUE_PREDICTIONS, ROUTING_ASK_ANSWER_GENERATE),
     )
     for queue_name, routing_key in bindings:
         queue = await channel.declare_queue(queue_name, durable=True)
@@ -333,3 +335,15 @@ async def publish_tarot_reading_send(
 
 def parse_task(body: bytes) -> TaskMessage:
     return TaskMessage.model_validate(json.loads(body))
+
+
+async def publish_ask_answer_generate(
+    reading_id: UUID,
+    settings: Settings | None = None,
+) -> None:
+    """Разбор ответа «Спроси Астрид»: числа уже посчитаны, worker пишет текст."""
+    await _publish(
+        ROUTING_ASK_ANSWER_GENERATE,
+        _task_message(type=TaskType.ASK_ANSWER_GENERATE, reading_id=reading_id),
+        settings,
+    )

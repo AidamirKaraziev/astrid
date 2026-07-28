@@ -30,6 +30,7 @@ log = get_logger(__name__)
 _TAROT_PAYLOAD_PREFIX = "tarot:"
 WHEEL_PAYLOAD_PREFIX = "wheel_spin:"
 WHEEL_SPIN_PRODUCT_CODE = "wheel_spin"
+ASK_PAYLOAD_PREFIX = "ask:"
 
 TAROT_PAYLOAD_PREFIX = _TAROT_PAYLOAD_PREFIX  # для фильтров хендлеров
 
@@ -62,6 +63,25 @@ def parse_wheel_spin_invoice_payload(payload: str | None) -> UUID | None:
         return None
     try:
         return UUID(payload.removeprefix(WHEEL_PAYLOAD_PREFIX))
+    except ValueError:
+        return None
+
+
+def ask_product_code(question_key: str) -> str:
+    """Товар на каждый вопрос: цена правится в БД без релиза."""
+    return f"ask_{question_key}"
+
+
+def ask_invoice_payload(reading_id: UUID) -> str:
+    return f"{ASK_PAYLOAD_PREFIX}{reading_id}"
+
+
+def parse_ask_invoice_payload(payload: str | None) -> UUID | None:
+    """UUID черновика ответа из payload инвойса; None — чужой/битый payload."""
+    if not payload or not payload.startswith(ASK_PAYLOAD_PREFIX):
+        return None
+    try:
+        return UUID(payload.removeprefix(ASK_PAYLOAD_PREFIX))
     except ValueError:
         return None
 
@@ -124,6 +144,64 @@ async def get_wheel_spin_price(
     if row is None:
         return None
     return ProductPriceInfo(row.currency, row.amount, row.discount_percent)
+
+
+async def get_ask_price(
+    session: AsyncSession,
+    question_key: str,
+    currency: str = CURRENCY_XTR,
+) -> ProductPriceInfo | None:
+    """Цена ответа из каталога; None — вопрос ещё не заведён как товар."""
+    row = await payments_crud.get_product_price(session, ask_product_code(question_key), currency)
+    if row is None:
+        return None
+    return ProductPriceInfo(row.currency, row.amount, row.discount_percent)
+
+
+async def register_ask_payment(
+    session: AsyncSession,
+    *,
+    user: User,
+    question_key: str,
+    provider_charge_id: str,
+    amount: int,
+    currency: str,
+) -> Payment | None:
+    """Записать оплату ответа; None — этот charge_id уже обработан (дубль)."""
+    provider = PaymentProvider.TELEGRAM_STARS
+    existing = await payments_crud.get_payment_by_charge(session, provider, provider_charge_id)
+    if existing is not None:
+        log.warning(Event.PAYMENT_DUPLICATE, user_id=user.id, charge_id=provider_charge_id)
+        return None
+
+    price = await get_ask_price(session, question_key, currency)
+    if price is not None and price.final_amount == amount:
+        base_amount, discount_percent = price.base_amount, price.discount_percent
+    else:
+        base_amount, discount_percent = amount, 0
+
+    product_code = ask_product_code(question_key)
+    payment = await payments_crud.create_payment(
+        session,
+        user_id=user.id,
+        product_code=product_code,
+        reading_id=None,  # ответы «Спроси Астрид» живут в своей таблице
+        currency=currency,
+        amount=amount,
+        base_amount=base_amount,
+        discount_percent=discount_percent,
+        provider=provider,
+        provider_charge_id=provider_charge_id,
+    )
+    log.info(
+        Event.PAYMENT_COMPLETED,
+        user_id=user.id,
+        payment_id=payment.id,
+        product_code=product_code,
+        amount=amount,
+        currency=currency,
+    )
+    return payment
 
 
 async def register_wheel_spin_payment(

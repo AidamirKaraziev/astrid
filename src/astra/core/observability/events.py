@@ -84,6 +84,14 @@ class Event(StrEnum):
     TAROT_READING_FAILED = "tarot_reading.failed"
     TAROT_READING_FREE_GRANTED = "tarot_reading.free_granted"
 
+    # Спроси Астрид (ответы по натальной карте)
+    ASK_ANSWER_CREATED = "ask_answer.created"
+    ASK_ANSWER_COMPUTED = "ask_answer.computed"
+    ASK_ANSWER_GENERATED = "ask_answer.generated"
+    ASK_ANSWER_SENT = "ask_answer.sent"
+    ASK_ANSWER_FAILED = "ask_answer.failed"
+    ASK_ANSWER_FROM_ARCHIVE = "ask_answer.from_archive"
+
     # Колесо фортуны
     WHEEL_SPIN = "wheel.spin"
     WHEEL_POOL_EMPTY = "wheel.pool_empty"

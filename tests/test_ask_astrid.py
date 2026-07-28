@@ -1,6 +1,7 @@
 """Раздел «Спроси Астрид»: верхний уровень — темы вопросов."""
 
-from unittest.mock import AsyncMock, MagicMock
+from types import SimpleNamespace
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from aiogram.fsm.context import FSMContext
@@ -15,11 +16,13 @@ from astra.telegram.button_texts import (
     CB_ASK_CLOSE,
     CB_ASK_HOME,
     CB_ASK_OWN,
+    CB_ASK_QUESTION_PREFIX,
     CB_ASK_TOPIC_PREFIX,
 )
 from astra.telegram.handlers import ask_astrid
 from astra.telegram.keyboard_policy import MAIN_MENU_BUTTONS
-from astra.telegram.keyboards import ask_astrid_keyboard, main_menu_keyboard
+from astra.telegram.keyboards import ask_astrid_keyboard, ask_questions_keyboard, main_menu_keyboard
+from astra.users.gender import GENDER_FEMALE, GENDER_MALE
 
 
 async def _fsm() -> FSMContext:
@@ -30,11 +33,25 @@ def _callback(data: str | None = None) -> MagicMock:
     callback = MagicMock(spec=CallbackQuery)
     callback.answer = AsyncMock()
     callback.data = data
+    callback.from_user = SimpleNamespace(id=777)
     callback.message = MagicMock(spec=Message)
     callback.message.edit_text = AsyncMock()
     callback.message.answer = AsyncMock()
     callback.message.delete = AsyncMock()
     return callback
+
+
+def _user(gender: str | None) -> SimpleNamespace:
+    return SimpleNamespace(profile=SimpleNamespace(gender=gender))
+
+
+def _with_user(gender: str | None = None):
+    """Подменяем загрузку пользователя: род в подписях берётся из профиля."""
+    return patch.object(
+        ask_astrid.users_crud,
+        "get_user_by_telegram_id",
+        AsyncMock(return_value=_user(gender)),
+    )
 
 
 # ─────────────────────────── клавиатуры ───────────────────────────
@@ -87,35 +104,42 @@ async def test_menu_button_opens_hub_and_clears_state() -> None:
 
 
 @pytest.mark.asyncio
-async def test_topic_says_questions_are_coming() -> None:
-    callback = _callback(f"{CB_ASK_TOPIC_PREFIX}{A.ASK_TOPIC_LOVE}")
+async def test_topic_without_questions_says_they_are_coming() -> None:
+    callback = _callback(f"{CB_ASK_TOPIC_PREFIX}{A.ASK_TOPIC_NOW}")
 
-    await ask_astrid.cb_ask_topic(callback)
+    with _with_user():
+        await ask_astrid.cb_ask_topic(callback, MagicMock())
 
     text = callback.message.edit_text.await_args.args[0]
-    assert A.ASK_TOPIC_LABELS[A.ASK_TOPIC_LOVE] in text
+    assert A.ASK_TOPIC_LABELS[A.ASK_TOPIC_NOW] in text
     assert "скоро" in text.lower()
+    markup = callback.message.edit_text.await_args.kwargs["reply_markup"]
+    assert markup.inline_keyboard[0][0].callback_data == CB_ASK_HOME
 
 
 @pytest.mark.asyncio
 async def test_unknown_topic_is_ignored() -> None:
     callback = _callback(f"{CB_ASK_TOPIC_PREFIX}unknown")
 
-    await ask_astrid.cb_ask_topic(callback)
+    with _with_user():
+        await ask_astrid.cb_ask_topic(callback, MagicMock())
 
     callback.message.edit_text.assert_not_awaited()
 
 
 @pytest.mark.asyncio
-async def test_topic_screen_returns_to_topics() -> None:
-    callback = _callback(f"{CB_ASK_TOPIC_PREFIX}{A.ASK_TOPIC_NOW}")
-    await ask_astrid.cb_ask_topic(callback)
-    markup = callback.message.edit_text.await_args.kwargs["reply_markup"]
-    assert markup.inline_keyboard[0][0].callback_data == CB_ASK_HOME
+async def test_love_topic_shows_its_questions() -> None:
+    callback = _callback(f"{CB_ASK_TOPIC_PREFIX}{A.ASK_TOPIC_LOVE}")
 
-    back = _callback(CB_ASK_HOME)
-    await ask_astrid.cb_ask_home(back)
-    assert back.message.edit_text.await_args.args[0] == A.ASK_HUB_TEXT
+    with _with_user(GENDER_FEMALE):
+        await ask_astrid.cb_ask_topic(callback, MagicMock())
+
+    text = callback.message.edit_text.await_args.args[0]
+    assert A.ASK_TOPIC_LABELS[A.ASK_TOPIC_LOVE] in text
+    rows = callback.message.edit_text.await_args.kwargs["reply_markup"].inline_keyboard
+    data = [btn.callback_data for row in rows for btn in row]
+    assert data[:12] == [f"{CB_ASK_QUESTION_PREFIX}{q.key}" for q in A.ASK_QUESTIONS[A.ASK_TOPIC_LOVE]]
+    assert data[-2:] == [CB_ASK_OWN, CB_ASK_HOME]
 
 
 @pytest.mark.asyncio
@@ -123,9 +147,96 @@ async def test_topic_falls_back_to_new_message_when_edit_fails() -> None:
     callback = _callback(f"{CB_ASK_TOPIC_PREFIX}{A.ASK_TOPIC_MONEY}")
     callback.message.edit_text = AsyncMock(side_effect=Exception("message has photo"))
 
-    await ask_astrid.cb_ask_topic(callback)
+    with _with_user():
+        await ask_astrid.cb_ask_topic(callback, MagicMock())
 
     assert A.ASK_TOPIC_LABELS[A.ASK_TOPIC_MONEY] in callback.message.answer.await_args.args[0]
+
+
+@pytest.mark.asyncio
+async def test_home_returns_to_topics() -> None:
+    back = _callback(CB_ASK_HOME)
+
+    await ask_astrid.cb_ask_home(back)
+
+    assert back.message.edit_text.await_args.args[0] == A.ASK_HUB_TEXT
+
+
+# ─────────────────────────── вопросы темы ───────────────────────────
+
+
+def test_love_topic_has_twelve_questions_with_question_marks() -> None:
+    questions = A.ASK_QUESTIONS[A.ASK_TOPIC_LOVE]
+    assert len(questions) == 12
+    assert all(q.label.endswith("?") for q in questions)
+    assert len({q.key for q in questions}) == 12
+
+
+def test_question_labels_fit_telegram_button() -> None:
+    for question in A.ASK_QUESTION_BY_KEY.values():
+        rendered = A.render_question(question.label, GENDER_FEMALE)
+        assert len(rendered) <= 40, rendered
+
+
+def test_gender_is_substituted_in_labels() -> None:
+    single = A.ASK_QUESTION_BY_KEY["love_why_single"].label
+    assert A.render_question(single, GENDER_FEMALE) == "Почему я до сих пор одна?"
+    assert A.render_question(single, GENDER_MALE) == "Почему я до сих пор один?"
+    assert A.render_question(single, None) == "Почему я до сих пор не в паре?"
+
+    sabotage = A.ASK_QUESTION_BY_KEY["love_self_sabotage"].label
+    assert A.render_question(sabotage, GENDER_FEMALE) == "Как я сама рушу близость?"
+    assert A.render_question(sabotage, GENDER_MALE) == "Как я сам рушу близость?"
+    # Пол не задан — форма выпадает целиком, лишний пробел не остаётся.
+    assert A.render_question(sabotage, None) == "Как я рушу близость?"
+
+
+def test_keyboard_renders_gender_of_the_user() -> None:
+    labels = [
+        btn.text
+        for row in ask_questions_keyboard(A.ASK_TOPIC_LOVE, GENDER_MALE).inline_keyboard
+        for btn in row
+    ]
+    assert "Почему я до сих пор один?" in labels
+
+
+@pytest.mark.asyncio
+async def test_question_says_answer_is_coming_and_returns_to_its_topic() -> None:
+    callback = _callback(f"{CB_ASK_QUESTION_PREFIX}love_marriage")
+
+    with _with_user(GENDER_FEMALE):
+        await ask_astrid.cb_ask_question(callback, await _fsm(), MagicMock())
+
+    text = callback.message.edit_text.await_args.args[0]
+    assert "Ждёт ли меня брак?" in text
+    assert "скоро" in text.lower()
+    markup = callback.message.edit_text.await_args.kwargs["reply_markup"]
+    back = markup.inline_keyboard[0][0].callback_data
+    assert back == f"{CB_ASK_TOPIC_PREFIX}{A.ASK_TOPIC_LOVE}"
+
+
+@pytest.mark.asyncio
+async def test_unknown_question_is_ignored() -> None:
+    callback = _callback(f"{CB_ASK_QUESTION_PREFIX}nope")
+
+    with _with_user():
+        await ask_astrid.cb_ask_question(callback, await _fsm(), MagicMock())
+
+    callback.message.edit_text.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_question_without_profile_uses_neutral_form() -> None:
+    callback = _callback(f"{CB_ASK_QUESTION_PREFIX}love_why_single")
+
+    with patch.object(
+        ask_astrid.users_crud,
+        "get_user_by_telegram_id",
+        AsyncMock(return_value=None),
+    ):
+        await ask_astrid.cb_ask_question(callback, await _fsm(), MagicMock())
+
+    assert "Почему я до сих пор не в паре?" in callback.message.edit_text.await_args.args[0]
 
 
 # ─────────────────────────── свой вопрос и закрытие ───────────────────────────

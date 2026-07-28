@@ -1,28 +1,79 @@
 """Раздел «Спроси Астрид»: готовые вопросы к своей карте.
 
-Сейчас реализован только верхний уровень — список тем. Нажатие на тему и на
-«свой вопрос» честно говорит, что вопросы внутри ещё готовятся: экран уже
-живой, но ничего не обещает лишнего.
+Два уровня: темы → вопросы темы. Наполнена пока одна тема («Любовь,
+отношения, брак»), остальные честно говорят, что вопросы готовятся.
+Сам ответ по карте и оплата придут отдельно — вопрос ведёт на заглушку.
 
 Навигация инлайновая (callback), а не Reply-кнопками: следующий уровень —
-вопросы и оплата — ляжет тем же механизмом, без коллизий со свободным текстом.
+оплата и ответ — ляжет тем же механизмом, без коллизий со свободным текстом.
 """
 
 from __future__ import annotations
 
 from aiogram import F, Router
 from aiogram.fsm.context import FSMContext
-from aiogram.types import CallbackQuery, InlineKeyboardMarkup, Message
+from aiogram.types import (
+    BufferedInputFile,
+    CallbackQuery,
+    InlineKeyboardMarkup,
+    LabeledPrice,
+    Message,
+    PreCheckoutQuery,
+)
+from sqlalchemy.ext.asyncio import AsyncSession
 
+from astra.ask import models as ask_crud
+from astra.ask.card import render_fated_partners_card
+from astra.ask.enums import AskStatus
+from astra.core.observability import Event, get_logger
+from astra.llm.prompts.ask.fated_partners import card_caption
+from astra.messaging.publisher import publish_ask_answer_generate
+from astra.payments.service import (
+    ASK_PAYLOAD_PREFIX,
+    ask_invoice_payload,
+    get_ask_price,
+    parse_ask_invoice_payload,
+    register_ask_payment,
+)
+from astra.services.ask_service import (
+    ASK_FAILED_REFUNDED_TEXT,
+    QUESTION_FATED_COUNT,
+    compute_for_reading,
+    result_from_reading,
+)
 from astra.telegram import ask_text as A
+from astra.telegram.ask_keyboards import (
+    ask_answer_keyboard,
+    ask_archive_keyboard,
+    ask_gate_keyboard,
+    ask_status_keyboard,
+)
 from astra.telegram.button_texts import (
     BTN_ASK_ASTRID,
+    CB_ASK_ANSWER_ARCHIVE,
     CB_ASK_CLOSE,
+    CB_ASK_COMPAT_CROSSSELL,
+    CB_ASK_GATE_SKIP,
+    CB_ASK_GATE_TIME,
     CB_ASK_HOME,
     CB_ASK_OWN,
+    CB_ASK_QUESTION_PREFIX,
+    CB_ASK_STATUS_FREE,
+    CB_ASK_STATUS_TAKEN,
     CB_ASK_TOPIC_PREFIX,
+    COMING_SOON_TEXT,
 )
-from astra.telegram.keyboards import ask_astrid_keyboard, ask_topic_keyboard
+from astra.telegram.keyboards import (
+    ask_astrid_keyboard,
+    ask_back_keyboard,
+    ask_questions_keyboard,
+)
+from astra.telegram.states import ProfileStates
+from astra.users import crud as users_crud
+from astra.users.gender import Gender
+from astra.users.models import User
+
+log = get_logger(__name__)
 
 router = Router(name="ask_astrid")
 
@@ -30,6 +81,20 @@ router = Router(name="ask_astrid")
 async def open_ask_hub(message: Message) -> None:
     """Открыть раздел новым сообщением (из кнопки меню)."""
     await message.answer(A.ASK_HUB_TEXT, reply_markup=ask_astrid_keyboard())
+
+
+async def _current_user(callback: CallbackQuery, session: AsyncSession) -> User | None:
+    if callback.from_user is None:
+        return None
+    return await users_crud.get_user_by_telegram_id(session, callback.from_user.id)
+
+
+async def _user_gender(callback: CallbackQuery, session: AsyncSession) -> Gender | None:
+    """Пол из профиля: нужен для рода в подписях («одна» / «один»)."""
+    user = await _current_user(callback, session)
+    if user is None or user.profile is None:
+        return None
+    return user.profile.gender
 
 
 async def _edit_or_answer(
@@ -61,20 +126,264 @@ async def cb_ask_home(callback: CallbackQuery) -> None:
 
 
 @router.callback_query(F.data.startswith(CB_ASK_TOPIC_PREFIX))
-async def cb_ask_topic(callback: CallbackQuery) -> None:
+async def cb_ask_topic(callback: CallbackQuery, session: AsyncSession) -> None:
     await callback.answer()
     key = (callback.data or "").removeprefix(CB_ASK_TOPIC_PREFIX)
     label = A.ASK_TOPIC_LABELS.get(key)
     if label is None:
         return
-    text = A.ASK_TOPIC_SOON_TEXT.format(label=f"<b>{label}</b>")
-    await _edit_or_answer(callback, text, ask_topic_keyboard())
+
+    if key not in A.ASK_QUESTIONS:
+        text = A.ASK_TOPIC_SOON_TEXT.format(label=f"<b>{label}</b>")
+        await _edit_or_answer(callback, text, ask_back_keyboard())
+        return
+
+    gender = await _user_gender(callback, session)
+    text = A.ASK_TOPIC_INTRO_TEXT.format(label=f"<b>{label}</b>")
+    await _edit_or_answer(callback, text, ask_questions_keyboard(key, gender))
+
+
+@router.callback_query(F.data.startswith(CB_ASK_QUESTION_PREFIX))
+async def cb_ask_question(callback: CallbackQuery, state: FSMContext, session: AsyncSession) -> None:
+    await callback.answer()
+    key = (callback.data or "").removeprefix(CB_ASK_QUESTION_PREFIX)
+    question = A.ASK_QUESTION_BY_KEY.get(key)
+    if question is None:
+        return
+
+    # Готовые продукты уходят в покупку, остальные вопросы — на честную заглушку.
+    if key == QUESTION_FATED_COUNT:
+        await _start_paid_question(callback, state, session, question_key=key)
+        return
+
+    gender = await _user_gender(callback, session)
+    text = A.ASK_QUESTION_SOON_TEXT.format(
+        question=f"<b>{A.render_question(question.label, gender)}</b>",
+    )
+    topic = A.ASK_QUESTION_TOPIC[key]
+    await _edit_or_answer(callback, text, ask_back_keyboard(f"{CB_ASK_TOPIC_PREFIX}{topic}"))
+
+
+async def _start_paid_question(
+    callback: CallbackQuery,
+    state: FSMContext,
+    session: AsyncSession,
+    *,
+    question_key: str,
+) -> None:
+    """Купленный ответ из архива, иначе — экран уточнения времени рождения."""
+    user = await _current_user(callback, session)
+    if user is None or user.profile is None or user.profile.birth_date is None:
+        await _edit_or_answer(callback, A.ASK_NEED_PROFILE_TEXT, ask_back_keyboard())
+        return
+
+    archived = await ask_crud.get_ready_reading(
+        session,
+        user_id=user.id,
+        question_key=question_key,
+    )
+    if archived is not None:
+        log.info(Event.ASK_ANSWER_FROM_ARCHIVE, reading_id=archived.id, user_id=user.id)
+        await _edit_or_answer(callback, A.ASK_ARCHIVE_TEXT, ask_archive_keyboard())
+        return
+
+    await state.update_data(ask_question_key=question_key)
+    if user.profile.birth_time is None:
+        await _edit_or_answer(callback, A.ASK_GATE_TIME_TEXT, ask_gate_keyboard())
+        return
+    await _edit_or_answer(callback, A.ASK_STATUS_TEXT, ask_status_keyboard())
+
+
+@router.callback_query(F.data == CB_ASK_GATE_TIME)
+async def cb_ask_gate_time(callback: CallbackQuery, state: FSMContext) -> None:
+    """Человек согласился вписать время — отдаём его в обычный флоу профиля."""
+    await callback.answer()
+    await state.set_state(ProfileStates.edit_birth_time)
+    msg = callback.message
+    if isinstance(msg, Message):
+        await msg.answer(
+            "Введи время рождения в формате ЧЧ:ММ (например 14:30) — "
+            "и возвращайся к вопросу, посчитаю точнее ✨",
+        )
+
+
+@router.callback_query(F.data == CB_ASK_GATE_SKIP)
+async def cb_ask_gate_skip(callback: CallbackQuery) -> None:
+    await callback.answer()
+    await _edit_or_answer(callback, A.ASK_STATUS_TEXT, ask_status_keyboard())
+
+
+@router.callback_query(F.data.in_({CB_ASK_STATUS_TAKEN, CB_ASK_STATUS_FREE}))
+async def cb_ask_status(callback: CallbackQuery, state: FSMContext, session: AsyncSession) -> None:
+    """Статус получен: создаём черновик и выставляем инвойс."""
+    await callback.answer()
+    msg = callback.message
+    user = await _current_user(callback, session)
+    if not isinstance(msg, Message) or user is None:
+        return
+
+    data = await state.get_data()
+    question_key = data.get("ask_question_key", QUESTION_FATED_COUNT)
+    in_relationship = callback.data == CB_ASK_STATUS_TAKEN
+
+    price = await get_ask_price(session, question_key)
+    if price is None:
+        await msg.answer(COMING_SOON_TEXT)
+        return
+
+    reading = await ask_crud.create_draft(
+        session,
+        user_id=user.id,
+        question_key=question_key,
+        in_relationship=in_relationship,
+    )
+    await session.commit()
+    log.info(Event.ASK_ANSWER_CREATED, reading_id=reading.id, user_id=user.id)
+
+    await msg.answer_invoice(
+        title=A.ASK_INVOICE_TITLE[:32],
+        description=A.ASK_INVOICE_DESCRIPTION,
+        payload=ask_invoice_payload(reading.id),
+        currency=price.currency,
+        prices=[LabeledPrice(label=A.ASK_INVOICE_TITLE, amount=price.final_amount)],
+    )
+
+
+@router.pre_checkout_query(F.invoice_payload.startswith(ASK_PAYLOAD_PREFIX))
+async def ask_pre_checkout(query: PreCheckoutQuery, session: AsyncSession) -> None:
+    reading_id = parse_ask_invoice_payload(query.invoice_payload)
+    reading = await ask_crud.get_reading(session, reading_id) if reading_id else None
+    if reading is None or reading.status != AskStatus.PENDING_PAYMENT:
+        await query.answer(ok=False, error_message="Платёж устарел — начни заново ✨")
+        log.warning(Event.PAYMENT_PRE_CHECKOUT_REJECTED, reason="draft_missing_or_paid")
+        return
+    await query.answer(ok=True)
+
+
+@router.message(F.successful_payment.invoice_payload.startswith(ASK_PAYLOAD_PREFIX))
+async def ask_paid(message: Message, session: AsyncSession) -> None:
+    """Оплата прошла: считаем числа, отдаём карточку, разбор пишет worker."""
+    payment_info = message.successful_payment
+    if payment_info is None or message.from_user is None:
+        return
+    reading_id = parse_ask_invoice_payload(payment_info.invoice_payload)
+    if reading_id is None:
+        return
+
+    charge_id = payment_info.telegram_payment_charge_id
+    user = await users_crud.get_user_by_telegram_id(session, message.from_user.id)
+    reading = await ask_crud.get_reading(session, reading_id) if user else None
+    if user is None or reading is None or reading.user_id != user.id:
+        # Списали, а начислить не на что — сразу возвращаем звёзды.
+        log.error(Event.PAYMENT_ORPHAN, reading_id=reading_id, charge_id=charge_id)
+        if message.bot is not None:
+            await message.bot.refund_star_payment(
+                user_id=message.from_user.id,
+                telegram_payment_charge_id=charge_id,
+            )
+        return
+
+    payment = await register_ask_payment(
+        session,
+        user=user,
+        question_key=reading.question_key,
+        provider_charge_id=charge_id,
+        amount=payment_info.total_amount,
+        currency=payment_info.currency,
+    )
+    if payment is None:
+        return  # дубль successful_payment
+
+    await message.answer(A.ASK_TEASER_TEXT)
+    await message.chat.do("typing")
+
+    result = await compute_for_reading(session, reading, user)
+    if result is None:
+        await session.rollback()
+        if message.bot is not None:
+            await message.bot.refund_star_payment(
+                user_id=message.from_user.id,
+                telegram_payment_charge_id=charge_id,
+            )
+        await message.answer(ASK_FAILED_REFUNDED_TEXT)
+        return
+
+    await ask_crud.mark_paid(
+        session,
+        reading,
+        amount=payment_info.total_amount,
+        charge_id=charge_id,
+        computed=result.model_dump(mode="json"),
+        methodology_version=result.methodology_version,
+    )
+    await session.commit()  # сначала commit, потом publish — worker должен видеть строку
+
+    await _send_card(message, session, reading, result)
+    await message.answer(A.ASK_ANSWER_COMING_TEXT)
+    await publish_ask_answer_generate(reading.id)
+
+
+async def _send_card(
+    message: Message,
+    session: AsyncSession,
+    reading,
+    result,
+) -> None:
+    """Карточка с числом уходит сразу — она же закрывает паузу ожидания разбора."""
+    try:
+        photo = BufferedInputFile(
+            render_fated_partners_card(result),
+            filename="astrid.png",
+        )
+        sent = await message.answer_photo(photo, caption=card_caption(result))
+        if sent.photo:
+            await ask_crud.save_card_file_id(session, reading, sent.photo[-1].file_id)
+            await session.commit()
+    except Exception:
+        # Картинка — украшение; если не собралась, ответ всё равно придёт текстом.
+        log.exception("ask.card_failed")
+        await message.answer(card_caption(result))
+
+
+@router.callback_query(F.data == CB_ASK_ANSWER_ARCHIVE)
+async def cb_ask_archive(callback: CallbackQuery, session: AsyncSession) -> None:
+    """Бесплатная повторная выдача купленного ответа."""
+    await callback.answer()
+    msg = callback.message
+    user = await _current_user(callback, session)
+    if not isinstance(msg, Message) or user is None:
+        return
+    reading = await ask_crud.get_ready_reading(
+        session,
+        user_id=user.id,
+        question_key=QUESTION_FATED_COUNT,
+    )
+    if reading is None or not reading.answer:
+        await msg.answer(COMING_SOON_TEXT)
+        return
+
+    result = result_from_reading(reading)
+    if reading.card_file_id and result is not None:
+        await msg.answer_photo(reading.card_file_id, caption=card_caption(result))
+    referral_code = user.referral_code.code if user.referral_code else None
+    await msg.answer(
+        reading.answer.get("html", ""),
+        reply_markup=ask_answer_keyboard(reading, referral_code=referral_code),
+    )
+
+
+@router.callback_query(F.data == CB_ASK_COMPAT_CROSSSELL)
+async def cb_ask_compat_crosssell(callback: CallbackQuery) -> None:
+    await callback.answer()
+    msg = callback.message
+    if isinstance(msg, Message):
+        await msg.answer(A.ASK_COMPAT_CROSSSELL_TEXT)
 
 
 @router.callback_query(F.data == CB_ASK_OWN)
 async def cb_ask_own(callback: CallbackQuery) -> None:
     await callback.answer()
-    await _edit_or_answer(callback, A.ASK_OWN_SOON_TEXT, ask_topic_keyboard())
+    await _edit_or_answer(callback, A.ASK_OWN_SOON_TEXT, ask_back_keyboard())
 
 
 @router.callback_query(F.data == CB_ASK_CLOSE)

@@ -10,6 +10,11 @@
 
 from __future__ import annotations
 
+import re
+from typing import NamedTuple
+
+from astra.users.gender import GENDER_FEMALE, GENDER_MALE, Gender
+
 ASK_TOPIC_LOVE = "love"
 ASK_TOPIC_MONEY = "money"
 ASK_TOPIC_PATH = "path"
@@ -44,10 +49,62 @@ ASK_HUB_TEXT = (
     "Выбери тему:"
 )
 
-# Вопросы внутри тем ещё не открыты — говорим об этом честно, без «скоро будет всё».
+ASK_TOPIC_INTRO_TEXT = "{label}\n\nВыбери вопрос — или просто напиши свой:"
+
+# Темы без своих вопросов: говорим честно, без «скоро будет всё».
 ASK_TOPIC_SOON_TEXT = (
     "{label}\n\n"
     "Вопросы по этой теме уже готовлю — открою здесь совсем скоро ✨"
+)
+
+ASK_QUESTION_SOON_TEXT = (
+    "{question}\n\n"
+    "Ответ по твоей карте уже собираю — открою здесь совсем скоро ✨"
+)
+
+# ─────────── «Сколько судьбоносных партнёров?»: экраны покупки ───────────
+
+ASK_NEED_PROFILE_TEXT = (
+    "Чтобы ответить по твоей карте, мне нужна дата и место рождения. "
+    "Загляни в «✨ Обо мне» — там пара шагов, и я всё посчитаю."
+)
+
+ASK_GATE_TIME_TEXT = (
+    "🕐 <b>Время рождения</b>\n\n"
+    "Со временем рождения я вижу седьмой дом — это про партнёрство, "
+    "и именно он отвечает на такой вопрос точнее всего.\n\n"
+    "Без времени тоже отвечу — по Венере и её аспектам, — но без домов "
+    "и без точных сроков."
+)
+
+ASK_STATUS_TEXT = (
+    "Один вопрос перед ответом — от него зависит, как читать твою карту.\n\n"
+    "<b>Сейчас ты в отношениях?</b>\n\n"
+    "<i>Сколько их уже было — не спрашиваю. Это я и посчитаю.</i>"
+)
+
+ASK_INVOICE_TITLE = "Сколько судьбоносных партнёров"
+ASK_INVOICE_DESCRIPTION = (
+    "Разбор по твоей натальной карте: сколько судьбоносных союзов показывает "
+    "карта, сколько уже было и сколько впереди, какими они будут и как их узнать."
+)
+
+ASK_TEASER_TEXT = (
+    "Смотрю твой седьмой дом, его управителя и Венеру — считаю, "
+    "сколько по-настоящему поворотных историй в твоей карте ✨"
+)
+
+ASK_ANSWER_COMING_TEXT = "Собираю разбор — он придёт следующим сообщением 💜"
+
+ASK_ARCHIVE_TEXT = (
+    "📖 <b>Твой ответ уже готов</b>\n\n"
+    "Карта одна — значит и ответ один. Он сохранён и открывается бесплатно, "
+    "сколько угодно раз."
+)
+
+ASK_COMPAT_CROSSSELL_TEXT = (
+    "Про конкретного человека я отвечу по вашим двум картам — это раздел "
+    "«💕 Совместимость» в меню. Там нужна его дата рождения."
 )
 
 ASK_OWN_SOON_TEXT = (
@@ -55,3 +112,61 @@ ASK_OWN_SOON_TEXT = (
     "Скоро можно будет спросить своими словами — и я отвечу по твоей карте. "
     "Ещё немного 💜"
 )
+
+
+class AskQuestion(NamedTuple):
+    """Вопрос внутри темы: ключ для callback + подпись кнопки.
+
+    В подписи допустима форма рода `{женская|мужская|нейтральная}` — её
+    раскрывает `render_question()` по полу из профиля. Нейтральная форма может
+    быть пустой: лишние пробелы схлопываются.
+    """
+
+    key: str
+    label: str
+
+
+_GENDER_FORM_RE = re.compile(r"\{([^{}]*)\}")
+
+
+def render_question(label: str, gender: Gender | None) -> str:
+    """Подставить род в подпись вопроса: пол не задан — нейтральная форма."""
+
+    def _pick(match: re.Match[str]) -> str:
+        forms = match.group(1).split("|")
+        if gender == GENDER_FEMALE:
+            return forms[0]
+        if gender == GENDER_MALE:
+            return forms[1] if len(forms) > 1 else forms[0]
+        return forms[2] if len(forms) > 2 else forms[0]
+
+    return " ".join(_GENDER_FORM_RE.sub(_pick, label).split())
+
+
+# Вопросы темы. Формулировки утверждены отдельно: коротко, со знаком вопроса,
+# от первого лица. Остальные темы наполняются следующими заходами.
+ASK_QUESTIONS: dict[str, tuple[AskQuestion, ...]] = {
+    ASK_TOPIC_LOVE: (
+        AskQuestion("love_fated_count", "Сколько судьбоносных партнёров?"),
+        AskQuestion("love_kids", "Будут ли у меня дети?"),
+        AskQuestion("love_kids_bond", "Какими будут отношения с детьми?"),
+        AskQuestion("love_partner_traits", "Черты моего судьбоносного партнёра?"),
+        AskQuestion("love_pain_loop", "Почему я снова и снова обжигаюсь?"),
+        AskQuestion("love_where_meet", "Где меня ждёт судьбоносная встреча?"),
+        AskQuestion("love_already_near", "Мой человек уже есть в моей жизни?"),
+        AskQuestion("love_magnetism", "Как включить свой магнетизм?"),
+        AskQuestion("love_solitude_end", "Когда закончится моё одиночество?"),
+        AskQuestion("love_marriage", "Ждёт ли меня брак?"),
+        AskQuestion("love_why_single", "Почему я до сих пор {одна|один|не в паре}?"),
+        AskQuestion("love_self_sabotage", "Как я {сама|сам|} рушу близость?"),
+    ),
+}
+
+ASK_QUESTION_BY_KEY: dict[str, AskQuestion] = {
+    question.key: question for questions in ASK_QUESTIONS.values() for question in questions
+}
+
+# Обратная связь вопрос → тема: нужна кнопке «Назад» с экрана вопроса.
+ASK_QUESTION_TOPIC: dict[str, str] = {
+    question.key: topic for topic, questions in ASK_QUESTIONS.items() for question in questions
+}

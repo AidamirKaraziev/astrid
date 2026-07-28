@@ -20,6 +20,7 @@ class TaskType(StrEnum):
     NATAL_SEND = "natal_report.send"
     TAROT_READING_GENERATE = "tarot_reading.generate"
     TAROT_READING_SEND = "tarot_reading.send"
+    ASK_ANSWER_GENERATE = "ask_answer.generate"
 
 
 class TaskMessage(BaseModel):
