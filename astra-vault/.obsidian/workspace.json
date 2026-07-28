@@ -206,6 +206,7 @@
   },
   "active": "17f53c534db05e46",
   "lastOpenFiles": [
+    "knowledge/decisions/в разделе Спроси Астрид утверждаются только название стиль содержание и посыл.md",
     "sessions/2026-07-28 раздел Спроси Астрид и продукт про судьбоносных партнёров.md",
     "knowledge/decisions/раздел Спроси Астрид два уровня и товар на каждый вопрос.md",
     "knowledge/decisions/сколько судьбоносных партнёров считает Python а объясняет LLM.md",
@@ -234,7 +235,6 @@
     "knowledge/decisions/таро расклады структурированный JSON и промпт на продукт.md",
     "sessions/2026-07-18 таро-расклады JSON на продукт и Три карты Сердце-Скрытое-Исход.md",
     "knowledge/decisions/таро гибридный пайплайн карты мгновенно интерпретация из worker.md",
-    "knowledge/decisions/AI-чат Astrid через structured output и роутинг в FSM.md",
-    "knowledge/debugging/deadtiger после ребута сам поднимается через несколько минут не паниковать.md"
+    "knowledge/decisions/AI-чат Astrid через structured output и роутинг в FSM.md"
   ]
 }
