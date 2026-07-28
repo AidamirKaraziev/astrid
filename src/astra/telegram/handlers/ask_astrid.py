@@ -23,10 +23,8 @@ from aiogram.types import (
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from astra.ask import models as ask_crud
-from astra.ask.card import render_fated_partners_card
 from astra.ask.enums import AskStatus
 from astra.core.observability import Event, get_logger
-from astra.llm.prompts.ask.fated_partners import card_caption
 from astra.messaging.publisher import publish_ask_answer_generate
 from astra.payments.service import (
     ASK_PAYLOAD_PREFIX,
@@ -35,10 +33,10 @@ from astra.payments.service import (
     parse_ask_invoice_payload,
     register_ask_payment,
 )
+from astra.ask.products import get_product, is_ready
 from astra.services.ask_service import (
     ASK_FAILED_REFUNDED_TEXT,
     ASK_FAILED_TEXT,
-    QUESTION_FATED_COUNT,
     compute_for_reading,
     result_from_reading,
 )
@@ -51,7 +49,8 @@ from astra.telegram.ask_keyboards import (
 )
 from astra.telegram.button_texts import (
     BTN_ASK_ASTRID,
-    CB_ASK_ANSWER_ARCHIVE,
+    CB_ASK_ARCHIVE_PREFIX,
+    CB_ASK_CALIB_PREFIX,
     CB_ASK_CLOSE,
     CB_ASK_COMPAT_CROSSSELL,
     CB_ASK_GATE_SKIP,
@@ -59,8 +58,6 @@ from astra.telegram.button_texts import (
     CB_ASK_HOME,
     CB_ASK_OWN,
     CB_ASK_QUESTION_PREFIX,
-    CB_ASK_STATUS_FREE,
-    CB_ASK_STATUS_TAKEN,
     CB_ASK_TOPIC_PREFIX,
     COMING_SOON_TEXT,
 )
@@ -153,7 +150,7 @@ async def cb_ask_question(callback: CallbackQuery, state: FSMContext, session: A
         return
 
     # Готовые продукты уходят в покупку, остальные вопросы — на честную заглушку.
-    if key == QUESTION_FATED_COUNT:
+    if is_ready(key):
         await _start_paid_question(callback, state, session, question_key=key)
         return
 
@@ -185,14 +182,21 @@ async def _start_paid_question(
     )
     if archived is not None:
         log.info(Event.ASK_ANSWER_FROM_ARCHIVE, reading_id=archived.id, user_id=user.id)
-        await _edit_or_answer(callback, A.ASK_ARCHIVE_TEXT, ask_archive_keyboard())
+        await _edit_or_answer(
+            callback,
+            A.ASK_ARCHIVE_TEXT,
+            ask_archive_keyboard(question_key),
+        )
         return
 
+    product = get_product(question_key)
+    if product is None:
+        return
     await state.update_data(ask_question_key=question_key)
     if user.profile.birth_time is None:
         await _edit_or_answer(callback, A.ASK_GATE_TIME_TEXT, ask_gate_keyboard())
         return
-    await _edit_or_answer(callback, A.ASK_STATUS_TEXT, ask_status_keyboard())
+    await _edit_or_answer(callback, product.calibration_text, ask_status_keyboard(product))
 
 
 @router.callback_query(F.data == CB_ASK_GATE_TIME)
@@ -209,23 +213,32 @@ async def cb_ask_gate_time(callback: CallbackQuery, state: FSMContext) -> None:
 
 
 @router.callback_query(F.data == CB_ASK_GATE_SKIP)
-async def cb_ask_gate_skip(callback: CallbackQuery) -> None:
+async def cb_ask_gate_skip(callback: CallbackQuery, state: FSMContext) -> None:
     await callback.answer()
-    await _edit_or_answer(callback, A.ASK_STATUS_TEXT, ask_status_keyboard())
+    data = await state.get_data()
+    product = get_product(data.get("ask_question_key", ""))
+    if product is None:
+        await _edit_or_answer(callback, A.ASK_HUB_TEXT, ask_astrid_keyboard())
+        return
+    await _edit_or_answer(callback, product.calibration_text, ask_status_keyboard(product))
 
 
-@router.callback_query(F.data.in_({CB_ASK_STATUS_TAKEN, CB_ASK_STATUS_FREE}))
-async def cb_ask_status(callback: CallbackQuery, state: FSMContext, session: AsyncSession) -> None:
-    """Статус получен: создаём черновик и выставляем инвойс."""
+@router.callback_query(F.data.startswith(CB_ASK_CALIB_PREFIX))
+async def cb_ask_calibration(callback: CallbackQuery, session: AsyncSession) -> None:
+    """Ответ на калибрующий вопрос: создаём черновик и выставляем инвойс."""
     await callback.answer()
     msg = callback.message
     user = await _current_user(callback, session)
     if not isinstance(msg, Message) or user is None:
         return
 
-    data = await state.get_data()
-    question_key = data.get("ask_question_key", QUESTION_FATED_COUNT)
-    in_relationship = callback.data == CB_ASK_STATUS_TAKEN
+    payload = (callback.data or "").removeprefix(CB_ASK_CALIB_PREFIX)
+    question_key, _, answer = payload.rpartition(":")
+    product = get_product(question_key)
+    if product is None:
+        await msg.answer(COMING_SOON_TEXT)
+        return
+    calibration = answer == "yes"
 
     price = await get_ask_price(session, question_key)
     if price is None:
@@ -236,7 +249,8 @@ async def cb_ask_status(callback: CallbackQuery, state: FSMContext, session: Asy
         session,
         user_id=user.id,
         question_key=question_key,
-        in_relationship=in_relationship,
+        in_relationship=calibration,
+        context={product.calibration_field: calibration},
     )
     await session.commit()
     log.info(Event.ASK_ANSWER_CREATED, reading_id=reading.id, user_id=user.id)
@@ -249,11 +263,11 @@ async def cb_ask_status(callback: CallbackQuery, state: FSMContext, session: Asy
         return
 
     await msg.answer_invoice(
-        title=A.ASK_INVOICE_TITLE[:32],
-        description=A.ASK_INVOICE_DESCRIPTION,
+        title=product.invoice_title[:32],
+        description=product.invoice_description,
         payload=ask_invoice_payload(reading.id),
         currency=price.currency,
-        prices=[LabeledPrice(label=A.ASK_INVOICE_TITLE, amount=price.final_amount)],
+        prices=[LabeledPrice(label=product.invoice_title, amount=price.final_amount)],
     )
 
 
@@ -326,7 +340,10 @@ async def _fulfill_reading(
     Расчёт идёт синхронно — он быстрый; карточка уходит до разбора и закрывает
     паузу ожидания LLM. Если посчитать не удалось, звёзды возвращаются.
     """
-    await message.answer(A.ASK_TEASER_TEXT)
+    product = get_product(reading.question_key)
+    if product is None:
+        return
+    await message.answer(product.teaser)
     await message.chat.do("typing")
 
     result = await compute_for_reading(session, reading, user)
@@ -352,7 +369,7 @@ async def _fulfill_reading(
     )
     await session.commit()  # сначала commit, потом publish — worker должен видеть строку
 
-    await _send_card(message, session, reading, result)
+    await _send_card(message, session, reading, result, product)
     await message.answer(A.ASK_ANSWER_COMING_TEXT)
     await publish_ask_answer_generate(reading.id)
 
@@ -362,24 +379,26 @@ async def _send_card(
     session: AsyncSession,
     reading,
     result,
+    product,
 ) -> None:
-    """Карточка с числом уходит сразу — она же закрывает паузу ожидания разбора."""
+    """Карточка уходит сразу — она же закрывает паузу ожидания разбора."""
+    caption = product.prompt.card_caption(result)
+    if product.render_card is None:
+        await message.answer(caption)
+        return
     try:
-        photo = BufferedInputFile(
-            render_fated_partners_card(result),
-            filename="astrid.png",
-        )
-        sent = await message.answer_photo(photo, caption=card_caption(result))
+        photo = BufferedInputFile(product.render_card(result), filename="astrid.png")
+        sent = await message.answer_photo(photo, caption=caption)
         if sent.photo:
             await ask_crud.save_card_file_id(session, reading, sent.photo[-1].file_id)
             await session.commit()
     except Exception:
         # Картинка — украшение; если не собралась, ответ всё равно придёт текстом.
         log.exception("ask.card_failed")
-        await message.answer(card_caption(result))
+        await message.answer(caption)
 
 
-@router.callback_query(F.data == CB_ASK_ANSWER_ARCHIVE)
+@router.callback_query(F.data.startswith(CB_ASK_ARCHIVE_PREFIX))
 async def cb_ask_archive(callback: CallbackQuery, session: AsyncSession) -> None:
     """Бесплатная повторная выдача купленного ответа."""
     await callback.answer()
@@ -387,18 +406,23 @@ async def cb_ask_archive(callback: CallbackQuery, session: AsyncSession) -> None
     user = await _current_user(callback, session)
     if not isinstance(msg, Message) or user is None:
         return
+    question_key = (callback.data or "").removeprefix(CB_ASK_ARCHIVE_PREFIX)
     reading = await ask_crud.get_ready_reading(
         session,
         user_id=user.id,
-        question_key=QUESTION_FATED_COUNT,
+        question_key=question_key,
     )
-    if reading is None or not reading.answer:
+    product = get_product(question_key)
+    if reading is None or not reading.answer or product is None:
         await msg.answer(COMING_SOON_TEXT)
         return
 
     result = result_from_reading(reading)
     if reading.card_file_id and result is not None:
-        await msg.answer_photo(reading.card_file_id, caption=card_caption(result))
+        await msg.answer_photo(
+            reading.card_file_id,
+            caption=product.prompt.card_caption(result),
+        )
     referral_code = user.referral_code.code if user.referral_code else None
     await msg.answer(
         reading.answer.get("html", ""),

@@ -15,13 +15,16 @@ from astra.ask.card import render_fated_partners_card
 from astra.ask.schemas import FatedPartnersFactors, FatedPartnersResult
 from astra.llm.prompts.ask import fated_partners as product
 from astra.telegram.button_texts import (
-    CB_ASK_ANSWER_ARCHIVE,
+    CB_ASK_ARCHIVE_PREFIX,
+    CB_ASK_CALIB_PREFIX,
     CB_ASK_GATE_SKIP,
     CB_ASK_GATE_TIME,
     CB_ASK_QUESTION_PREFIX,
-    CB_ASK_STATUS_FREE,
-    CB_ASK_STATUS_TAKEN,
 )
+
+CALIB_YES = f"{CB_ASK_CALIB_PREFIX}{'love_fated_count'}:yes"
+CALIB_NO = f"{CB_ASK_CALIB_PREFIX}{'love_fated_count'}:no"
+from astra.ask.products import get_product
 from astra.telegram.handlers import ask_astrid
 from astra.telegram import ask_text as A
 
@@ -104,7 +107,8 @@ async def test_with_birth_time_goes_straight_to_status_question() -> None:
     with user_patch, archive_patch:
         await ask_astrid.cb_ask_question(callback, state, MagicMock())
 
-    assert callback.message.edit_text.await_args.args[0] == A.ASK_STATUS_TEXT
+    calibration = get_product(QUESTION).calibration_text
+    assert callback.message.edit_text.await_args.args[0] == calibration
     assert (await state.get_data())["ask_question_key"] == QUESTION
 
 
@@ -131,12 +135,12 @@ async def test_bought_answer_is_offered_from_archive_for_free() -> None:
     assert callback.message.edit_text.await_args.args[0] == A.ASK_ARCHIVE_TEXT
     markup = callback.message.edit_text.await_args.kwargs["reply_markup"]
     data = [btn.callback_data for row in markup.inline_keyboard for btn in row]
-    assert CB_ASK_ANSWER_ARCHIVE in data
+    assert f"{CB_ASK_ARCHIVE_PREFIX}{QUESTION}" in data
 
 
 @pytest.mark.asyncio
 async def test_status_answer_creates_draft_and_sends_invoice() -> None:
-    callback = _callback(CB_ASK_STATUS_TAKEN)
+    callback = _callback(CALIB_YES)
     user = _user(birth_time=datetime(1990, 3, 15, 14, 30))
     session = MagicMock()
     session.commit = AsyncMock()
@@ -148,7 +152,7 @@ async def test_status_answer_creates_draft_and_sends_invoice() -> None:
         patch.object(ask_astrid, "get_ask_price", AsyncMock(return_value=price)),
         patch.object(ask_astrid.ask_crud, "create_draft", AsyncMock(return_value=draft)) as create,
     ):
-        await ask_astrid.cb_ask_status(callback, await _fsm(), session)
+        await ask_astrid.cb_ask_calibration(callback, session)
 
     assert create.await_args.kwargs["in_relationship"] is True
     invoice = callback.message.answer_invoice.await_args.kwargs
@@ -159,7 +163,7 @@ async def test_status_answer_creates_draft_and_sends_invoice() -> None:
 @pytest.mark.asyncio
 async def test_hundred_percent_discount_skips_invoice_and_answers_at_once() -> None:
     """Скидка 100%: инвойс на 0 звёзд Telegram не примет — выдаём сразу."""
-    callback = _callback(CB_ASK_STATUS_TAKEN)
+    callback = _callback(CALIB_YES)
     session = MagicMock()
     session.commit = AsyncMock()
     free_price = SimpleNamespace(currency="XTR", final_amount=0, is_free=True)
@@ -178,7 +182,7 @@ async def test_hundred_percent_discount_skips_invoice_and_answers_at_once() -> N
         ),
         patch.object(ask_astrid, "_fulfill_reading", AsyncMock()) as fulfill,
     ):
-        await ask_astrid.cb_ask_status(callback, await _fsm(), session)
+        await ask_astrid.cb_ask_calibration(callback, session)
 
     callback.message.answer_invoice.assert_not_awaited()
     assert fulfill.await_args.kwargs == {"amount": 0, "charge_id": None}
@@ -186,7 +190,7 @@ async def test_hundred_percent_discount_skips_invoice_and_answers_at_once() -> N
 
 @pytest.mark.asyncio
 async def test_paid_price_still_sends_invoice() -> None:
-    callback = _callback(CB_ASK_STATUS_TAKEN)
+    callback = _callback(CALIB_YES)
     session = MagicMock()
     session.commit = AsyncMock()
     price = SimpleNamespace(currency="XTR", final_amount=1, is_free=False)
@@ -205,7 +209,7 @@ async def test_paid_price_still_sends_invoice() -> None:
         ),
         patch.object(ask_astrid, "_fulfill_reading", AsyncMock()) as fulfill,
     ):
-        await ask_astrid.cb_ask_status(callback, await _fsm(), session)
+        await ask_astrid.cb_ask_calibration(callback, session)
 
     callback.message.answer_invoice.assert_awaited_once()
     fulfill.assert_not_awaited()
@@ -213,7 +217,7 @@ async def test_paid_price_still_sends_invoice() -> None:
 
 @pytest.mark.asyncio
 async def test_free_status_is_recorded_as_not_in_relationship() -> None:
-    callback = _callback(CB_ASK_STATUS_FREE)
+    callback = _callback(CALIB_NO)
     session = MagicMock()
     session.commit = AsyncMock()
 
@@ -234,7 +238,7 @@ async def test_free_status_is_recorded_as_not_in_relationship() -> None:
             AsyncMock(return_value=SimpleNamespace(id=uuid4())),
         ) as create,
     ):
-        await ask_astrid.cb_ask_status(callback, await _fsm(), session)
+        await ask_astrid.cb_ask_calibration(callback, session)
 
     assert create.await_args.kwargs["in_relationship"] is False
 

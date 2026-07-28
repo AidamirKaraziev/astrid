@@ -14,7 +14,7 @@ import random
 from io import BytesIO
 from pathlib import Path
 
-from astra.ask.schemas import FatedPartnersResult
+from astra.ask.schemas import ChildrenResult, FatedPartnersResult
 
 WIDTH = 1080
 HEIGHT = 1350
@@ -58,34 +58,57 @@ def _background(image_module, draw_module) -> "object":
     return image
 
 
-def render_fated_partners_card(result: FatedPartnersResult) -> bytes:
-    """PNG с числом судьбоносных партнёров."""
+def render_card(*, hero: str, label: str, footnote: str) -> bytes:
+    """Общая карточка раздела: крупное главное, подпись, строка снизу."""
     from PIL import Image, ImageDraw, ImageFont
 
     image = _background(Image, ImageDraw)
     draw = ImageDraw.Draw(image)
 
-    font_number = ImageFont.truetype(str(_FONT_PATH), 400)
+    # Длинный герой (период «2029–2030») не влезает кеглем числа — ужимаем.
+    hero_size = 400 if len(hero) <= 2 else 190
+    font_hero = ImageFont.truetype(str(_FONT_PATH), hero_size)
     font_label = ImageFont.truetype(str(_FONT_PATH), 62)
-    font_split = ImageFont.truetype(str(_FONT_PATH), 44)
+    font_footnote = ImageFont.truetype(str(_FONT_PATH), 44)
     font_footer = ImageFont.truetype(str(_FONT_PATH), 34)
 
-    _centered(draw, str(result.total), y=300, font=font_number, fill=_ACCENT)
-    _centered(draw, _plural(result.total), y=790, font=font_label, fill=_TEXT, spacing=16)
+    hero_y = 300 if hero_size == 400 else 430
+    _centered(draw, hero, y=hero_y, font=font_hero, fill=_ACCENT)
+    _centered(draw, label, y=790, font=font_label, fill=_TEXT, spacing=16)
 
     draw.line([(340, 1010), (740, 1010)], fill=_MUTED, width=2)
-    _centered(
-        draw,
-        f"уже было {result.past}   ·   впереди {result.future}",
-        y=1050,
-        font=font_split,
-        fill=_MUTED,
-    )
+    _centered(draw, footnote, y=1050, font=font_footnote, fill=_MUTED)
     _centered(draw, "по натальной карте · Астрид", y=1230, font=font_footer, fill=_MUTED)
 
     buffer = BytesIO()
     image.save(buffer, format="PNG", optimize=True)
     return buffer.getvalue()
+
+
+def render_fated_partners_card(result: FatedPartnersResult) -> bytes:
+    """PNG с числом судьбоносных партнёров."""
+    return render_card(
+        hero=str(result.total),
+        label=_plural(result.total),
+        footnote=f"уже было {result.past}   ·   впереди {result.future}",
+    )
+
+
+def render_children_card(result: ChildrenResult) -> bytes:
+    """PNG с лучшим окном темы детей: годы крупно."""
+    from astra.llm.prompts.ask.children import count_words, window_period
+
+    if result.best_window is None:
+        return render_card(
+            hero="✨",
+            label="тема детей\nв твоей карте",
+            footnote=f"карта показывает {count_words(result.count_hint)}",
+        )
+    return render_card(
+        hero=window_period(result.best_window),
+        label="лучшее окно\nдля темы детей",
+        footnote=f"карта показывает {count_words(result.count_hint)}",
+    )
 
 
 def _centered(draw, text: str, *, y: int, font, fill, spacing: int = 8) -> None:

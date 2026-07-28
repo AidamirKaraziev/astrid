@@ -33,8 +33,10 @@ class AskReading(Base, TimestampMixin):
     )
     question_key: Mapped[str] = mapped_column(String(64), index=True)
     status: Mapped[str] = mapped_column(String(32), default=AskStatus.PENDING_PAYMENT)
-    # Ответ человека перед покупкой: сейчас в отношениях или свободен.
+    # Ответ на калибрующий вопрос первого продукта (легаси, строки до 020).
     in_relationship: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    # Ответы на калибрующие вопросы продукта: {"has_children": true}
+    context: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
     # Снимок расчёта: числа, факторы, окна, версия метода.
     computed: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
     methodology_version: Mapped[int | None] = mapped_column(Integer, nullable=True)
@@ -55,11 +57,13 @@ async def create_draft(
     user_id: uuid.UUID,
     question_key: str,
     in_relationship: bool | None,
+    context: dict[str, Any] | None = None,
 ) -> AskReading:
     reading = AskReading(
         user_id=user_id,
         question_key=question_key,
         in_relationship=in_relationship,
+        context=context,
         status=AskStatus.PENDING_PAYMENT,
     )
     session.add(reading)

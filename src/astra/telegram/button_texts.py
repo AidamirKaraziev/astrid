@@ -101,6 +101,11 @@ CB_ASK_OWN = "ask:own"
 # Покупка ответа: уточнение времени рождения → статус отношений → инвойс
 CB_ASK_GATE_TIME = "ask:gate:time"
 CB_ASK_GATE_SKIP = "ask:gate:skip"
+# Ключ вопроса едет в самой кнопке: состояние FSM может потеряться между
+# экранами (рестарт, очистка Redis), а платный флоу не должен упираться в тупик.
+CB_ASK_CALIB_PREFIX = "ask:calib:"  # + <ключ вопроса>:yes|no
+CB_ASK_ARCHIVE_PREFIX = "ask:archive:"  # + <ключ вопроса>
+# Старые кнопки без ключа: у части людей висят в истории чата.
 CB_ASK_STATUS_TAKEN = "ask:status:taken"
 CB_ASK_STATUS_FREE = "ask:status:free"
 CB_ASK_ANSWER_ARCHIVE = "ask:archive"

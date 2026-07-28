@@ -15,14 +15,14 @@ from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from pydantic import BaseModel
+
 from astra.ask import models as ask_crud
 from astra.ask.enums import AskStatus
-from astra.ask.fated_partners import METHODOLOGY_VERSION, compute_fated_partners
 from astra.ask.models import AskReading
-from astra.ask.schemas import FatedPartnersResult
+from astra.ask.products import get_product
 from astra.core.config import Settings, get_settings
 from astra.core.observability import Event, get_logger
-from astra.llm.prompts.ask import fated_partners as product
 from astra.llm.types import ChatMessage, CompletionRequest
 from astra.services.astro_service import build_full_chart_for_user
 from astra.users import crud as users_crud
@@ -30,7 +30,6 @@ from astra.users.models import User
 
 log = get_logger(__name__)
 
-QUESTION_FATED_COUNT = "love_fated_count"
 
 _GENERATE_ATTEMPTS = 3
 
@@ -44,37 +43,47 @@ ASK_FAILED_TEXT = (
 )
 
 
+def calibration_answer(reading: AskReading) -> bool:
+    """Ответ человека на калибрующий вопрос продукта.
+
+    Первый продукт («судьбоносные партнёры») писал его в отдельную колонку —
+    её и читаем для старых строк; остальные продукты кладут в `context`.
+    """
+    product = get_product(reading.question_key)
+    if product is not None and reading.context:
+        value = reading.context.get(product.calibration_field)
+        if value is not None:
+            return bool(value)
+    return bool(reading.in_relationship)
+
+
 async def compute_for_reading(
     session: AsyncSession,
     reading: AskReading,
     user: User,
-) -> FatedPartnersResult | None:
-    """Посчитать числа по карте пользователя. None — нет данных для расчёта."""
+) -> BaseModel | None:
+    """Посчитать факты по карте пользователя. None — нет данных для расчёта."""
+    product = get_product(reading.question_key)
     profile = user.profile
-    if profile is None or profile.birth_date is None:
+    if product is None or profile is None or profile.birth_date is None:
         return None
     chart = await build_full_chart_for_user(session, user, profile)
-    result = compute_fated_partners(
-        chart,
-        birth_date=profile.birth_date,
-        in_relationship=bool(reading.in_relationship),
-    )
+    result = product.compute(chart, profile.birth_date, calibration_answer(reading), None)
     log.info(
         Event.ASK_ANSWER_COMPUTED,
         reading_id=reading.id,
-        total=result.total,
-        past=result.past,
-        future=result.future,
-        has_time=result.factors.has_time,
+        question_key=reading.question_key,
+        methodology_version=product.methodology_version,
     )
     return result
 
 
-def result_from_reading(reading: AskReading) -> FatedPartnersResult | None:
-    """Снимок расчёта из БД обратно в схему."""
-    if not reading.computed:
+def result_from_reading(reading: AskReading) -> BaseModel | None:
+    """Снимок расчёта из БД обратно в схему продукта."""
+    product = get_product(reading.question_key)
+    if product is None or not reading.computed:
         return None
-    return FatedPartnersResult.model_validate(reading.computed)
+    return product.result_model.model_validate(reading.computed)
 
 
 async def generate_ask_answer(
@@ -90,13 +99,15 @@ async def generate_ask_answer(
     if reading.answer and reading.status == AskStatus.READY:
         return reading  # идемпотентность при requeue
 
+    product = get_product(reading.question_key)
     result = result_from_reading(reading)
-    if result is None:
+    if product is None or result is None:
         await ask_crud.mark_failed(session, reading, "missing_computed")
         return None
 
     user = await users_crud.get_user_by_id(session, reading.user_id)
     profile = user.profile if user else None
+    prompt = product.prompt
 
     from astra.llm.daily_llm import get_daily_provider
 
@@ -106,38 +117,39 @@ async def generate_ask_answer(
         extra["thinking_disabled"] = True
     request = CompletionRequest(
         messages=(
-            ChatMessage("system", product.SYSTEM_PROMPT),
+            ChatMessage("system", prompt.SYSTEM_PROMPT),
             ChatMessage(
                 "user",
-                product.build_user_message(
+                prompt.build_user_message(
                     result,
                     user_name=profile.display_name if profile else None,
                     gender=profile.gender if profile else None,
                 ),
             ),
         ),
-        temperature=product.TEMPERATURE,
-        max_tokens=product.MAX_TOKENS,
+        temperature=prompt.TEMPERATURE,
+        max_tokens=prompt.MAX_TOKENS,
         timeout_seconds=cfg.deepseek_timeout_seconds,
         extra=extra,
     )
 
+    expected = product.validate_expected(result)
     last_error = "unknown"
     for _ in range(_GENERATE_ATTEMPTS):
         completion = await provider.complete(request)
         if not completion.text:
             last_error = completion.reason or "empty_response"
             continue
-        answer = product.parse(completion.text)
+        answer = prompt.parse(completion.text)
         if answer is None:
             last_error = "json_invalid"
             continue
-        validation_error = product.validate(answer, expected_partners=result.total)
+        validation_error = prompt.validate(answer, expected)
         if validation_error is not None:
             last_error = validation_error
             continue
         payload = answer.model_dump()
-        payload["html"] = product.render_answer(answer, result)
+        payload["html"] = prompt.render_answer(answer, result)
         await ask_crud.save_answer(session, reading, payload)
         log.info(Event.ASK_ANSWER_GENERATED, reading_id=reading.id)
         return reading

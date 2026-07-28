@@ -10,13 +10,12 @@ from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 from astra.ask.models import AskReading
 from astra.core.config import get_settings
 from astra.telegram.button_texts import (
-    CB_ASK_ANSWER_ARCHIVE,
+    CB_ASK_ARCHIVE_PREFIX,
+    CB_ASK_CALIB_PREFIX,
     CB_ASK_COMPAT_CROSSSELL,
     CB_ASK_GATE_SKIP,
     CB_ASK_GATE_TIME,
     CB_ASK_HOME,
-    CB_ASK_STATUS_FREE,
-    CB_ASK_STATUS_TAKEN,
     CB_ASK_TOPIC_PREFIX,
 )
 
@@ -40,12 +39,22 @@ def ask_gate_keyboard() -> InlineKeyboardMarkup:
     )
 
 
-def ask_status_keyboard() -> InlineKeyboardMarkup:
-    """Один вопрос перед ответом — он калибрует расчёт."""
+def ask_status_keyboard(product) -> InlineKeyboardMarkup:  # noqa: ANN001 — AskProduct, циклический импорт
+    """Калибрующий вопрос продукта: подписи свои у каждого вопроса."""
     return InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text="Сейчас в отношениях", callback_data=CB_ASK_STATUS_TAKEN)],
-            [InlineKeyboardButton(text="Сейчас свободна/свободен", callback_data=CB_ASK_STATUS_FREE)],
+            [
+                InlineKeyboardButton(
+                    text=product.calibration_yes,
+                    callback_data=f"{CB_ASK_CALIB_PREFIX}{product.key}:yes",
+                ),
+            ],
+            [
+                InlineKeyboardButton(
+                    text=product.calibration_no,
+                    callback_data=f"{CB_ASK_CALIB_PREFIX}{product.key}:no",
+                ),
+            ],
             [InlineKeyboardButton(text="🔙 Назад", callback_data=CB_ASK_HOME)],
         ],
     )
@@ -84,14 +93,14 @@ def ask_answer_keyboard(reading: AskReading, *, referral_code: str | None) -> In
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
-def ask_archive_keyboard() -> InlineKeyboardMarkup:
+def ask_archive_keyboard(question_key: str) -> InlineKeyboardMarkup:
     """У человека уже есть купленный ответ — показываем его бесплатно."""
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [
                 InlineKeyboardButton(
                     text="📖 Показать мой ответ",
-                    callback_data=CB_ASK_ANSWER_ARCHIVE,
+                    callback_data=f"{CB_ASK_ARCHIVE_PREFIX}{question_key}",
                     style=ButtonStyle.PRIMARY,
                 ),
             ],

@@ -48,6 +48,44 @@ class FatedPartnersFactors(BaseModel):
     notes: list[str] = Field(default_factory=list)  # человеческие формулировки для промпта
 
 
+class ChildrenFactors(BaseModel):
+    """Факторы темы детей. Идут в промпт как есть и называются в ответе вслух."""
+
+    has_time: bool
+    fifth_sign: str | None = None
+    fifth_fertility: str | None = None  # плодородный / нейтральный / сухой
+    planets_in_fifth: list[str] = Field(default_factory=list)
+    ruler_fifth: str | None = None
+    ruler_fifth_sign: str | None = None
+    ruler_fifth_house: int | None = None
+    ruler_fifth_aspects: list[str] = Field(default_factory=list)
+    moon_sign: str | None = None
+    moon_house: int | None = None
+    moon_aspects: list[str] = Field(default_factory=list)
+    jupiter_aspects: list[str] = Field(default_factory=list)
+    north_node_house: int | None = None
+    score: float = 0.0
+    notes: list[str] = Field(default_factory=list)
+
+
+class ChildrenResult(BaseModel):
+    """Тема родительства в карте: сценарий, сколько показывает карта, окна.
+
+    Вердикта «детей не будет» здесь нет и быть не может: карта не видит
+    фертильность, а такой ответ человек может принять за медицинский.
+    """
+
+    methodology_version: int
+    theme: str  # ранняя / поздняя / через усилие / центральная / спокойная
+    count_hint: int  # сколько показывает карта, минимум 1
+    age: int
+    has_children: bool  # ответ человека перед покупкой
+    parenting_age_passed: bool  # окна деторождения уже позади — тема звучит иначе
+    factors: ChildrenFactors
+    windows: list[PartnershipWindow] = Field(default_factory=list)  # лучшие впереди
+    best_window: PartnershipWindow | None = None
+
+
 class FatedPartnersResult(BaseModel):
     """Ответ расчёта: два числа + чем они обоснованы."""
 

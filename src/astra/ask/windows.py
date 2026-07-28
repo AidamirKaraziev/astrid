@@ -88,15 +88,31 @@ def find_partnership_windows(
     birth_date: date,
     today: date,
 ) -> list[PartnershipWindow]:
-    """Окна за прожитую жизнь и на 15 лет вперёд, отсортированные по времени.
+    """Окна партнёрства: транзиты к десценденту, Венере и управителю 7 дома."""
+    return find_windows(targets, weights=_WEIGHTS, birth_date=birth_date, today=today)
 
-    `targets` — подпись точки → её долгота (десцендент, Венера, управитель 7).
+
+def find_windows(
+    targets: dict[str, float],
+    *,
+    weights: dict[tuple[str, str], float],
+    birth_date: date,
+    today: date,
+    min_age: int = MIN_AGE,
+    future_years: int = FUTURE_YEARS,
+) -> list[PartnershipWindow]:
+    """Окна за прожитую жизнь и вперёд, отсортированные по времени.
+
+    `targets` — подпись точки → её долгота; `weights` — вес пары
+    «транзитная планета × точка», он же задаёт, какие пары вообще считать.
+    Таблица весов своя у каждого продукта: для детей важен Юпитер к 5 дому,
+    для партнёрства — Сатурн к десценденту.
     """
     if not targets:
         return []
 
-    start = date(birth_date.year + MIN_AGE, birth_date.month, min(birth_date.day, 28))
-    end = date(today.year + FUTURE_YEARS, today.month, 1)
+    start = date(birth_date.year + min_age, birth_date.month, min(birth_date.day, 28))
+    end = date(today.year + future_years, today.month, 1)
     months = _month_ends(start, end)
 
     windows: list[PartnershipWindow] = []
@@ -106,7 +122,7 @@ def find_partnership_windows(
             return []  # эфемериды недоступны — окна не выдумываем
 
         for target_name, target_lon in targets.items():
-            weight = _WEIGHTS.get((planet_ru, target_name))
+            weight = weights.get((planet_ru, target_name))
             if weight is None:
                 continue
             windows.extend(
