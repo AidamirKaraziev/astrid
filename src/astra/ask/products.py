@@ -40,6 +40,7 @@ log = get_logger(__name__)
 
 QUESTION_FATED_COUNT = "love_fated_count"
 QUESTION_CHILDREN = "love_kids"
+QUESTION_KIDS_BOND = "love_kids_bond"
 
 # Первый продукт писал ответ на калибрующий вопрос в отдельную колонку —
 # у строк, созданных до миграции 020, поля `context` нет.
@@ -177,6 +178,28 @@ SPECS: dict[str, AskProductSpec] = {
         teaser=(
             "Смотрю твой пятый дом, Луну и Юпитер — ищу, как в твоей карте "
             "устроена тема детей и когда её лучшие окна ✨"
+        ),
+    ),
+    QUESTION_KIDS_BOND: AskProductSpec(
+        key=QUESTION_KIDS_BOND,
+        calc_module="astra.ask.kids_bond",
+        prompt_module="astra.llm.prompts.ask.kids_bond",
+        calibration_text=(
+            "Один вопрос перед ответом — от него зависит, как читать твою карту.\n\n"
+            "<b>У тебя уже есть дети?</b>"
+        ),
+        calibration_yes="Да, есть",
+        calibration_no="Пока нет",
+        calibration_field="has_children",
+        invoice_title="Отношения с детьми",
+        invoice_description=(
+            "Разбор по твоей натальной карте: какой ты родитель, что ребёнок "
+            "получит от тебя лучше всего, где будет напряжение, что ты "
+            "повторяешь за своими родителями и каким тебя видит ребёнок."
+        ),
+        teaser=(
+            "Смотрю твой пятый дом, Луну и Меркурий — определяю, какой ты "
+            "родитель и как строится связь с ребёнком ✨"
         ),
     ),
 }
