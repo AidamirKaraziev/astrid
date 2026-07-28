@@ -71,12 +71,42 @@ def test_ask_astrid_name_does_not_collide_with_support() -> None:
 def test_hub_keyboard_lists_all_topics_then_own_question_and_close() -> None:
     rows = ask_astrid_keyboard().inline_keyboard
     data = [btn.callback_data for row in rows for btn in row]
-    labels = [btn.text for row in rows for btn in row]
 
-    assert data[: len(A.ASK_TOPICS)] == [f"{CB_ASK_TOPIC_PREFIX}{key}" for key, _ in A.ASK_TOPICS]
-    assert labels[: len(A.ASK_TOPICS)] == [label for _, label in A.ASK_TOPICS]
+    assert sorted(data[: len(A.ASK_TOPICS)]) == sorted(
+        f"{CB_ASK_TOPIC_PREFIX}{key}" for key, _ in A.ASK_TOPICS
+    )
     assert data[-2:] == [CB_ASK_OWN, CB_ASK_CLOSE]
     assert len(A.ASK_TOPICS) == 8
+
+
+def test_open_topics_go_first_and_closed_ones_are_marked() -> None:
+    """Неоткрытые темы помечены растущей луной, готовые — сверху."""
+    from astra.telegram.keyboards import SOON_MARK
+
+    labels = [btn.text for row in ask_astrid_keyboard().inline_keyboard for btn in row]
+    topics = labels[: len(A.ASK_TOPICS)]
+
+    assert topics[0] == A.ASK_TOPIC_LABELS[A.ASK_TOPIC_LOVE]  # в «Любви» есть готовые
+    assert all(label.startswith(SOON_MARK) for label in topics[1:])
+    # Значок темы заменён, а не дополнен: один эмодзи на кнопку.
+    assert "🌒 💼" not in " ".join(topics)
+
+
+def test_ready_questions_go_first_and_the_rest_are_marked() -> None:
+    from astra.ask.products import is_ready
+    from astra.telegram.keyboards import SOON_MARK
+
+    rows = ask_questions_keyboard(A.ASK_TOPIC_LOVE, GENDER_FEMALE).inline_keyboard
+    buttons = [btn for row in rows for btn in row]
+    questions = [
+        btn for btn in buttons if (btn.callback_data or "").startswith(CB_ASK_QUESTION_PREFIX)
+    ]
+    keys = [(btn.callback_data or "").removeprefix(CB_ASK_QUESTION_PREFIX) for btn in questions]
+
+    ready_flags = [is_ready(key) for key in keys]
+    assert ready_flags == sorted(ready_flags, reverse=True), "готовые вопросы должны идти первыми"
+    for btn, key in zip(questions, keys, strict=True):
+        assert btn.text.startswith(SOON_MARK) is not is_ready(key)
 
 
 def test_every_topic_is_one_full_width_row() -> None:
@@ -138,7 +168,9 @@ async def test_love_topic_shows_its_questions() -> None:
     assert A.ASK_TOPIC_LABELS[A.ASK_TOPIC_LOVE] in text
     rows = callback.message.edit_text.await_args.kwargs["reply_markup"].inline_keyboard
     data = [btn.callback_data for row in rows for btn in row]
-    assert data[:12] == [f"{CB_ASK_QUESTION_PREFIX}{q.key}" for q in A.ASK_QUESTIONS[A.ASK_TOPIC_LOVE]]
+    assert sorted(data[:12]) == sorted(
+        f"{CB_ASK_QUESTION_PREFIX}{q.key}" for q in A.ASK_QUESTIONS[A.ASK_TOPIC_LOVE]
+    )
     assert data[-2:] == [CB_ASK_OWN, CB_ASK_HOME]
 
 
@@ -197,7 +229,8 @@ def test_keyboard_renders_gender_of_the_user() -> None:
         for row in ask_questions_keyboard(A.ASK_TOPIC_LOVE, GENDER_MALE).inline_keyboard
         for btn in row
     ]
-    assert "Почему я до сих пор один?" in labels
+    # Вопрос ещё не открыт — подпись идёт с пометкой «скоро».
+    assert any(label.endswith("Почему я до сих пор один?") for label in labels)
 
 
 @pytest.mark.asyncio

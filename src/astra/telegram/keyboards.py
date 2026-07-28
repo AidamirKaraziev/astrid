@@ -1,3 +1,5 @@
+import re
+
 from aiogram.enums import ButtonStyle
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, KeyboardButton, ReplyKeyboardMarkup
 
@@ -330,20 +332,46 @@ def support_writing_keyboard() -> ReplyKeyboardMarkup:
     )
 
 
+# Вопрос или тема ещё не открыты: растущая луна вместо замка — «скоро будет»,
+# а не «купи доступ». Готовое всегда идёт первым.
+SOON_MARK = "🌒"
+
+
+# Свой значок темы у неоткрытой кнопки заменяем, а не дополняем: один эмодзи
+# на кнопку — правило стиля бота.
+_LEADING_EMOJI = re.compile(r"^\W+\s*")
+
+
+def _soon(label: str) -> str:
+    return f"{SOON_MARK} {_LEADING_EMOJI.sub('', label)}"
+
+
+def _topic_is_ready(topic_key: str) -> bool:
+    from astra.ask.products import is_ready
+    from astra.telegram import ask_text as A
+
+    return any(is_ready(q.key) for q in A.ASK_QUESTIONS.get(topic_key, ()))
+
+
 def ask_astrid_keyboard() -> InlineKeyboardMarkup:
     """Верхний уровень «Спроси Астрид»: темы, свой вопрос, закрыть."""
     from astra.telegram import ask_text as A
 
+    topics = sorted(A.ASK_TOPICS, key=lambda item: not _topic_is_ready(item[0]))
     rows: list[list[InlineKeyboardButton]] = [
-        [InlineKeyboardButton(text=label, callback_data=f"{CB_ASK_TOPIC_PREFIX}{key}")]
-        for key, label in A.ASK_TOPICS
+        [
+            InlineKeyboardButton(
+                text=label if _topic_is_ready(key) else _soon(label),
+                callback_data=f"{CB_ASK_TOPIC_PREFIX}{key}",
+            ),
+        ]
+        for key, label in topics
     ]
     rows.append(
         [
             InlineKeyboardButton(
-                text=A.BTN_ASK_OWN_QUESTION,
+                text=_soon(A.BTN_ASK_OWN_QUESTION),
                 callback_data=CB_ASK_OWN,
-                style=ButtonStyle.PRIMARY,
             ),
         ],
     )
@@ -355,21 +383,27 @@ def ask_questions_keyboard(topic_key: str, gender: Gender | None) -> InlineKeybo
     """Вопросы темы: подписи с подставленным родом, внизу свой вопрос и назад."""
     from astra.telegram import ask_text as A
 
+    from astra.ask.products import is_ready
+
+    questions = sorted(A.ASK_QUESTIONS.get(topic_key, ()), key=lambda q: not is_ready(q.key))
     rows: list[list[InlineKeyboardButton]] = [
         [
             InlineKeyboardButton(
-                text=A.render_question(question.label, gender),
+                text=(
+                    A.render_question(question.label, gender)
+                    if is_ready(question.key)
+                    else _soon(A.render_question(question.label, gender))
+                ),
                 callback_data=f"{CB_ASK_QUESTION_PREFIX}{question.key}",
             ),
         ]
-        for question in A.ASK_QUESTIONS.get(topic_key, ())
+        for question in questions
     ]
     rows.append(
         [
             InlineKeyboardButton(
-                text=A.BTN_ASK_OWN_QUESTION,
+                text=_soon(A.BTN_ASK_OWN_QUESTION),
                 callback_data=CB_ASK_OWN,
-                style=ButtonStyle.PRIMARY,
             ),
         ],
     )
