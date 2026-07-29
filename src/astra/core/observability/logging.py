@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING
 import structlog
 
 from astra.core.observability.context import service_var
+from astra.core.observability.human import HumanRenderer
 from astra.core.observability.processors import (
     add_context_fields,
     add_service,
@@ -57,12 +58,15 @@ def configure_observability(settings: Settings) -> None:
         serialize_types,
         add_trace_context,
         sanitize_pii,
+        structlog.processors.format_exc_info,
     ]
 
     if settings.log_format == "json":
+        # Машинный формат: включать, когда появится сборщик логов (Loki и т.п.).
         renderer: structlog.types.Processor = structlog.processors.JSONRenderer()
     else:
-        renderer = structlog.dev.ConsoleRenderer()
+        # По умолчанию — человек: и локальный терминал, и docker compose logs.
+        renderer = HumanRenderer()
 
     structlog.configure(
         processors=[

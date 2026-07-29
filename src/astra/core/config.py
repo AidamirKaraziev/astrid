@@ -14,7 +14,7 @@ class Settings(BaseSettings):
     app_env: str = "development"
     debug: bool = False
     log_level: str = "INFO"
-    # plain — console renderer (dev); json — stdout JSON (prod / Loki)
+    # plain — человекочитаемые строки (по умолчанию); json — для сборщика логов
     log_format: str = "plain"
     # OpenTelemetry traces (этап 3); пока только флаг в конфиге
     otel_enabled: bool = False

@@ -22,7 +22,9 @@ x-app-build: &app-build
 x-app-env: &app-env
   APP_ENV: production
   DEBUG: "false"
-  LOG_FORMAT: json
+  # Человекочитаемые логи: сборщика (Loki) нет, stdout читает человек.
+  # Появится сборщик — вернуть json.
+  LOG_FORMAT: plain
   OTEL_ENABLED: "false"
   # SENTRY_DSN и SENTRY_ENVIRONMENT — из .env (env_file); для prod обычно SENTRY_ENVIRONMENT=prod
   TELEGRAM_MODE: polling
