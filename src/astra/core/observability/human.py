@@ -7,7 +7,7 @@
 
 Формат строки:
 
-    08:46:42  warn   telegram.api.failed   user=4819237 product=tarot_wish reason=timeout
+    2026-07-29 11:46:42  WARN   telegram.api.failed   product_code=tarot_wish reason=timeout
 
 Ключи событий оставлены как есть — по ним ищут grep'ом и они же встречаются в
 коде. Поля выстроены по важности: сначала кто и что, потом деньги и причина,
@@ -57,10 +57,11 @@ _DROP = {"service", "timestamp", "level", "event", "logger", "_record", "_from_s
 # Хвостом и приглушённо — пригождается редко, но иногда спасает.
 _TAIL = ("correlation_id", "trace_id", "span_id")
 
+# Уровень — заглавными и одной ширины: по нему скользят глазами первым делом.
 _LEVEL_STYLE = {
-    "debug": ("debug", "\033[90m"),
-    "info": ("info ", "\033[36m"),
-    "warning": ("warn ", "\033[33m"),
+    "debug": ("DEBUG", "\033[90m"),
+    "info": ("INFO ", "\033[36m"),
+    "warning": ("WARN ", "\033[33m"),
     "error": ("ERROR", "\033[31m"),
     "critical": ("CRIT ", "\033[1;31m"),
 }
@@ -83,15 +84,21 @@ def _shorten(value: object) -> str:
     return text.replace("\n", " ")
 
 
+# Дата в каждой строке: логи смотрят через `docker compose logs` за несколько
+# суток сразу, и «11:46» без числа заставляет гадать, вчера это было или неделю
+# назад.
+_TIME_FORMAT = "%Y-%m-%d %H:%M:%S"
+
+
 def _time(raw: object) -> str:
-    """ISO-время из structlog → часы:минуты:секунды в местном поясе."""
+    """ISO-время из structlog → дата и время в местном поясе."""
     if not isinstance(raw, str):
-        return datetime.now(DISPLAY_TIMEZONE).strftime("%H:%M:%S")
+        return datetime.now(DISPLAY_TIMEZONE).strftime(_TIME_FORMAT)
     try:
         moment = datetime.fromisoformat(raw.replace("Z", "+00:00"))
     except ValueError:
-        return raw[:8]
-    return moment.astimezone(DISPLAY_TIMEZONE).strftime("%H:%M:%S")
+        return raw[:19]
+    return moment.astimezone(DISPLAY_TIMEZONE).strftime(_TIME_FORMAT)
 
 
 class HumanRenderer:
@@ -108,7 +115,7 @@ class HumanRenderer:
     def __call__(self, logger, name, event_dict: dict) -> str:
         event = str(event_dict.pop("event", ""))
         level = str(event_dict.pop("level", "info")).lower()
-        label, color = _LEVEL_STYLE.get(level, ("info ", ""))
+        label, color = _LEVEL_STYLE.get(level, ("INFO ", ""))
         moment = _time(event_dict.get("timestamp"))
 
         exc = event_dict.pop("exception", None) or event_dict.pop("exc_info", None)

@@ -15,17 +15,22 @@ def _render(**event) -> str:
 
 
 class TestLine:
-    def test_time_shown_in_local_zone(self):
-        """08:46 UTC — это 11:46 по Москве; логи сверяют с жалобами людей."""
-        assert _render().startswith("11:46:42")
+    def test_time_shown_with_date_in_local_zone(self):
+        """08:46 UTC — это 11:46 по Москве; дата нужна, логи смотрят за несколько дней."""
+        assert _render().startswith("2026-07-29 11:46:42")
 
     def test_event_key_kept_as_is(self):
         assert "payment.completed" in _render()
 
-    def test_level_is_readable_word(self):
-        assert " info " in _render()
+    def test_level_is_uppercase_and_aligned(self):
+        """Уровень заглавными и одной ширины — по нему скользят глазами первым делом."""
+        assert " INFO  " in _render()
         assert " ERROR " in _render(level="error")
-        assert " warn " in _render(level="warning")
+        assert " WARN  " in _render(level="warning")
+        assert " DEBUG " in _render(level="debug")
+
+    def test_unknown_level_falls_back_to_info(self):
+        assert " INFO  " in _render(level="странный")
 
 
 class TestFields:
