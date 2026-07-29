@@ -236,3 +236,16 @@ def test_full_pdf_from_llm_output(tmp_path, chart):
     builder.build()
     assert builder.page_num == builder.total_pages
     assert out.stat().st_size > 10_000
+
+
+def test_trim_aspects_caps_section() -> None:
+    """У натала тот же лимит раздела — мина была заложена та же, просто не выстрелила."""
+    from astra.llm.natal_assemble import _trim_aspects
+    from astra.llm.schemas.compatibility import MAX_ASPECT_BLOCKS
+
+    blocks = [f"аспект {i}" for i in range(MAX_ASPECT_BLOCKS + 7)]
+    trimmed = _trim_aspects(blocks)
+
+    assert len(trimmed) == MAX_ASPECT_BLOCKS
+    assert trimmed[0] == "аспект 0"  # самые точные идут первыми и остаются
+    assert _trim_aspects(blocks[:3]) == blocks[:3]

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from astra.llm.schemas.compatibility import (
+    MAX_ASPECT_BLOCKS,
     METRIC_LABELS,
     ZONE_BLOCK_TITLES,
     AspectStrength,
@@ -110,6 +111,16 @@ def _clamp_zone_items(zone_items: list[list[str]]) -> list[list[str]]:
     return result
 
 
+def _trim_aspects(blocks: list[LlmAspectBlock]) -> list[LlmAspectBlock]:
+    """Оставить самые точные аспекты: аспекты уже отсортированы по орбу.
+
+    В раздел отчёта помещается MAX_ASPECT_BLOCKS карточек. У пары с плотной
+    сеткой связей их набирается больше — лишние (с самым широким орбом) просто
+    фон, и раньше они роняли всю сборку уже после оплаты генерации.
+    """
+    return blocks[:MAX_ASPECT_BLOCKS]
+
+
 def assemble_llm_output(
     raw: CompatibilityContentRaw,
     prompt_input: CompatibilityPromptInput,
@@ -161,8 +172,8 @@ def assemble_llm_output(
         pair_story=clamp_text(raw.pair_story, _LIMITS["pair_story"]),
         natal_insight=clamp_text(raw.natal_insight, _LIMITS["natal_insight"]),
         metrics=metrics,
-        strong_aspects=strong,
-        working_aspects=working,
+        strong_aspects=_trim_aspects(strong),
+        working_aspects=_trim_aspects(working),
         zone_blocks=zone_blocks,
         conclusion_quote=clamp_text(raw.conclusion_quote, _LIMITS["conclusion_quote"]),
         conclusion_tip=clamp_text(raw.conclusion_tip, _LIMITS["conclusion_tip"]),

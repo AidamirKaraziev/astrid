@@ -14,6 +14,7 @@ from astra.llm.compatibility_assemble import (
     strength_from_orb,
 )
 from astra.llm.prompts.compatibility_fixtures import build_aidamir_angela_prompt_input
+from astra.llm.schemas.compatibility import MAX_ASPECT_BLOCKS
 from astra.llm.schemas.compatibility_raw import CompatibilityPolishRaw
 from astra.llm.prompts.compatibility import parse_narrative_skeleton
 from astra.llm.text_clamp import clamp_text
@@ -111,3 +112,38 @@ def test_merge_polish_keeps_metrics_and_zones() -> None:
     assert merged.metrics == content.metrics
     assert merged.zone_items == content.zone_items
     assert "Обновлённый" in merged.tldr
+
+
+def test_assemble_trims_extra_working_aspects() -> None:
+    """Плотная пара: лишние широкие орбы отбрасываются, а не роняют сборку.
+
+    Прод-кейс: у пары набралось 16 «рабочих» аспектов, в раздел помещается 12,
+    и вся сборка падала уже после оплаты генерации.
+    """
+    prompt_input = build_aidamir_angela_prompt_input()
+    aspects = sorted_aspects(prompt_input)
+
+    extra = []
+    orb = 2.5
+    while len(aspects) + len(extra) < 20:
+        extra.append(aspects[-1].model_copy(update={"orb_deg": round(orb, 2)}))
+        orb += 0.1
+
+    prompt_input = prompt_input.model_copy(update={"aspects": [*aspects, *extra]})
+    raw = sample_content_raw()
+    interpretations = list(raw.aspect_interpretations)
+    interpretations += [interpretations[-1].model_copy() for _ in extra]
+    raw = raw.model_copy(update={"aspect_interpretations": interpretations})
+
+    output = assemble_llm_output(raw, prompt_input)
+
+    assert len(output.working_aspects) == MAX_ASPECT_BLOCKS
+    orbs = [float(item.orb) for item in output.working_aspects]
+    assert orbs == sorted(orbs)  # оставили самые точные, отбросили самый фон
+    assert all(2.0 <= value <= 6.0 for value in orbs)
+
+
+def test_trim_keeps_everything_when_it_fits() -> None:
+    prompt_input = build_aidamir_angela_prompt_input()
+    output = assemble_llm_output(sample_content_raw(), prompt_input)
+    assert len(output.working_aspects) == 8  # обрезка не трогает нормальные пары

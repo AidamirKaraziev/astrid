@@ -7,7 +7,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
-from astra.llm.schemas.compatibility import AspectType, LlmAspectBlock
+from astra.llm.schemas.compatibility import MAX_ASPECT_BLOCKS, AspectType, LlmAspectBlock
 
 NATAL_METRIC_LABELS: tuple[str, ...] = (
     "Энергия",
@@ -125,8 +125,8 @@ class NatalLlmOutput(BaseModel):
     metrics: list[NatalMetric] = Field(min_length=4, max_length=4)
     personality: list[NatalPlanetText] = Field(min_length=2, max_length=3)
     mind_feelings_action: list[NatalPlanetText] = Field(min_length=3, max_length=3)
-    strong_aspects: list[LlmAspectBlock] = Field(min_length=0, max_length=12)
-    working_aspects: list[LlmAspectBlock] = Field(min_length=0, max_length=12)
+    strong_aspects: list[LlmAspectBlock] = Field(min_length=0, max_length=MAX_ASPECT_BLOCKS)
+    working_aspects: list[LlmAspectBlock] = Field(min_length=0, max_length=MAX_ASPECT_BLOCKS)
     spheres: list[NatalSphereBlock] = Field(min_length=3, max_length=3)
     karmic: list[NatalPlanetText] = Field(min_length=2, max_length=3)
     zone_blocks: list[NatalZoneBlock] = Field(min_length=3, max_length=3)

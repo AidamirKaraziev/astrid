@@ -5,7 +5,7 @@ from __future__ import annotations
 from astra.astro.chart_features import ChartFeatures
 from astra.astro.schemas import FullNatalChart
 from astra.llm.compatibility_assemble import format_orb, strength_from_orb
-from astra.llm.schemas.compatibility import LlmAspectBlock
+from astra.llm.schemas.compatibility import MAX_ASPECT_BLOCKS, LlmAspectBlock
 from astra.llm.schemas.natal import (
     NATAL_ASPECTS_LIMIT,
     NATAL_METRIC_LABELS,
@@ -252,6 +252,16 @@ def _sphere_factors(prompt_input: NatalPromptInput, sphere_title: str) -> str:
     return clamp_text(" · ".join(parts), 90)
 
 
+def _trim_aspects(blocks: list[LlmAspectBlock]) -> list[LlmAspectBlock]:
+    """Оставить самые точные аспекты: список уже отсортирован по орбу.
+
+    В раздел отчёта помещается MAX_ASPECT_BLOCKS карточек. У карты с плотной
+    сеткой связей их набирается больше — лишние (с самым широким орбом) просто
+    фон, и раньше они роняли всю сборку уже после оплаты генерации.
+    """
+    return blocks[:MAX_ASPECT_BLOCKS]
+
+
 def assemble_llm_output(
     raw: NatalContentRaw,
     prompt_input: NatalPromptInput,
@@ -347,8 +357,8 @@ def assemble_llm_output(
         metrics=metrics,
         personality=personality,
         mind_feelings_action=mind,
-        strong_aspects=strong,
-        working_aspects=working,
+        strong_aspects=_trim_aspects(strong),
+        working_aspects=_trim_aspects(working),
         spheres=spheres,
         karmic=karmic,
         zone_blocks=zone_blocks,
