@@ -207,6 +207,38 @@ table.list tr:hover td { background: rgba(255,255,255,.025); }
 .legend span.second::before { background: linear-gradient(180deg, #67e8f9, #0e7490); }
 .legend span.now::before { background: rgba(196,181,253,.45); }
 
+/* --- предпросмотр телеграма --- */
+.tg-wrap { max-width: 420px; margin: 14px 0; }
+.tg-bubble {
+  position: relative; padding: 10px 14px 20px; border-radius: 14px 14px 14px 4px;
+  background: #2b5278; color: #fff; font-size: 15px; line-height: 1.45;
+  box-shadow: 0 6px 18px rgba(0,0,0,.35); word-break: break-word;
+}
+.tg-bubble a { color: #9dd0ff; }
+.tg-bubble blockquote {
+  margin: 8px 0; padding: 4px 0 4px 10px; border-left: 3px solid #9dd0ff;
+  color: #e8f2ff; font-style: normal;
+}
+.tg-bubble tg-spoiler { background: rgba(255,255,255,.28); border-radius: 4px; color: transparent; }
+.tg-bubble tg-spoiler:hover { color: inherit; background: transparent; }
+.tg-bubble code { background: rgba(0,0,0,.25); padding: 1px 5px; border-radius: 5px; font-size: 14px; }
+.tg-time { position: absolute; right: 12px; bottom: 5px; font-size: 11px; color: rgba(255,255,255,.6); }
+.tg-btn {
+  margin-top: 4px; padding: 9px 12px; text-align: center; font-size: 14.5px;
+  border-radius: 10px; background: #38607f; color: #cfe6ff;
+}
+
+/* --- множественный выбор --- */
+.field-group { margin: 16px 0; }
+.group-title { display: block; font-size: 11.5px; letter-spacing: .7px; text-transform: uppercase; color: #a99fc4; margin-bottom: 8px; }
+.picks { display: flex; flex-wrap: wrap; gap: 8px; }
+.pick {
+  display: inline-flex; align-items: center; gap: 7px; padding: 7px 12px; border-radius: 999px;
+  font-size: 13.5px; color: #cfc7e6; border: 1px solid rgba(196,181,253,.24); cursor: pointer;
+}
+.pick:hover { background: rgba(255,255,255,.05); }
+.pick input { accent-color: #a78bfa; }
+
 /* --- прототип --- */
 .proto {
   display: inline-block; font-size: 11px; letter-spacing: 1px; text-transform: uppercase;

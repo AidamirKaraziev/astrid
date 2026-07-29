@@ -116,6 +116,9 @@ class Settings(BaseSettings):
     admin_report_hour: int = 10
     admin_report_timezone: str = "Europe/Moscow"
 
+    # Куда уходит пробная рассылка «отправить себе». 0 — в группу операторов.
+    admin_test_chat_id: int = 0
+
     # Админ-панель /admin: правка цен, скидок и призов колеса без релиза.
     # Пустой admin_password = панель выключена целиком (все роуты отвечают 404).
     admin_username: str = "astrid"

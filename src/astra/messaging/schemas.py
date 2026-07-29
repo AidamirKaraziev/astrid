@@ -21,6 +21,7 @@ class TaskType(StrEnum):
     TAROT_READING_GENERATE = "tarot_reading.generate"
     TAROT_READING_SEND = "tarot_reading.send"
     ASK_ANSWER_GENERATE = "ask_answer.generate"
+    BROADCAST_SEND = "broadcast.send"
 
 
 class TaskMessage(BaseModel):

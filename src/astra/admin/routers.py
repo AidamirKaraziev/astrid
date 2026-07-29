@@ -14,6 +14,7 @@ from urllib.parse import parse_qs, urlencode
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from astra.admin import auth, service
@@ -26,6 +27,7 @@ from astra.admin.timeline import Grain
 from astra.admin import ledger
 from astra.admin.render_ledger import ledger_page
 from astra.admin.render_queue import queue_page
+from astra.admin.render_broadcast import broadcast_page
 from astra.admin.render_settings import settings_page
 from astra.admin.render import catalog_page, login_page
 from astra.admin.service import AdminError
@@ -334,6 +336,281 @@ async def payments(
     titles = await ledger.product_titles(session)
     products = sorted(titles.items(), key=lambda item: item[1])
     return HTMLResponse(ledger_page(events, totals, filters, products))
+
+
+# --- рассылки -----------------------------------------------------------------
+
+
+async def _current_draft(session: AsyncSession):
+    """Черновик рассылки один: панелью пользуется один человек."""
+    from astra.broadcasts.models import Broadcast, BroadcastStatus
+
+    row = await session.execute(
+        select(Broadcast)
+        .where(Broadcast.status == BroadcastStatus.DRAFT)
+        .order_by(Broadcast.created_at.desc())
+        .limit(1),
+    )
+    draft = row.scalar_one_or_none()
+    if draft is None:
+        draft = Broadcast(source_text="", final_text="", criteria={})
+        session.add(draft)
+        await session.flush()
+    return draft
+
+
+def _criteria_from(form: dict[str, str], raw: dict[str, list[str]]):
+    from astra.broadcasts.audience import Criteria
+
+    def number(name: str) -> int | None:
+        value = (form.get(name) or "").strip()
+        return int(value) if value.isdigit() else None
+
+    return Criteria(
+        zodiac=set(raw.get("zodiac", [])),
+        used_products=set(raw.get("used_products", [])),
+        active_within_days=number("active_within_days"),
+        sleeping_since_days=number("sleeping_since_days"),
+        joined_within_days=number("joined_within_days"),
+        money=form.get("money", ""),
+        abandoned_draft="abandoned_draft" in form,
+        unclaimed_prize="unclaimed_prize" in form,
+        exclude_paid="exclude_paid" in form,
+        exclude_active_within_days=number("exclude_active_within_days"),
+    )
+
+
+async def _broadcast_screen(session: AsyncSession, flash=None, flash_error=False) -> Response:
+    from astra.broadcasts import audience as audience_module
+    from astra.broadcasts import service as broadcast_service
+    from astra.broadcasts.audience import Criteria
+    from astra.broadcasts.editor import check
+
+    draft = await _current_draft(session)
+    criteria = Criteria(**{k: set(v) if isinstance(v, list) else v for k, v in draft.criteria.items()})
+    size = draft.audience_size or None
+    if criteria.is_empty() and not draft.direct_recipients:
+        size = None
+
+    titles = await ledger.product_titles(session)
+    return HTMLResponse(
+        broadcast_page(
+            criteria=criteria,
+            products=sorted(titles.items(), key=lambda item: item[1]),
+            audience_size=size,
+            source_text=draft.source_text,
+            final_text=draft.final_text,
+            warnings=check(draft.final_text) if draft.final_text else (),
+            buttons=draft.buttons,
+            personalize=draft.personalize,
+            use_ai=draft.used_ai,
+            history=await broadcast_service.history(session),
+            flash=flash,
+            flash_error=flash_error,
+        ),
+    )
+
+
+@router.get("/broadcasts")
+async def broadcasts(
+    request: Request,
+    session: AsyncSession = Depends(get_session),
+) -> Response:
+    redirect = _guard(request)
+    if redirect is not None:
+        return redirect
+    error = request.query_params.get("err")
+    return await _broadcast_screen(
+        session,
+        flash=error or request.query_params.get("ok"),
+        flash_error=bool(error),
+    )
+
+
+@router.post("/broadcasts/count")
+async def broadcasts_count(
+    request: Request,
+    session: AsyncSession = Depends(get_session),
+) -> Response:
+    """Посчитать охват до отправки: вслепую рассылку не запускают."""
+    redirect = _guard(request)
+    if redirect is not None:
+        return redirect
+
+    from astra.broadcasts import audience as audience_module
+
+    raw = parse_qs((await request.body()).decode("utf-8", "replace"), keep_blank_values=True)
+    form = {key: values[-1] for key, values in raw.items()}
+    criteria = _criteria_from(form, raw)
+
+    draft = await _current_draft(session)
+    direct = [
+        int(piece.strip())
+        for piece in (form.get("direct") or "").split(",")
+        if piece.strip().isdigit()
+    ]
+    draft.direct_recipients = direct
+    draft.criteria = {
+        key: sorted(value) if isinstance(value, set) else value
+        for key, value in criteria.__dict__.items()
+        if value
+    }
+    draft.audience_size = (
+        len(direct) if direct else await audience_module.count(session, criteria)
+    )
+    return _redirect("/admin/broadcasts", ok=f"Под фильтры попадает {draft.audience_size} чел.")
+
+
+@router.post("/broadcasts/compose")
+async def broadcasts_compose(
+    request: Request,
+    session: AsyncSession = Depends(get_session),
+) -> Response:
+    """Собрать сообщение: с редактором или без, но всегда с проверкой разметки."""
+    redirect = _guard(request)
+    if redirect is not None:
+        return redirect
+
+    from astra.broadcasts.editor import check, improve
+
+    form = await _form(request)
+    text = (form.get("text") or "").strip()
+    if not text:
+        return _redirect("/admin/broadcasts", err="Пустой текст — нечего отправлять.")
+
+    draft = await _current_draft(session)
+    draft.source_text = text
+    draft.personalize = "personalize" in form
+    draft.used_ai = "use_ai" in form
+
+    if draft.used_ai:
+        result = await improve(text, personalize=draft.personalize)
+        draft.final_text = result.text
+        message = "Текст переписан — посмотри предпросмотр."
+    else:
+        draft.final_text = text
+        message = "Текст сохранён без редактора."
+
+    problems = check(draft.final_text)
+    return _redirect(
+        "/admin/broadcasts",
+        ok=None if problems else message,
+        err="; ".join(problems) if problems else None,
+    )
+
+
+@router.post("/broadcasts/button")
+async def broadcasts_button(
+    request: Request,
+    session: AsyncSession = Depends(get_session),
+) -> Response:
+    redirect = _guard(request)
+    if redirect is not None:
+        return redirect
+
+    form = await _form(request)
+    draft = await _current_draft(session)
+    button = {
+        "section": form.get("section", ""),
+        "url": form.get("url", ""),
+        "title": form.get("title", ""),
+    }
+    if not button["section"] and not button["url"]:
+        return _redirect("/admin/broadcasts", err="Выбери раздел или укажи ссылку.")
+
+    draft.buttons = [*draft.buttons, button]
+    return _redirect("/admin/broadcasts", ok="Кнопка добавлена.")
+
+
+@router.post("/broadcasts/test")
+async def broadcasts_test(
+    request: Request,
+    session: AsyncSession = Depends(get_session),
+) -> Response:
+    """Пробное сообщение себе: предпросмотр в браузере не покажет живой Telegram."""
+    redirect = _guard(request)
+    if redirect is not None:
+        return redirect
+
+    settings = get_settings()
+    chat_id = settings.admin_test_chat_id or settings.telegram_admin_group_id
+    if not chat_id:
+        return _redirect("/admin/broadcasts", err="Некуда слать: задай ADMIN_TEST_CHAT_ID.")
+
+    draft = await _current_draft(session)
+    if not draft.final_text:
+        return _redirect("/admin/broadcasts", err="Сначала собери сообщение.")
+
+    from astra.broadcasts.keyboards import broadcast_keyboard
+    from astra.workers.telegram_send import send_telegram_html
+
+    try:
+        await send_telegram_html(
+            chat_id,
+            draft.final_text,
+            reply_markup=broadcast_keyboard(draft.buttons),
+            keyboard_zone=None,
+        )
+    except Exception as exc:  # noqa: BLE001 — причину показываем на экране
+        return _redirect("/admin/broadcasts", err=f"Telegram не принял: {type(exc).__name__}")
+
+    return _redirect("/admin/broadcasts", ok="Отправил тебе — посмотри в Telegram.")
+
+
+@router.post("/broadcasts/send")
+async def broadcasts_send(
+    request: Request,
+    session: AsyncSession = Depends(get_session),
+) -> Response:
+    """Запустить рассылку: фиксируем получателей и отдаём воркеру."""
+    redirect = _guard(request)
+    if redirect is not None:
+        return redirect
+
+    from astra.broadcasts import service as broadcast_service
+    from astra.messaging.publisher import publish_broadcast_send
+
+    draft = await _current_draft(session)
+    if not draft.final_text:
+        return _redirect("/admin/broadcasts", err="Сначала собери сообщение.")
+
+    size = await broadcast_service.prepare(session, draft)
+    if not size:
+        return _redirect("/admin/broadcasts", err="Под фильтры не попал никто.")
+
+    await session.commit()  # воркер должен увидеть строки получателей
+    await publish_broadcast_send(draft.id)
+    log.info("admin.broadcast_started", broadcast_id=draft.id, audience=size)
+    return _redirect("/admin/broadcasts", ok=f"Рассылка пошла: {size} получателей.")
+
+
+@router.get("/broadcasts/{broadcast_id}/retry")
+async def broadcasts_retry(
+    broadcast_id: uuid.UUID,
+    request: Request,
+    session: AsyncSession = Depends(get_session),
+) -> Response:
+    """Повторить недошедшим — заблокировавших не трогаем, им не дойдёт."""
+    redirect = _guard(request)
+    if redirect is not None:
+        return redirect
+
+    from astra.broadcasts import service as broadcast_service
+    from astra.broadcasts.models import Broadcast, BroadcastStatus
+    from astra.messaging.publisher import publish_broadcast_send
+
+    broadcast = await session.get(Broadcast, broadcast_id)
+    if broadcast is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
+
+    count = await broadcast_service.reset_failed(session, broadcast_id)
+    if not count:
+        return _redirect("/admin/broadcasts", err="Недошедших нет.")
+
+    broadcast.status = BroadcastStatus.SENDING
+    await session.commit()
+    await publish_broadcast_send(broadcast_id)
+    return _redirect("/admin/broadcasts", ok=f"Повторяю для {count} чел.")
 
 
 @router.get("/{section}")

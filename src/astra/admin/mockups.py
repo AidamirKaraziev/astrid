@@ -131,49 +131,7 @@ def support_page() -> str:
     return shell("support", content, subtitle="Кто ждёт ответа дольше всех", prototype=True)
 
 
-def broadcasts_page() -> str:
-    """Рассылка по сегменту."""
-    compose = (
-        '<form class="row" style="flex-direction:column;align-items:stretch;gap:14px">'
-        '<div class="field grow"><label>Кому</label>'
-        "<select><option>Все активные — 3 412</option>"
-        "<option>Покупали хоть раз — 604</option>"
-        "<option selected>Не покупали ни разу — 2 808</option>"
-        "<option>Молчат больше 7 дней — 1 190</option></select></div>"
-        '<div class="field" style="width:100%"><label>Сообщение</label>'
-        "<textarea>Астрид приготовила для тебя расклад на неделю 💫 "
-        "Загляни — первые три карты бесплатно.</textarea></div>"
-        '<label class="toggle"><input type="checkbox" checked>Пропускать тех, кто заблокировал бота</label>'
-        "</form>"
-    )
-    preview = (
-        '<p class="hint">Получателей: <b>2 808</b>. Отправка пачками по 25 в секунду, '
-        "около <b>2 минут</b>. Заблокировавшие бота (<b>314</b>) пропускаются.</p>"
-        f'<div style="margin-top:14px">{_btn("Предпросмотр")} {_btn("Отправить", ghost=False)}</div>'
-    )
-    history = _table(
-        ("Когда", "Кому", "Отправлено", "Прочитали", "Отписались"),
-        [
-            ("22.07", "Все активные", "3 380", "2 104", "18"),
-            ("14.07", "Не покупали", "2 640", "1 402", "41"),
-            ("01.07", "Покупали хоть раз", "580", "497", "2"),
-        ],
-    )
-    content = (
-        f'<div class="note">{_DEMO_NOTE}</div>'
-        + _card("Новая рассылка", compose)
-        + _card(
-            "Перед отправкой",
-            preview,
-            '<span class="chip">отправка уходит в воркер, панель только ставит задачу</span>',
-        )
-        + _card("Прошлые рассылки", history)
-    )
-    return shell("broadcasts", content, subtitle="Одно сообщение — тысячи людей, поэтому с подтверждением", prototype=True)
-
-
 PROTOTYPES = {
     "people": people_page,
     "support": support_page,
-    "broadcasts": broadcasts_page,
 }

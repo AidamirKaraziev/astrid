@@ -18,6 +18,9 @@ from astra.messaging.publisher import (
     publish_tarot_reading_generate,
     publish_tarot_reading_send,
 )
+from astra.broadcasts import service as broadcast_service
+from astra.broadcasts.keyboards import broadcast_keyboard
+from astra.broadcasts.models import Broadcast
 from astra.messaging.schemas import TaskMessage, TaskType
 from astra.predictions import crud as predictions_crud
 from astra.services.astro_service import (
@@ -448,6 +451,43 @@ async def handle_ask_answer_generate(session: AsyncSession, task: TaskMessage) -
         await session.commit()
 
 
+async def handle_broadcast_send(session: AsyncSession, task: TaskMessage) -> None:
+    """Разослать подготовленную рассылку.
+
+    Панель уже зафиксировала получателей строками, поэтому воркер просто идёт по
+    ним и шлёт. Ошибка одного сообщения не рвёт рассылку: заблокировавший бота
+    помечается и пропускается, сетевая осечка остаётся «недошедшей» и повторяется
+    кнопкой из истории.
+    """
+    if task.report_id is None:
+        return
+
+    broadcast = await session.get(Broadcast, task.report_id)
+    if broadcast is None:
+        log.warning("broadcast.missing", broadcast_id=task.report_id)
+        return
+
+    markup = broadcast_keyboard(broadcast.buttons)
+
+    async def sender(person, text: str) -> None:
+        await send_telegram_html(
+            person.telegram_id,
+            text,
+            reply_markup=markup,
+            keyboard_zone=None,
+        )
+
+    progress = await broadcast_service.send_all(session, broadcast, sender)
+    await session.commit()
+    log.info(
+        "broadcast.sent",
+        broadcast_id=broadcast.id,
+        sent=progress.sent,
+        blocked=progress.blocked,
+        failed=progress.failed,
+    )
+
+
 async def dispatch_task(session: AsyncSession, task: TaskMessage) -> None:
     if task.type == TaskType.NATAL_CHART_GENERATE:
         await handle_natal_chart_generate(session, task)
@@ -477,6 +517,8 @@ async def dispatch_task(session: AsyncSession, task: TaskMessage) -> None:
         await handle_tarot_reading_generate(session, task)
     elif task.type == TaskType.TAROT_READING_SEND:
         await handle_tarot_reading_send(session, task)
+    elif task.type == TaskType.BROADCAST_SEND:
+        await handle_broadcast_send(session, task)
     elif task.type == TaskType.ASK_ANSWER_GENERATE:
         await handle_ask_answer_generate(session, task)
     else:

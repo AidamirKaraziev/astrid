@@ -250,7 +250,7 @@ class TestSections:
         settings = _settings()
         async with await _client(settings) as client:
             client.cookies.set(auth.COOKIE_NAME, auth.issue_session(settings))
-            for slug in ("people", "support", "broadcasts"):
+            for slug in ("people", "support"):
                 response = await client.get(f"/admin/{slug}")
                 assert response.status_code == 200, slug
                 # каркас на месте: меню и честная пометка «это макет»
