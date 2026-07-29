@@ -18,7 +18,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from astra.admin import auth, service
 from astra.admin import metrics as metrics_queries
 from astra.admin.mockups import PROTOTYPES
+from astra.admin import queue as admin_queue
 from astra.admin.render_metrics import metrics_page
+from astra.admin.render_queue import queue_page
 from astra.admin.render import catalog_page, login_page
 from astra.admin.service import AdminError
 from astra.core.config import Settings, get_settings
@@ -177,6 +179,59 @@ async def metrics(
 
     dashboard = await metrics_queries.collect(session, days)
     return HTMLResponse(metrics_page(dashboard))
+
+
+@router.get("/queue")
+async def queue(
+    request: Request,
+    session: AsyncSession = Depends(get_session),
+) -> Response:
+    """Упавшие, зависшие и неприкаянные заказы — с кнопками починки."""
+    redirect = _guard(request)
+    if redirect is not None:
+        return redirect
+
+    problems = await admin_queue.list_problems(session)
+    error = request.query_params.get("err")
+    return HTMLResponse(
+        queue_page(
+            problems,
+            admin_queue.summarize(problems),
+            flash=error or request.query_params.get("ok"),
+            flash_error=bool(error),
+        ),
+    )
+
+
+@router.post("/queue/{target}/{entity_id}/{action}")
+async def queue_action(
+    target: str,
+    entity_id: uuid.UUID,
+    action: str,
+    request: Request,
+    session: AsyncSession = Depends(get_session),
+) -> Response:
+    """Повторить генерацию или вернуть звёзды. Обе операции необратимы по-своему."""
+    redirect = _guard(request)
+    if redirect is not None:
+        return redirect
+
+    try:
+        kind = admin_queue.Target(target)
+    except ValueError:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND) from None
+
+    try:
+        if action == "retry":
+            message = await admin_queue.retry(session, kind, entity_id)
+        elif action == "refund":
+            message = await admin_queue.refund(session, kind, entity_id)
+        else:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
+    except AdminError as exc:
+        return _redirect("/admin/queue", err=str(exc))
+
+    return _redirect("/admin/queue", ok=message)
 
 
 @router.get("/{section}")

@@ -20,73 +20,6 @@ def _btn(label: str, ghost: bool = True) -> str:
     return f'<button class="{"ghost" if ghost else ""}" type=button>{label}</button>'
 
 
-def queue_page() -> str:
-    """Упавшие и зависшие разборы + платежи без заказа."""
-    rows = [
-        (
-            '<span class="badge bad">упал</span>',
-            "Спроси Астрид · дети",
-            '<span class="mono">@lunayeva</span>',
-            "200 ⭐",
-            "12 мин назад",
-            '<span class="dim">LLM вернула 3 блока вместо 5</span>',
-            _btn("Повторить") + " " + _btn("Вернуть"),
-        ),
-        (
-            '<span class="badge warn">завис</span>',
-            "Таро · на отношения",
-            '<span class="mono">@kirill_m</span>',
-            "150 ⭐",
-            "48 мин в generating",
-            '<span class="dim">воркер не ответил</span>',
-            _btn("Повторить") + " " + _btn("Вернуть"),
-        ),
-        (
-            '<span class="badge warn">завис</span>',
-            "Натал · полный разбор",
-            '<span class="mono">id 5512094</span>',
-            "500 ⭐",
-            "2 ч в generating",
-            '<span class="dim">воркер не ответил</span>',
-            _btn("Повторить") + " " + _btn("Вернуть"),
-        ),
-        (
-            '<span class="badge bad">сирота</span>',
-            "Таро · три карты",
-            '<span class="mono">@dashaaa</span>',
-            "50 ⭐",
-            "вчера, 21:14",
-            '<span class="dim">оплата пришла, черновик не найден</span>',
-            _btn("Создать заказ") + " " + _btn("Вернуть"),
-        ),
-    ]
-    content = (
-        f'<div class="note">{_DEMO_NOTE}</div>'
-        '<div class="tiles" style="margin-bottom:20px">'
-        + _tile("4", "требуют внимания")
-        + _tile("900 ⭐", "денег в подвешенном состоянии")
-        + _tile("2 ч", "самый старый случай")
-        + "</div>"
-        + _card(
-            "Что пошло не так",
-            _table(
-                ("Статус", "Продукт", "Человек", "Оплачено", "Когда", "Причина", ""),
-                rows,
-                wide=(5,),
-            ),
-            '<span class="chip">обновляется само раз в минуту</span>',
-        )
-        + _card(
-            "Как это работает",
-            '<p class="hint">Упавшие разборы воркер уже пытался переделать и вернул звёзды сам — '
-            "здесь они, чтобы понять причину. Зависшие в generating не разрулит никто: "
-            "их надо либо перезапустить, либо вернуть деньги руками. Сироты — оплата дошла, "
-            "а заказ к ней не привязался.</p>",
-        )
-    )
-    return shell("queue", content, subtitle="Заказы, которые не дошли до человека", prototype=True)
-
-
 def people_page() -> str:
     """Поиск человека и его карточка."""
     search = (
@@ -322,7 +255,6 @@ def broadcasts_page() -> str:
 
 
 PROTOTYPES = {
-    "queue": queue_page,
     "people": people_page,
     "payments": payments_page,
     "support": support_page,
