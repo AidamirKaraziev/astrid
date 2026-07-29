@@ -143,7 +143,9 @@ def create_app(*, with_lifespan: bool = True) -> FastAPI:
     app.include_router(points_router, prefix="/v1")
     app.include_router(referrals_router, prefix="/v1")
     app.include_router(telegram_webhook_router, prefix="/v1")
-    # Панель — не часть API: без префикса версии и без OpenAPI.
+    # Панель — не часть API: без префикса версии и без OpenAPI. Живёт здесь
+    # только ради одного процесса на MVP; чтобы вынести её в свой сервис,
+    # достаточно убрать эту строку и поднять `astra-admin` (см. astra.admin.app).
     app.include_router(admin_router)
     instrument_fastapi_app(settings, app)
     return app

@@ -243,6 +243,84 @@ class TestCatalogPage:
         update.assert_not_awaited()
 
 
+class TestSections:
+    async def test_prototypes_render_with_nav(self):
+        settings = _settings()
+        async with await _client(settings) as client:
+            client.cookies.set(auth.COOKIE_NAME, auth.issue_session(settings))
+            for slug in ("queue", "people", "payments", "support", "settings", "broadcasts", "metrics"):
+                response = await client.get(f"/admin/{slug}")
+                assert response.status_code == 200, slug
+                # каркас на месте: меню и честная пометка «это макет»
+                assert 'nav class="side"' in response.text, slug
+                assert "прототип" in response.text, slug
+
+    async def test_unknown_section_is_404(self):
+        settings = _settings()
+        async with await _client(settings) as client:
+            client.cookies.set(auth.COOKIE_NAME, auth.issue_session(settings))
+            assert (await client.get("/admin/налоги")).status_code == 404
+
+    async def test_sections_need_login(self):
+        async with await _client(_settings()) as client:
+            response = await client.get("/admin/metrics")
+        assert response.status_code == 303
+        assert response.headers["location"].startswith("/admin/login")
+
+    async def test_login_route_wins_over_section(self):
+        """`/admin/login` не должен уехать в обработчик разделов."""
+        async with await _client(_settings()) as client:
+            response = await client.get("/admin/login")
+        assert response.status_code == 200
+        assert "Панель управления каталогом" in response.text
+
+
+class TestStandaloneApp:
+    """Панель должна уметь работать отдельным сервисом без остального API."""
+
+    async def test_serves_panel_without_api_routes(self):
+        from astra.admin.app import create_admin_app
+
+        get_settings.cache_clear()
+        with patch("astra.core.config.Settings", return_value=_settings()):
+            app = create_admin_app(with_lifespan=False)
+
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            assert (await client.get("/health")).status_code == 200
+            assert (await client.get("/admin/login")).status_code == 200
+            # маршруты бота и API в отдельный сервис не едут
+            assert (await client.post("/v1/telegram/webhook")).status_code == 404
+
+    def test_does_not_import_telegram(self):
+        """Панель не тянет aiogram: в своём процессе бота не будет."""
+        import astra.admin.app
+        import astra.admin.mockups
+        import astra.admin.render
+        import astra.admin.routers
+        import astra.admin.service
+
+        modules = (
+            astra.admin.app,
+            astra.admin.routers,
+            astra.admin.service,
+            astra.admin.render,
+            astra.admin.mockups,
+        )
+        import ast
+
+        for module in modules:
+            tree = ast.parse(open(module.__file__, encoding="utf-8").read())
+            imported: list[str] = []
+            for node in ast.walk(tree):
+                if isinstance(node, ast.Import):
+                    imported += [alias.name for alias in node.names]
+                elif isinstance(node, ast.ImportFrom) and node.module:
+                    imported.append(node.module)
+            forbidden = [name for name in imported if "aiogram" in name or "astra.telegram" in name]
+            assert not forbidden, f"{module.__name__}: {forbidden}"
+
+
 class TestValidation:
     async def test_zero_price_rejected(self):
         with pytest.raises(AdminError):

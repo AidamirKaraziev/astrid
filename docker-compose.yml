@@ -168,6 +168,42 @@ services:
     command: >
       sh -c "alembic upgrade head && astra-worker"
 
+  # Панель отдельным процессом (profile: admin) — сейчас не нужна: /admin едет
+  # внутри api. Понадобится, когда у api появится публичный адрес под вебхук
+  # оплаты: тогда убрать include_router(admin_router) из astra.main и поднимать
+  # этот сервис. Адрес панели не изменится, только порт.
+  # Запуск: docker compose --profile admin up -d admin
+  # На проде порт стоит привязать к tailscale-интерфейсу: "100.120.8.76:8001:8001".
+  admin:
+    profiles: [admin]
+    <<: *restart
+    build:
+      <<: *app-build
+      target: runtime
+    env_file:
+      - .env
+    environment:
+      <<: *app-env
+      SENTRY_SERVICE: admin
+    ports:
+      - "8001:8001"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: astra-admin
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8001/health')",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
+
 volumes:
   postgres_data:
   compatibility_data:

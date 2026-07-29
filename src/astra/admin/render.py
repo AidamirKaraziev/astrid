@@ -37,7 +37,7 @@ body::before {
     radial-gradient(700px 700px at 50% 110%, rgba(217, 70, 239, .18), transparent 62%);
 }
 a { color: #c4b5fd; }
-.wrap { max-width: 980px; margin: 0 auto; padding: 32px 20px 72px; }
+.wrap { max-width: 1180px; margin: 0 auto; padding: 32px 20px 72px; }
 
 header.top {
   display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
@@ -88,6 +88,9 @@ form.row {
 }
 .field input:focus, .field select:focus { border-color: #a78bfa; box-shadow: 0 0 0 3px rgba(167,139,250,.18); }
 .field.wide input, .field.wide select { width: 150px; }
+/* поле, растягивающееся по строке: поиск, выбор аудитории */
+.field.grow { flex: 1 1 260px; }
+.field.grow input, .field.grow select { width: 100%; }
 
 .toggle { display: flex; align-items: center; gap: 8px; font-size: 14px; color: #cfc7e6; padding-bottom: 9px; }
 .toggle input { width: 17px; height: 17px; accent-color: #a78bfa; }
@@ -122,6 +125,82 @@ details[open] summary::before { content: "− "; }
 }
 .flash.err { border-color: rgba(252,165,165,.32); background: rgba(248,113,113,.13); color: #fecaca; }
 
+/* --- каркас: боковая навигация + содержимое --- */
+.layout { display: grid; grid-template-columns: 186px 1fr; gap: 26px; align-items: start; }
+/* без min-width:0 колонка растягивается под самую широкую таблицу и вбок едет
+   вся страница вместо внутренней прокрутки .scroll */
+.layout > main { min-width: 0; }
+nav.side { position: sticky; top: 24px; display: flex; flex-direction: column; gap: 3px; }
+nav.side a {
+  padding: 9px 14px; border-radius: 12px; font-size: 14.5px; text-decoration: none;
+  color: #cfc7e6; border: 1px solid transparent; white-space: nowrap;
+}
+nav.side a:hover { background: rgba(255,255,255,.055); }
+nav.side a.on {
+  background: rgba(139,92,246,.20); color: #f3e8ff; border-color: rgba(196,181,253,.28);
+}
+
+/* --- таблицы списков --- */
+.scroll { overflow-x: auto; }
+.card .scroll { margin-top: 12px; }
+table.list { width: 100%; border-collapse: collapse; font-size: 14px; }
+table.list th {
+  text-align: left; font-size: 11px; font-weight: 600; letter-spacing: .9px;
+  text-transform: uppercase; color: #a99fc4; padding: 0 14px 10px 0; white-space: nowrap;
+}
+/* Ячейки не переносим — таблица уезжает в горизонтальную прокрутку .scroll;
+   длинным текстам (причина ошибки, текст обращения) даём класс .cell-wide. */
+table.list td { padding: 11px 14px 11px 0; border-top: 1px solid rgba(196,181,253,.10); white-space: nowrap; }
+table.list td.cell-wide { white-space: normal; min-width: 170px; }
+table.list button { padding: 7px 12px; font-size: 13px; margin-right: 6px; }
+table.list tr:hover td { background: rgba(255,255,255,.025); }
+.mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; color: #c4b5fd; }
+.dim { color: #a99fc4; }
+
+.badge {
+  display: inline-block; font-size: 11.5px; padding: 3px 9px; border-radius: 999px;
+  border: 1px solid rgba(196,181,253,.28); color: #c4b5fd; background: rgba(139,92,246,.12);
+}
+.badge.bad { color: #fca5a5; border-color: rgba(252,165,165,.32); background: rgba(248,113,113,.12); }
+.badge.warn { color: #fcd34d; border-color: rgba(252,211,77,.3); background: rgba(251,191,36,.12); }
+.badge.ok { color: #bbf7d0; border-color: rgba(134,239,172,.3); background: rgba(74,222,128,.12); }
+
+/* --- метрики --- */
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(158px, 1fr)); gap: 14px; }
+.tile {
+  padding: 18px 20px; border-radius: 18px;
+  background: linear-gradient(160deg, rgba(255,255,255,.075), rgba(255,255,255,.028));
+  border: 1px solid rgba(196,181,253,.16);
+}
+.tile b { display: block; font-size: 27px; font-weight: 650; letter-spacing: -.5px; }
+.tile span { font-size: 12.5px; color: #a99fc4; }
+.tile em { font-style: normal; font-size: 12.5px; color: #bbf7d0; }
+.bars { display: flex; align-items: flex-end; gap: 9px; height: 132px; margin-top: 6px; }
+.bars i {
+  flex: 1; border-radius: 7px 7px 0 0; background: linear-gradient(180deg, #d8b4fe, #7c3aed);
+  position: relative;
+}
+.bars i:hover { filter: brightness(1.15); }
+.bars-x { display: flex; gap: 9px; margin-top: 8px; }
+.bars-x span { flex: 1; text-align: center; font-size: 11px; color: #a99fc4; }
+
+/* --- прототип --- */
+.proto {
+  display: inline-block; font-size: 11px; letter-spacing: 1px; text-transform: uppercase;
+  padding: 4px 10px; border-radius: 999px; margin-left: 10px; vertical-align: middle;
+  color: #fcd34d; border: 1px solid rgba(252,211,77,.32); background: rgba(251,191,36,.1);
+}
+.note {
+  padding: 12px 16px; border-radius: 14px; margin-bottom: 18px; font-size: 13.5px;
+  color: #d9d0ef; border: 1px dashed rgba(196,181,253,.3); background: rgba(139,92,246,.08);
+}
+textarea {
+  width: 100%; min-height: 120px; padding: 12px 14px; font: inherit; font-size: 14.5px;
+  color: #ece7f7; background: rgba(12,7,24,.75); border: 1px solid rgba(196,181,253,.24);
+  border-radius: 14px; outline: none; resize: vertical;
+}
+textarea:focus { border-color: #a78bfa; }
+
 .login { max-width: 380px; margin: 14vh auto 0; padding: 0 20px; }
 .login .card { padding: 30px 28px; }
 .login h1 { margin: 0 0 6px; font-size: 23px; }
@@ -130,12 +209,22 @@ details[open] summary::before { content: "− "; }
 .login .field input { width: 100%; }
 .login button { width: 100%; margin-top: 6px; }
 
+@media (max-width: 860px) {
+  .layout { grid-template-columns: 1fr; gap: 18px; }
+  nav.side {
+    position: static; flex-direction: row; overflow-x: auto; gap: 6px;
+    padding-bottom: 6px; scrollbar-width: none;
+  }
+  nav.side::-webkit-scrollbar { display: none; }
+}
+
 @media (max-width: 620px) {
   .wrap { padding: 18px 14px 56px; }
   form.row { gap: 10px; }
   .field input, .field select, .field.wide input, .field.wide select { width: 100%; }
   .field { flex: 1 1 130px; }
   form.row button { flex: 1 1 100%; }
+  .tile b { font-size: 23px; }
 }
 """
 
@@ -185,6 +274,55 @@ def page(title: str, body: str) -> str:
         f"<title>{escape(title)}</title><style>{_CSS}</style></head>"
         f"<body>{body}</body></html>"
     )
+
+
+# Разделы панели: slug (пустой — каталог), пункт меню, заголовок страницы.
+SECTIONS: tuple[tuple[str, str, str], ...] = (
+    ("", "Каталог", "Каталог"),
+    ("queue", "Очередь", "Очередь проблем"),
+    ("people", "Люди", "Люди"),
+    ("payments", "Платежи", "Платежи"),
+    ("support", "Поддержка", "Обращения"),
+    ("settings", "Настройки", "Настройки и тексты"),
+    ("broadcasts", "Рассылки", "Рассылки"),
+    ("metrics", "Метрики", "Метрики"),
+)
+
+_TITLES = {slug: title for slug, _, title in SECTIONS}
+
+
+def _nav(active: str) -> str:
+    items = "".join(
+        f'<a href="/admin/{slug}" class="{"on" if slug == active else ""}">{escape(label)}</a>'
+        for slug, label, _ in SECTIONS
+    )
+    return f'<nav class="side">{items}</nav>'
+
+
+def shell(
+    active: str,
+    content: str,
+    *,
+    subtitle: str,
+    banner: str = "",
+    script: str = "",
+    prototype: bool = False,
+) -> str:
+    """Каркас страницы: шапка, боковое меню, содержимое раздела."""
+    title = _TITLES.get(active, "Панель")
+    proto = '<span class="proto">прототип</span>' if prototype else ""
+    tail = f"<script>{script}</script>" if script else ""
+    body = (
+        '<div class="wrap">'
+        f'<header class="top"><div><h1>Astra ✨ {escape(title.lower())}{proto}</h1>'
+        f"<p>{escape(subtitle)}</p></div>"
+        '<div class="spacer"></div>'
+        '<form method="post" action="/admin/logout"><button class="ghost" type=submit>Выйти</button></form>'
+        "</header>"
+        f'<div class="layout">{_nav(active)}<main>{banner}{content}</main></div>'
+        f"</div>{tail}"
+    )
+    return page(f"{title} — Astra", body)
 
 
 def login_page(*, error: str | None = None) -> str:
@@ -329,14 +467,10 @@ def catalog_page(
         sections.append('<h2 class="section">Призы колеса <span>— перебивают акции каталога</span></h2>')
         sections.extend(_prize_form(prize, total_weight) for prize in prizes)
 
-    body = (
-        '<div class="wrap">'
-        '<header class="top"><div><h1>Astra ✨ каталог</h1>'
-        "<p>Правки применяются сразу — цена читается из базы на каждую покупку</p></div>"
-        '<div class="spacer"></div>'
-        '<form method="post" action="/admin/logout"><button class="ghost" type=submit>Выйти</button></form>'
-        "</header>"
-        f"{banner}{''.join(sections)}"
-        f"</div><script>{_JS}</script>"
+    return shell(
+        "",
+        "".join(sections),
+        subtitle="Правки применяются сразу — цена читается из базы на каждую покупку",
+        banner=banner,
+        script=_JS,
     )
-    return page("Каталог — Astra", body)

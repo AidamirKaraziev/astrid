@@ -41,6 +41,8 @@ dev = [
 [project.scripts]
 astra-api = "astra.main:run"
 astra-worker = "astra.workers.main:run"
+# Панель отдельным процессом: нужна, когда /admin надо увести с публичного порта
+astra-admin = "astra.admin.app:run"
 
 [build-system]
 requires = ["hatchling"]

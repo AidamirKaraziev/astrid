@@ -16,6 +16,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from astra.admin import auth, service
+from astra.admin.mockups import PROTOTYPES
 from astra.admin.render import catalog_page, login_page
 from astra.admin.service import AdminError
 from astra.core.config import Settings, get_settings
@@ -154,6 +155,19 @@ async def catalog(
             flash_error=bool(error),
         ),
     )
+
+
+@router.get("/{section}")
+async def prototype_section(section: str, request: Request) -> Response:
+    """Макеты будущих разделов: вёрстка на выдуманных данных, в базу не ходят."""
+    redirect = _guard(request)
+    if redirect is not None:
+        return redirect
+
+    page = PROTOTYPES.get(section)
+    if page is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
+    return HTMLResponse(page())
 
 
 @router.post("/prices/{price_id}")
