@@ -1,6 +1,8 @@
 """Тесты админ-панели: выключена без пароля, вход, правки каталога, экранирование."""
 
 import uuid
+from datetime import date
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -248,12 +250,49 @@ class TestSections:
         settings = _settings()
         async with await _client(settings) as client:
             client.cookies.set(auth.COOKIE_NAME, auth.issue_session(settings))
-            for slug in ("queue", "people", "payments", "support", "settings", "broadcasts", "metrics"):
+            for slug in ("queue", "people", "payments", "support", "settings", "broadcasts"):
                 response = await client.get(f"/admin/{slug}")
                 assert response.status_code == 200, slug
                 # каркас на месте: меню и честная пометка «это макет»
                 assert 'nav class="side"' in response.text, slug
-                assert "прототип" in response.text, slug
+                assert 'class="proto"' in response.text, slug
+
+    async def test_metrics_page_is_live_not_prototype(self):
+        """Метрики уехали из макетов: страница считает по базе."""
+        from astra.admin.mockups import PROTOTYPES
+
+        assert "metrics" not in PROTOTYPES
+
+        settings = _settings()
+        dashboard = MagicMock(
+            days=7,
+            money=MagicMock(revenue=4830, payments=41, buyers=30, refunds=0,
+                            refunded_amount=0, discount_given=120, average_check=118),
+            previous=MagicMock(revenue=4100, payments=35),
+            revenue_days=[(date(2026, 7, 29), 1270)],
+            funnel=[SimpleNamespace(name="Запустили бота", people=10, share=lambda total: 100.0)],
+            products=[SimpleNamespace(action="day_card", title="Карта дня", uses=14,
+                                      users=6, paid_uses=0, free_uses=14)],
+            audience=MagicMock(dau=5, wau=9, mau=12, stickiness=41.7, retention={1: 50.0, 7: 20.0, 30: 0.0}),
+            streaks=[("1", 5), ("30+", 1)],
+            wheel=MagicMock(spins=4, spins_free=4, spins_paid=0, wins_total=4,
+                            wins_activated=1, wins_expired=2, activation_share=25.0,
+                            revenue_from_prizes=150, prize_rows=(("tarot_wish −100%", 2, 50.0, 33.3),)),
+            referrals=MagicMock(invited=1, organic=6, invited_conversion=100.0, organic_conversion=16.7),
+            repeat=MagicMock(paying_users=3, repeat_users=1, repeat_share=33.3, revenue_per_buyer=160),
+            signups=2,
+            failed=(1, 16),
+            days_to_purchase=2.5,
+        )
+        with patch(f"{_ROUTERS}.metrics_queries.collect", AsyncMock(return_value=dashboard)):
+            async with await _client(settings) as client:
+                client.cookies.set(auth.COOKIE_NAME, auth.issue_session(settings))
+                response = await client.get("/admin/metrics?days=7")
+
+        assert response.status_code == 200
+        assert 'class="proto"' not in response.text  # бейджа макета нет
+        assert "Карта дня" in response.text
+        assert "липкость 41.7%" in response.text
 
     async def test_unknown_section_is_404(self):
         settings = _settings()

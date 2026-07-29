@@ -110,6 +110,12 @@ class Settings(BaseSettings):
     tarot_spreads_enabled: bool = True
     tarot_reading_price_stars: int = 50
 
+    # Ежедневная сводка в группу операторов: во сколько (по Москве) и слать ли.
+    # Уходит в TELEGRAM_ADMIN_GROUP_ID; без него сводка не отправляется.
+    admin_report_enabled: bool = True
+    admin_report_hour: int = 10
+    admin_report_timezone: str = "Europe/Moscow"
+
     # Админ-панель /admin: правка цен, скидок и призов колеса без релиза.
     # Пустой admin_password = панель выключена целиком (все роуты отвечают 404).
     admin_username: str = "astrid"

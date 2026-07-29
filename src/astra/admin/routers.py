@@ -16,7 +16,9 @@ from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from astra.admin import auth, service
+from astra.admin import metrics as metrics_queries
 from astra.admin.mockups import PROTOTYPES
+from astra.admin.render_metrics import metrics_page
 from astra.admin.render import catalog_page, login_page
 from astra.admin.service import AdminError
 from astra.core.config import Settings, get_settings
@@ -155,6 +157,26 @@ async def catalog(
             flash_error=bool(error),
         ),
     )
+
+
+@router.get("/metrics")
+async def metrics(
+    request: Request,
+    session: AsyncSession = Depends(get_session),
+) -> Response:
+    """Живые метрики: деньги, воронка, продукты, аудитория, колесо, рефералы."""
+    redirect = _guard(request)
+    if redirect is not None:
+        return redirect
+
+    try:
+        days = int(request.query_params.get("days", metrics_queries.DEFAULT_DAYS))
+    except ValueError:
+        days = metrics_queries.DEFAULT_DAYS
+    days = min(max(days, 1), 365)
+
+    dashboard = await metrics_queries.collect(session, days)
+    return HTMLResponse(metrics_page(dashboard))
 
 
 @router.get("/{section}")

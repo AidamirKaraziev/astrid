@@ -184,6 +184,13 @@ table.list tr:hover td { background: rgba(255,255,255,.025); }
 .bars-x { display: flex; gap: 9px; margin-top: 8px; }
 .bars-x span { flex: 1; text-align: center; font-size: 11px; color: #a99fc4; }
 
+.periods { display: flex; gap: 8px; margin-bottom: 18px; flex-wrap: wrap; }
+.periods a {
+  padding: 7px 14px; border-radius: 999px; font-size: 13.5px; text-decoration: none;
+  color: #c4b5fd; border: 1px solid rgba(196,181,253,.24);
+}
+.periods a.on { background: rgba(139,92,246,.22); color: #f3e8ff; border-color: rgba(196,181,253,.4); }
+
 /* --- прототип --- */
 .proto {
   display: inline-block; font-size: 11px; letter-spacing: 1px; text-transform: uppercase;
@@ -323,6 +330,56 @@ def shell(
         f"</div>{tail}"
     )
     return page(f"{title} — Astra", body)
+
+
+# --- кирпичики страниц: их используют и живые разделы, и макеты ---
+
+
+def card(title: str, inner: str, chips: str = "") -> str:
+    return f'<div class="card"><div class="card-head"><h3>{title}</h3>{chips}</div>{inner}</div>'
+
+
+def tile(value: str, label: str, note: str = "") -> str:
+    note_html = f"<em>{note}</em>" if note else ""
+    return f'<div class="tile"><b>{value}</b><span>{label}</span> {note_html}</div>'
+
+
+def tiles(*items: str) -> str:
+    return f'<div class="tiles" style="margin-bottom:20px">{"".join(items)}</div>'
+
+
+def table(
+    headers: tuple[str, ...],
+    rows: list[tuple[str, ...]],
+    *,
+    wide: tuple[int, ...] = (),
+) -> str:
+    """Таблица списка; `wide` — номера колонок, где длинный текст переносится."""
+    head = "".join(f"<th>{h}</th>" for h in headers)
+    body = "".join(
+        "<tr>"
+        + "".join(
+            f'<td{" class=cell-wide" if i in wide else ""}>{cell}</td>'
+            for i, cell in enumerate(row)
+        )
+        + "</tr>"
+        for row in rows
+    )
+    return (
+        f'<div class="scroll"><table class="list"><thead><tr>{head}</tr></thead>'
+        f"<tbody>{body}</tbody></table></div>"
+    )
+
+
+def bars(points: list[tuple[str, int]], unit: str = "⭐") -> str:
+    """Столбики по дням: подпись под каждым, значение в подсказке."""
+    top = max((value for _, value in points), default=0) or 1
+    columns = "".join(
+        f'<i style="height:{max(2, round(value * 100 / top))}%" title="{escape(label)}: {value} {unit}"></i>'
+        for label, value in points
+    )
+    labels = "".join(f"<span>{escape(label)}</span>" for label, _ in points)
+    return f'<div class="bars">{columns}</div><div class="bars-x">{labels}</div>'
 
 
 def login_page(*, error: str | None = None) -> str:

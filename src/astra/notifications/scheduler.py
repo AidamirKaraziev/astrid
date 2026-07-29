@@ -103,6 +103,43 @@ async def process_scheduled_notifications(
     return enqueued
 
 
+async def send_daily_report_if_due(
+    session: AsyncSession,
+    bot_send_text,
+    settings: Settings | None = None,
+    now_utc: datetime | None = None,
+) -> bool:
+    """Раз в сутки отправить сводку в группу операторов. True — отправили.
+
+    Сводка уходит в тот же час, что задан в конфиге, и ровно один раз: отметка
+    о последней отправке живёт в памяти процесса, а совпадение по минуте не даёт
+    повторов внутри часа.
+    """
+    cfg = settings or get_settings()
+    if not cfg.admin_report_enabled or not cfg.telegram_admin_group_id:
+        return False
+
+    now = (now_utc or datetime.now(ZoneInfo("UTC"))).astimezone(
+        ZoneInfo(cfg.admin_report_timezone),
+    )
+    if now.hour != cfg.admin_report_hour or now.minute != 0:
+        return False
+    if _last_report_sent.get("day") == now.date():
+        return False
+
+    from astra.admin.daily_report import build_daily_report
+
+    text = await build_daily_report(session)
+    await bot_send_text(cfg.telegram_admin_group_id, text)
+    _last_report_sent["day"] = now.date()
+    log.info("admin.daily_report.sent", chat_id=cfg.telegram_admin_group_id)
+    return True
+
+
+# Последний день, за который сводка уже ушла (в памяти процесса).
+_last_report_sent: dict[str, object] = {}
+
+
 async def notification_worker(
     bot_send_text,
     interval_seconds: int = 60,
@@ -125,4 +162,12 @@ async def notification_worker(
                     log.info(Event.SCHEDULER_ENQUEUED, count=count)
         except Exception:
             log.exception(Event.SCHEDULER_ITERATION_FAILED)
+
+        # Сводка отдельно от прогнозов: её падение не должно рвать рассылку.
+        try:
+            async with get_session_factory()() as session:
+                await send_daily_report_if_due(session, bot_send_text, cfg)
+        except Exception:
+            log.exception("admin.daily_report.failed")
+
         await asyncio.sleep(interval_seconds)

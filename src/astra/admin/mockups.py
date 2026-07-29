@@ -8,46 +8,12 @@
 
 from __future__ import annotations
 
-from astra.admin.render import shell
+from astra.admin.render import card as _card, shell, table as _table, tile as _tile
 
 _DEMO_NOTE = (
     "Данные на этом экране выдуманы — макет для обсуждения структуры. "
     "Кнопки пока ничего не делают."
 )
-
-
-def _table(
-    headers: tuple[str, ...],
-    rows: list[tuple[str, ...]],
-    *,
-    wide: tuple[int, ...] = (),
-) -> str:
-    """Таблица списка; `wide` — номера колонок, где длинный текст переносится."""
-    head = "".join(f"<th>{h}</th>" for h in headers)
-    body = "".join(
-        "<tr>"
-        + "".join(
-            f'<td{" class=cell-wide" if i in wide else ""}>{cell}</td>'
-            for i, cell in enumerate(row)
-        )
-        + "</tr>"
-        for row in rows
-    )
-    return (
-        f'<div class="scroll"><table class="list"><thead><tr>{head}</tr></thead>'
-        f"<tbody>{body}</tbody></table></div>"
-    )
-
-
-def _card(title: str, inner: str, chips: str = "") -> str:
-    return (
-        f'<div class="card"><div class="card-head"><h3>{title}</h3>{chips}</div>{inner}</div>'
-    )
-
-
-def _tile(value: str, label: str, note: str = "") -> str:
-    note_html = f"<em>{note}</em>" if note else ""
-    return f'<div class="tile"><b>{value}</b><span>{label}</span> {note_html}</div>'
 
 
 def _btn(label: str, ghost: bool = True) -> str:
@@ -355,56 +321,6 @@ def broadcasts_page() -> str:
     return shell("broadcasts", content, subtitle="Одно сообщение — тысячи людей, поэтому с подтверждением", prototype=True)
 
 
-def metrics_page() -> str:
-    """Дашборд: деньги и воронка."""
-    days = (("23.07", 380), ("24.07", 520), ("25.07", 610), ("26.07", 440),
-            ("27.07", 720), ("28.07", 890), ("29.07", 1270))
-    top = max(value for _, value in days)
-    bars = "".join(
-        f'<i style="height:{round(value * 100 / top)}%" title="{label}: {value} ⭐"></i>'
-        for label, value in days
-    )
-    labels = "".join(f"<span>{label}</span>" for label, _ in days)
-    funnel = _table(
-        ("Шаг", "Людей", "Доля"),
-        [
-            ("Запустили бота", "3 412", "100%"),
-            ("Прошли онбординг", "2 640", "77%"),
-            ("Открыли платный раздел", "1 108", "32%"),
-            ("Дошли до инвойса", "742", "22%"),
-            ("Оплатили", "604", "18%"),
-            ("Купили второй раз", "213", "6%"),
-        ],
-    )
-    products = _table(
-        ("Товар", "Оплат", "Выручка", "Средний чек"),
-        [
-            ("Спроси Астрид · дети", "96", "19 200 ⭐", "200 ⭐"),
-            ("Таро · на отношения", "88", "11 220 ⭐", "128 ⭐"),
-            ("Натал · полный разбор", "22", "11 000 ⭐", "500 ⭐"),
-            ("Таро · на желание", "104", "5 200 ⭐", "50 ⭐"),
-            ("Колесо · вращение", "141", "3 525 ⭐", "25 ⭐"),
-        ],
-    )
-    content = (
-        f'<div class="note">{_DEMO_NOTE}</div>'
-        '<div class="tiles" style="margin-bottom:20px">'
-        + _tile("4 830 ⭐", "выручка за 7 дней", "+18%")
-        + _tile("41", "оплаты", "+6")
-        + _tile("18%", "старт → покупка")
-        + _tile("118 ⭐", "средний чек")
-        + _tile("512", "активных за день")
-        + "</div>"
-        + _card(
-            "Выручка по дням",
-            f'<div class="bars">{bars}</div><div class="bars-x">{labels}</div>',
-        )
-        + _card("Воронка", funnel)
-        + _card("Товары за 7 дней", products)
-    )
-    return shell("metrics", content, subtitle="Деньги, воронка и что покупают", prototype=True)
-
-
 PROTOTYPES = {
     "queue": queue_page,
     "people": people_page,
@@ -412,5 +328,4 @@ PROTOTYPES = {
     "support": support_page,
     "settings": settings_page,
     "broadcasts": broadcasts_page,
-    "metrics": metrics_page,
 }
