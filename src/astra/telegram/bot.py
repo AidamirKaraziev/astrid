@@ -12,6 +12,7 @@ from astra.core.config import Settings
 from astra.core.observability import get_logger
 from astra.core.observability.middleware.telegram import TelegramObservabilityMiddleware
 from astra.db.session import get_session_factory
+from astra.telegram.activity_middleware import ActivityMiddleware
 from astra.telegram.auto_keyboard_middleware import AutoKeyboardMiddleware
 from astra.telegram.bot_menu import setup_bot_menu
 from astra.telegram.handlers import ask_astrid, catalog, commands, compatibility, day_card, menu, natal, navigation, onboarding, people, places, start, support, support_relay, tarot_daily, tarot_spreads, wheel
@@ -61,6 +62,8 @@ async def create_dispatcher(settings: Settings) -> Dispatcher:
 
     dp.update.outer_middleware(TelegramObservabilityMiddleware())
     dp.update.middleware(DbSessionMiddleware(get_session_factory()))
+    # После сессии и до хендлеров: отметка «человек сегодня был в боте».
+    dp.update.middleware(ActivityMiddleware())
     dp.message.middleware(AutoKeyboardMiddleware())
     dp.callback_query.middleware(AutoKeyboardMiddleware())
 

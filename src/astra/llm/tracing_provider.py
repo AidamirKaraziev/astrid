@@ -6,6 +6,7 @@ import time
 
 from astra.core.observability import Event, get_logger
 from astra.core.observability.tracing import start_span
+from astra.llm.accounting import record_call
 from astra.llm.base import BaseLlmProvider
 from astra.llm.types import CompletionRequest, CompletionResult
 
@@ -50,4 +51,17 @@ class TracingLlmProvider(BaseLlmProvider):
                 span.set_attribute("llm.duration_ms", duration_ms)
                 if result.reason:
                     span.set_attribute("llm.reason", result.reason)
+                if result.usage.known:
+                    span.set_attribute("llm.prompt_tokens", result.usage.prompt or 0)
+                    span.set_attribute("llm.completion_tokens", result.usage.completion or 0)
+
+            await record_call(
+                provider=self.name,
+                model=result.model,
+                purpose=self._purpose,
+                status=status,
+                reason=result.reason,
+                duration_ms=duration_ms,
+                usage=result.usage,
+            )
             return result

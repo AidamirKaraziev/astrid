@@ -18,7 +18,7 @@ from __future__ import annotations
 import uuid
 from datetime import date
 
-from sqlalchemy import Boolean, Date, ForeignKey, Index, String
+from sqlalchemy import Boolean, Date, ForeignKey, Index, String, UniqueConstraint
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -53,3 +53,37 @@ class UsageEvent(Base, TimestampMixin):
     # Платный продукт или бесплатный: разделяет «пользуются» и «покупают».
     is_paid: Mapped[bool] = mapped_column(Boolean, default=False)
     local_date: Mapped[date] = mapped_column(Date, index=True)
+
+
+class ActivityDay(Base, TimestampMixin):
+    """Отметка «человек что-то делал в этот день».
+
+    Одна строка на человека в сутки, а не на каждое нажатие: при тысячах
+    пользователей это тысячи строк в день вместо десятков тысяч, а для
+    «активных за день», удержания и серий большего и не нужно.
+
+    Две даты намеренно. `day_msk` — московские сутки, по ним считается весь
+    дашборд, чтобы цифры на одном экране сходились. `day_local` — сутки
+    самого человека, по ним живёт его серия: во Владивостоке день не должен
+    обрываться в шесть утра. У пользователя, активного поздно вечером, эти
+    даты разойдутся — поэтому уникальность по обеим сразу.
+    """
+
+    __tablename__ = "activity_days"
+    __table_args__ = (
+        UniqueConstraint("user_id", "day_msk", "day_local", name="uq_activity_days_user_day"),
+        Index("ix_activity_days_day_msk", "day_msk"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid.uuid4,
+    )
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        index=True,
+    )
+    day_msk: Mapped[date] = mapped_column(Date)
+    day_local: Mapped[date] = mapped_column(Date)

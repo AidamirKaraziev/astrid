@@ -11,7 +11,7 @@
 
 from __future__ import annotations
 
-from datetime import date, datetime
+from datetime import UTC, date, datetime
 from zoneinfo import ZoneInfo
 
 from astra.users.models import User
@@ -29,6 +29,7 @@ def user_timezone(user: User) -> ZoneInfo:
         return ZoneInfo(DEFAULT_TIMEZONE)
 
 
-def local_today(user: User) -> date:
-    """Сегодняшняя дата в часовом поясе человека."""
-    return datetime.now(user_timezone(user)).date()
+def local_today(user: User, now: datetime | None = None) -> date:
+    """Дата в часовом поясе человека; `now` — для тестов и пересчётов."""
+    moment = now or datetime.now(UTC)
+    return moment.astimezone(user_timezone(user)).date()

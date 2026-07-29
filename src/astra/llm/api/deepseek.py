@@ -6,7 +6,7 @@ import httpx
 
 from astra.core.config import Settings, get_settings
 from astra.llm.base import BaseLlmProvider
-from astra.llm.types import CompletionRequest, CompletionResult
+from astra.llm.types import CompletionRequest, CompletionResult, usage_from_openai
 
 
 class DeepSeekProvider(BaseLlmProvider):
@@ -81,4 +81,8 @@ class DeepSeekProvider(BaseLlmProvider):
         raw = (message.get("content") or "").strip()
         if not raw:
             return CompletionResult(None, "empty_response")
-        return CompletionResult(raw)
+        return CompletionResult(
+            raw,
+            model=data.get("model"),
+            usage=usage_from_openai(data),
+        )

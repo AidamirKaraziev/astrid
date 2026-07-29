@@ -6,7 +6,7 @@ import httpx
 
 from astra.core.config import Settings, get_settings
 from astra.llm.base import BaseLlmProvider
-from astra.llm.types import CompletionRequest, CompletionResult
+from astra.llm.types import CompletionRequest, CompletionResult, usage_from_gemini
 
 
 def _build_gemini_payload(request: CompletionRequest) -> dict[str, object]:
@@ -107,4 +107,8 @@ class GeminiProvider(BaseLlmProvider):
                 return CompletionResult(None, f"blocked:{block_reason}")
             return CompletionResult(None, "empty_response")
 
-        return CompletionResult(raw)
+        return CompletionResult(
+            raw,
+            model=data.get("modelVersion") or cfg.gemini_model,
+            usage=usage_from_gemini(data),
+        )

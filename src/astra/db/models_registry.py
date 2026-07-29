@@ -12,6 +12,7 @@ from astra.predictions.zodiac_daily import ZodiacDailyHoroscope  # noqa: F401
 from astra.referrals.models import Referral, ReferralCode  # noqa: F401
 from astra.support.models import SupportTicket  # noqa: F401
 from astra.tarot.models import TarotDraw, TarotReading  # noqa: F401
-from astra.usage.models import UsageEvent  # noqa: F401
+from astra.llm.models import LlmCall, LlmPrice  # noqa: F401
+from astra.usage.models import ActivityDay, UsageEvent  # noqa: F401
 from astra.users.models import Profile, User  # noqa: F401
 from astra.wheel.models import WheelPrize, WheelWin  # noqa: F401
