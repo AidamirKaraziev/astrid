@@ -9,6 +9,7 @@
 from __future__ import annotations
 
 import uuid
+from datetime import UTC, datetime, timedelta
 from urllib.parse import parse_qs, urlencode
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
@@ -19,7 +20,9 @@ from astra.admin import auth, service
 from astra.admin import metrics as metrics_queries
 from astra.admin.mockups import PROTOTYPES
 from astra.admin import queue as admin_queue
+from astra.admin import timeline as timeline_queries
 from astra.admin.render_metrics import metrics_page
+from astra.admin.timeline import Grain
 from astra.admin.render_queue import queue_page
 from astra.admin.render import catalog_page, login_page
 from astra.admin.service import AdminError
@@ -172,13 +175,19 @@ async def metrics(
         return redirect
 
     try:
-        days = int(request.query_params.get("days", metrics_queries.DEFAULT_DAYS))
+        grain = Grain(request.query_params.get("grain", Grain.DAY))
     except ValueError:
-        days = metrics_queries.DEFAULT_DAYS
-    days = min(max(days, 1), 365)
+        grain = Grain.DAY
+
+    # Таблицы под графиками считаем за то же окно, что показывают столбики.
+    days = {Grain.DAY: 30, Grain.WEEK: 84, Grain.MONTH: 365}[grain]
+    since = datetime.now(UTC) - timedelta(days=days)
 
     dashboard = await metrics_queries.collect(session, days)
-    return HTMLResponse(metrics_page(dashboard))
+    line = await timeline_queries.collect(session, grain)
+    spend = await timeline_queries.llm_spend(session, since)
+    spend_rows = await timeline_queries.spend_by_product(session, since)
+    return HTMLResponse(metrics_page(dashboard, line, spend, spend_rows))
 
 
 @router.get("/queue")

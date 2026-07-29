@@ -5,7 +5,8 @@ from __future__ import annotations
 from html import escape
 
 from astra.admin.metrics import Dashboard
-from astra.admin.render import bars, card, shell, table, tile, tiles
+from astra.admin.render import card, shell, table, tile, tiles
+from astra.admin.render_timeline import charts
 
 
 def _stars(amount: int) -> str:
@@ -21,16 +22,7 @@ def _delta(current: int, previous: int) -> str:
     return f"{'+' if change >= 0 else ''}{change}% к прошлому периоду"
 
 
-def _period_switch(days: int) -> str:
-    options = ((7, "7 дней"), (30, "30 дней"), (90, "90 дней"))
-    links = "".join(
-        f'<a href="/admin/metrics?days={value}" class="{"on" if value == days else ""}">{label}</a>'
-        for value, label in options
-    )
-    return f'<div class="periods">{links}</div>'
-
-
-def metrics_page(dash: Dashboard) -> str:
+def metrics_page(dash: Dashboard, timeline, spend, spend_rows) -> str:
     money = dash.money
     failed, total_readings = dash.failed
     failed_share = round(failed * 100 / total_readings, 1) if total_readings else 0.0
@@ -132,12 +124,23 @@ def metrics_page(dash: Dashboard) -> str:
         ("Пришли сами", str(ref.organic), f"{ref.organic_conversion}% из них купили"),
     ]
 
+    llm_rows = [
+        (escape(purpose), str(calls), f"${cost:.2f}")
+        for purpose, calls, cost in spend_rows
+    ] or [("Вызовов пока не было", "", "")]
+
     content = (
-        _period_switch(dash.days)
+        charts(timeline, spend)
         + head
         + card(
-            "Выручка по дням",
-            bars([(day.strftime("%d.%m"), value) for day, value in dash.revenue_days]),
+            "Расход на модели",
+            table(("Продукт", "Вызовов", "Стоимость"), llm_rows),
+            f'<span class="chip">токенов {spend.tokens:,}</span>'.replace(",", " ")
+            + (
+                f'<span class="chip">{spend.unknown_tokens} вызовов без учёта токенов</span>'
+                if spend.unknown_tokens
+                else ""
+            ),
         )
         + card("Деньги", table(("Показатель", "Значение", ""), money_rows, wide=(2,)))
         + card(
@@ -172,5 +175,5 @@ def metrics_page(dash: Dashboard) -> str:
     return shell(
         "metrics",
         content,
-        subtitle=f"Деньги, воронка и продукты за {dash.days} дн. — данные живые",
+        subtitle="Календарные периоды по Москве; таблицы ниже — за то же окно",
     )

@@ -284,15 +284,37 @@ class TestSections:
             failed=(1, 16),
             days_to_purchase=2.5,
         )
-        with patch(f"{_ROUTERS}.metrics_queries.collect", AsyncMock(return_value=dashboard)):
+        timeline = SimpleNamespace(
+            grain="day",
+            buckets=[SimpleNamespace(start=date(2026, 7, 29), label="29.07", current=True)],
+            people=[5],
+            products=[14],
+            calls=[31],
+            money=[1270],
+        )
+        spend = SimpleNamespace(
+            calls=31, failed=1, prompt_tokens=90000, completion_tokens=42000,
+            cost_usd=0.42, unknown_tokens=2, tokens=132000,
+        )
+        with (
+            patch(f"{_ROUTERS}.metrics_queries.collect", AsyncMock(return_value=dashboard)),
+            patch(f"{_ROUTERS}.timeline_queries.collect", AsyncMock(return_value=timeline)),
+            patch(f"{_ROUTERS}.timeline_queries.llm_spend", AsyncMock(return_value=spend)),
+            patch(
+                f"{_ROUTERS}.timeline_queries.spend_by_product",
+                AsyncMock(return_value=[("tarot_reading", 24, 0.31)]),
+            ),
+        ):
             async with await _client(settings) as client:
                 client.cookies.set(auth.COOKIE_NAME, auth.issue_session(settings))
-                response = await client.get("/admin/metrics?days=7")
+                response = await client.get("/admin/metrics?grain=day")
 
         assert response.status_code == 200
         assert 'class="proto"' not in response.text  # бейджа макета нет
         assert "Карта дня" in response.text
         assert "липкость 41.7%" in response.text
+        assert "вызовов модели" in response.text  # вторая линия на графике генераций
+        assert "$0.31" in response.text  # расход на модели по продуктам
 
     async def test_unknown_section_is_404(self):
         settings = _settings()

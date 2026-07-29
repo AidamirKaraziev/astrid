@@ -191,6 +191,22 @@ table.list tr:hover td { background: rgba(255,255,255,.025); }
 }
 .periods a.on { background: rgba(139,92,246,.22); color: #f3e8ff; border-color: rgba(196,181,253,.4); }
 
+/* --- график с двумя рядами --- */
+.bars i.pair { position: relative; }
+.bars.duo i { display: flex; align-items: flex-end; gap: 3px; background: none; height: 100%; }
+.bars.duo i > b {
+  flex: 1; border-radius: 5px 5px 0 0; background: linear-gradient(180deg, #d8b4fe, #7c3aed);
+}
+.bars.duo i > b.second { background: linear-gradient(180deg, #67e8f9, #0e7490); }
+.bars i.now, .bars.duo i.now > b { opacity: .55; }
+.legend { display: flex; gap: 16px; margin-top: 10px; font-size: 12.5px; color: #a99fc4; }
+.legend span::before {
+  content: ""; display: inline-block; width: 10px; height: 10px; border-radius: 3px;
+  margin-right: 6px; background: linear-gradient(180deg, #d8b4fe, #7c3aed);
+}
+.legend span.second::before { background: linear-gradient(180deg, #67e8f9, #0e7490); }
+.legend span.now::before { background: rgba(196,181,253,.45); }
+
 /* --- прототип --- */
 .proto {
   display: inline-block; font-size: 11px; letter-spacing: 1px; text-transform: uppercase;
