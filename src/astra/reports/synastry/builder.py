@@ -85,6 +85,7 @@ class SynastryPdfBuilder(BasePdfBuilder):
             section="Рабочие аспекты",
             hot=False,
             intro=self._report.working_aspects_intro,
+            legend=not self._report.strong_aspects,
         )
         self._page_zones()
         self._page_conclusion()
@@ -94,30 +95,44 @@ class SynastryPdfBuilder(BasePdfBuilder):
         total = 5  # cover, tldr, natal, zones, conclusion
         if self._report.pair_story.strip():
             total += 1
-        total += 1  # legend + first strong batch
 
-        y = self._content_top()
-        y = y - self._legend_height() - GAP["sm"]
-        y = y - self._aspect_card_height(self._report.strong_aspects[0], hot=True) - GAP["sm"]
-        idx = 1
-        while idx < len(self._report.strong_aspects):
-            h = self._aspect_card_height(self._report.strong_aspects[idx], hot=True) + GAP["sm"]
-            if y - h >= CONTENT_BOTTOM:
-                y -= h
-                idx += 1
-            else:
-                break
+        idx = 0
+        if self._report.strong_aspects:
+            total += 1  # legend + first strong batch
+            y = self._content_top()
+            y = y - self._legend_height() - GAP["sm"]
+            y = y - self._aspect_card_height(self._report.strong_aspects[0], hot=True) - GAP["sm"]
+            idx = 1
+            while idx < len(self._report.strong_aspects):
+                h = self._aspect_card_height(self._report.strong_aspects[idx], hot=True) + GAP["sm"]
+                if y - h >= CONTENT_BOTTOM:
+                    y -= h
+                    idx += 1
+                else:
+                    break
         total += len(self._plan_aspect_pages(self._report.strong_aspects[idx:]))
-        total += len(self._plan_aspect_pages(self._report.working_aspects))
+        total += len(
+            self._plan_aspect_pages(
+                self._report.working_aspects,
+                legend=not self._report.strong_aspects,
+            )
+        )
         return total
 
-    def _plan_aspect_pages(self, aspects: tuple[AspectData, ...] | list[AspectData]) -> list[str]:
+    def _plan_aspect_pages(
+        self,
+        aspects: tuple[AspectData, ...] | list[AspectData],
+        *,
+        legend: bool = False,
+    ) -> list[str]:
         if not aspects:
             return []
         pages: list[str] = []
         idx = 0
         while idx < len(aspects):
             y = self._content_top()
+            if legend and not pages:
+                y = y - self._legend_height() - GAP["sm"]
             count = 0
             while idx < len(aspects):
                 h = self._aspect_card_height(aspects[idx], hot=False)
@@ -376,6 +391,8 @@ class SynastryPdfBuilder(BasePdfBuilder):
         self._draw_footer()
 
     def _page_legend_and_strong_start(self) -> tuple[AspectData, ...]:
+        if not self._report.strong_aspects:
+            return ()
         self._new_page("strong", "Главные аспекты")
         self._draw_bg(vibe="content")
         self._draw_page_header("Главные аспекты", "Орб < 2° — работают постоянно")
@@ -401,6 +418,7 @@ class SynastryPdfBuilder(BasePdfBuilder):
         section: str,
         hot: bool,
         intro: str = "",
+        legend: bool = False,
     ) -> None:
         if not aspects:
             return
@@ -414,6 +432,8 @@ class SynastryPdfBuilder(BasePdfBuilder):
             self._new_page(bookmark, section if page_no == 0 else f"{section} (прод.)")
             self._draw_bg(vibe="content")
             self._draw_page_header(section, subtitle)
+            if legend and page_no == 0:
+                self._y = self._draw_legend(self._y)
 
             placed = 0
             while idx < len(aspects):

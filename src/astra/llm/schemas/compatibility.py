@@ -125,7 +125,7 @@ class CompatibilityLlmOutput(BaseModel):
     pair_story: str = Field(..., min_length=120, max_length=1400)
     natal_insight: str = Field(..., min_length=30, max_length=260)
     metrics: list[LlmMetric] = Field(min_length=4, max_length=4)
-    strong_aspects: list[LlmAspectBlock] = Field(min_length=1, max_length=MAX_ASPECT_BLOCKS)
+    strong_aspects: list[LlmAspectBlock] = Field(min_length=0, max_length=MAX_ASPECT_BLOCKS)
     working_aspects: list[LlmAspectBlock] = Field(min_length=0, max_length=MAX_ASPECT_BLOCKS)
     zone_blocks: list[LlmZoneBlock] = Field(min_length=3, max_length=3)
     conclusion_quote: str = Field(..., min_length=50, max_length=420)
