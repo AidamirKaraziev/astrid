@@ -36,6 +36,11 @@ def _user() -> MagicMock:
     user.telegram_id = 100500
     user.onboarding_completed = True
     user.profile = MagicMock(timezone="Europe/Moscow")
+    # серия и очки: любое использование продукта двигает их (usage.record_usage)
+    user.last_active_date = None
+    user.streak_current = 0
+    user.streak_best = 0
+    user.points = 0
     return user
 
 

@@ -61,6 +61,7 @@ from astra.telegram.button_texts import (
 from astra.telegram.keyboards import main_menu_keyboard, tarot_keyboard
 from astra.telegram.states import TarotStates
 from astra.telegram.tarot_media import send_card_photo, send_cards_album
+from astra.usage import UsageKind, record_usage
 from astra.users import crud as users_crud
 from astra.wheel import crud as wheel_crud
 from astra.wheel.service import mark_win_activated, reserve_win_for_reading, win_is_available
@@ -313,6 +314,13 @@ async def spread_question(message: Message, state: FSMContext, session: AsyncSes
             if win is not None:
                 await reserve_win_for_reading(session, win, reading.id)
                 await mark_win_activated(session, win)
+            await record_usage(
+                session,
+                user,
+                action=tarot_product_code(str(spread_type)),
+                kind=UsageKind.TAROT,
+                is_paid=False,
+            )
             await session.commit()
             await state.clear()
             log.info(
@@ -422,6 +430,13 @@ async def spread_paid(message: Message, session: AsyncSession) -> None:
             return  # дубль successful_payment — уже обработан
         if reading.status == ReadingStatus.PENDING_PAYMENT:
             await mark_reading_paid(session, reading, payment_info.total_amount)
+        await record_usage(
+            session,
+            user,
+            action=tarot_product_code(str(reading.spread_type)),
+            kind=UsageKind.TAROT,
+            is_paid=True,
+        )
         # Скидочный приз колеса тратится в момент оплаты расклада.
         win = await wheel_crud.get_pending_win_for_reading(session, reading.id)
         if win is not None:

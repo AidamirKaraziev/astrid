@@ -26,6 +26,7 @@ from astra.tarot.enums import ReadingStatus
 from astra.tarot.models import TarotReading
 from astra.tarot.spreads import SPREADS, SpreadSpec, SpreadType
 from astra.users import crud as users_crud
+from astra.users.local_time import local_today as _local_today
 from astra.users.models import User
 from astra.workers.telegram_send import send_telegram_html
 
@@ -47,7 +48,8 @@ READING_FAILED_REFUNDED_TEXT = (
 
 
 def local_today(user: User) -> date_type:
-    return datetime.now(ZoneInfo(user.profile.timezone)).date()
+    """Историческое имя: сам расчёт живёт в astra.users.local_time."""
+    return _local_today(user)
 
 
 async def try_acquire_reading_lock(user_id: UUID, settings: Settings | None = None) -> bool:

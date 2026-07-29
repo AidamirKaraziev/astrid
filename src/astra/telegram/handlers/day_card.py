@@ -20,6 +20,7 @@ from astra.telegram.button_texts import (
 )
 from astra.telegram.handlers.catalog import open_tarot_menu
 from astra.telegram.keyboards import day_forecast_followup_keyboard, main_menu_keyboard
+from astra.usage import ACTION_DAY_CARD, UsageKind, record_usage
 from astra.users import crud as users_crud
 
 log = get_logger(__name__)
@@ -62,6 +63,7 @@ async def cb_day_card_forecast(callback: CallbackQuery, session: AsyncSession) -
         await callback.message.answer(FORECAST_FAILED_TEXT, parse_mode="HTML")
         return
 
+    await record_usage(session, user, action=ACTION_DAY_CARD, kind=UsageKind.FORECAST)
     await session.commit()
     # Кнопку под картой убираем: прогноз уже открыт, повторное нажатие ни к чему.
     try:

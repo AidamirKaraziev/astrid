@@ -29,6 +29,7 @@ from astra.messaging.publisher import publish_ask_answer_generate
 from astra.payments.service import (
     ASK_PAYLOAD_PREFIX,
     ask_invoice_payload,
+    ask_product_code,
     get_ask_price,
     parse_ask_invoice_payload,
     register_ask_payment,
@@ -70,6 +71,7 @@ from astra.telegram.keyboards import (
 from astra.telegram.states import ProfileStates
 from astra.users import crud as users_crud
 from astra.users.gender import Gender
+from astra.usage import UsageKind, record_usage
 from astra.users.models import User
 
 log = get_logger(__name__)
@@ -397,6 +399,13 @@ async def _fulfill_reading(
         charge_id=charge_id,
         computed=result.model_dump(mode="json"),
         methodology_version=result.methodology_version,
+    )
+    await record_usage(
+        session,
+        user,
+        action=ask_product_code(reading.question_key),
+        kind=UsageKind.ASK,
+        is_paid=amount > 0,
     )
     await session.commit()  # сначала commit, потом publish — worker должен видеть строку
 

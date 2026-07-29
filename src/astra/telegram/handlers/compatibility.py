@@ -79,6 +79,7 @@ from astra.telegram.keyboards import (
 from astra.telegram.keyboards_people import person_pick_keyboard
 from astra.telegram.states import CompatibilityStates
 from astra.telegram.utils import parse_birth_date, parse_birth_time
+from astra.usage import ACTION_COMPATIBILITY, UsageKind, record_usage
 from astra.users import crud as users_crud
 from astra.users.gender import GENDER_FEMALE, GENDER_MALE
 
@@ -594,6 +595,13 @@ async def cb_compat_confirm(
             pair_mode=pair_mode,
             person_a=person_a,
             person_b=person_b,
+        )
+        await record_usage(
+            session,
+            user,
+            action=ACTION_COMPATIBILITY,
+            kind=UsageKind.COMPATIBILITY,
+            is_paid=False,
         )
         await session.commit()
         outcome = await request_compatibility_report(session, report.id)

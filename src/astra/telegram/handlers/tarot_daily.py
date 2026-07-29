@@ -13,6 +13,7 @@ from astra.core.observability import get_logger
 from astra.services.tarot_daily_service import format_tarot_reveal, reveal_daily_card
 from astra.telegram.keyboards import CB_TAROT_DAILY
 from astra.telegram.tarot_media import send_card_photo
+from astra.usage import ACTION_TAROT_DAILY, UsageKind, record_usage
 from astra.users import crud as users_crud
 
 log = get_logger(__name__)
@@ -43,6 +44,7 @@ async def cb_tarot_daily(callback: CallbackQuery, session: AsyncSession) -> None
         await callback.message.answer(_FAIL_TEXT)
         return
 
+    await record_usage(session, user, action=ACTION_TAROT_DAILY, kind=UsageKind.TAROT)
     await session.commit()
     await send_card_photo(
         callback.message,

@@ -13,6 +13,11 @@ os.environ.setdefault(
 )
 os.environ.setdefault("REDIS_URL", "redis://localhost:6379/0")
 
+# Регистрируем все ORM-модели, как это делает init_engine на старте приложения:
+# создание любой mapped-модели настраивает мапперы целиком, и без полного
+# реестра ссылки в relationship («NatalChart») не резолвятся.
+import astra.db.models_registry  # noqa: E402,F401
+
 
 @pytest.fixture
 def anyio_backend() -> str:

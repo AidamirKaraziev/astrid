@@ -17,6 +17,7 @@ from zoneinfo import ZoneInfo
 
 from astra.core.observability import Event, get_logger
 from astra.users.models import User
+from astra.users.local_time import local_today, user_timezone
 from astra.wheel import crud as wheel_crud
 from astra.wheel.enums import SpinType
 from astra.wheel.models import WheelPrize, WheelWin
@@ -25,12 +26,13 @@ log = get_logger(__name__)
 
 
 def user_local_today(user: User) -> date:
-    return datetime.now(ZoneInfo(user.profile.timezone)).date()
+    """Историческое имя: сам расчёт живёт в astra.users.local_time."""
+    return local_today(user)
 
 
 def free_win_expiry(user: User, won_on: date) -> datetime:
     """Конец локального дня пользователя (полночь следующего дня) в UTC."""
-    tz = ZoneInfo(user.profile.timezone)
+    tz = user_timezone(user)
     local_midnight = datetime.combine(won_on + timedelta(days=1), time.min, tzinfo=tz)
     return local_midnight.astimezone(UTC)
 

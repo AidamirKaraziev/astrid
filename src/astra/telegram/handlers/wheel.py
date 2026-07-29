@@ -49,6 +49,8 @@ from astra.wheel import crud as wheel_crud
 from astra.wheel.display import prize_label
 from astra.wheel.enums import SpinType
 from astra.wheel.models import WheelWin
+from astra.payments.service import WHEEL_SPIN_PRODUCT_CODE
+from astra.usage import UsageKind, record_usage
 from astra.wheel.service import perform_spin, user_local_today, win_is_available
 
 log = get_logger(__name__)
@@ -199,6 +201,13 @@ async def _spin_and_reveal(
     win = await perform_spin(session, user, spin_type, payment_id=payment_id)
     if win is None:
         return None
+    await record_usage(
+        session,
+        user,
+        action=WHEEL_SPIN_PRODUCT_CODE,
+        kind=UsageKind.WHEEL,
+        is_paid=spin_type != SpinType.FREE,
+    )
     await session.commit()
 
     labels = [prize_label(p.product_code, p.discount_percent) for p in prizes]

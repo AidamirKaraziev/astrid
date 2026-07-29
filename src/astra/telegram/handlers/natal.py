@@ -42,6 +42,7 @@ from astra.telegram.progress import (
 )
 from astra.telegram.states import NatalStates
 from astra.telegram.utils import parse_birth_date, parse_birth_time
+from astra.usage import ACTION_NATAL_REPORT, UsageKind, record_usage
 from astra.users import crud as users_crud
 from astra.users.gender import GENDER_FEMALE, GENDER_MALE
 
@@ -518,6 +519,13 @@ async def cb_natal_confirm(
             report = await create_natal_report_for_subject(session, user, subject)
         else:
             report = await create_natal_report_for_user(session, user)
+        await record_usage(
+            session,
+            user,
+            action=ACTION_NATAL_REPORT,
+            kind=UsageKind.NATAL,
+            is_paid=False,
+        )
         await session.commit()
         outcome = await request_natal_report(session, report.id)
     except Exception:
