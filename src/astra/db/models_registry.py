@@ -2,6 +2,7 @@
 
 from astra.ask.models import AskReading  # noqa: F401
 from astra.astro.models import NatalChart  # noqa: F401
+from astra.broadcasts.models import Broadcast, BroadcastDelivery  # noqa: F401
 from astra.compatibility.models import CompatibilityReport, NatalProfile  # noqa: F401
 from astra.natal_report.models import NatalReport  # noqa: F401
 from astra.payments.models import Payment, Product, ProductPrice  # noqa: F401
