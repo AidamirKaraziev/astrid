@@ -23,6 +23,8 @@ from astra.admin import queue as admin_queue
 from astra.admin import timeline as timeline_queries
 from astra.admin.render_metrics import metrics_page
 from astra.admin.timeline import Grain
+from astra.admin import ledger
+from astra.admin.render_ledger import ledger_page
 from astra.admin.render_queue import queue_page
 from astra.admin.render_settings import settings_page
 from astra.admin.render import catalog_page, login_page
@@ -296,6 +298,42 @@ async def save_llm_price(
         output_per_million=str(row.output_per_million),
     )
     return _redirect("/admin/settings", ok=f"{row.model}: цена сохранена.")
+
+
+@router.get("/payments")
+async def payments(
+    request: Request,
+    session: AsyncSession = Depends(get_session),
+) -> Response:
+    """Лента событий: оплаты, выдачи, возвраты, черновики, аварии, колесо."""
+    redirect = _guard(request)
+    if redirect is not None:
+        return redirect
+
+    params = request.query_params
+
+    def _set(name: str) -> set[str]:
+        raw = params.get(name, "")
+        return {piece for piece in raw.split(",") if piece}
+
+    try:
+        page = int(params.get("page", 1))
+    except ValueError:
+        page = 1
+
+    period = params.get("period", "today")
+    filters = ledger.Filters(
+        period=period if period in ledger.PERIODS else "today",
+        kinds=_set("kinds"),
+        products=_set("products"),
+        query=params.get("q", "").strip(),
+        page=page,
+    )
+
+    events, totals, total = await ledger.collect(session, filters)
+    titles = await ledger.product_titles(session)
+    products = sorted(titles.items(), key=lambda item: item[1])
+    return HTMLResponse(ledger_page(events, totals, filters, products))
 
 
 @router.get("/{section}")

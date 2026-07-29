@@ -90,44 +90,6 @@ def people_page() -> str:
     return shell("people", content, subtitle="Кто это, что купил и что у него сломалось", prototype=True)
 
 
-def payments_page() -> str:
-    """Список оплат с фильтрами и возвратом."""
-    filters = (
-        '<form class="row" style="border:0;margin:0;padding:0">'
-        '<div class="field wide"><label>Период</label>'
-        "<select><option>Сегодня</option><option selected>7 дней</option>"
-        "<option>30 дней</option><option>Всё время</option></select></div>"
-        '<div class="field wide"><label>Товар</label>'
-        "<select><option>Все</option><option>Таро</option><option>Спроси Астрид</option>"
-        "<option>Колесо</option></select></div>"
-        '<div class="field wide"><label>Статус</label>'
-        "<select><option>Все</option><option>Оплачен</option><option>Возвращён</option></select></div>"
-        "<button type=button>Показать</button></form>"
-    )
-    rows = [
-        ("29.07 14:02", "@lunayeva", "Спроси Астрид · дети", "200 ⭐", "200 ⭐", '<span class="badge ok">оплачен</span>', _btn("Вернуть")),
-        ("29.07 12:41", "@kirill_m", "Таро · на отношения", "150 ⭐", "105 ⭐", '<span class="badge">−30%</span>', _btn("Вернуть")),
-        ("29.07 09:15", "id 5512094", "Натал · полный разбор", "500 ⭐", "500 ⭐", '<span class="badge ok">оплачен</span>', _btn("Вернуть")),
-        ("28.07 21:14", "@dashaaa", "Таро · три карты", "50 ⭐", "50 ⭐", '<span class="badge bad">возвращён</span>', ""),
-        ("28.07 19:03", "@marina.k", "Колесо · вращение", "25 ⭐", "25 ⭐", '<span class="badge ok">оплачен</span>', _btn("Вернуть")),
-    ]
-    content = (
-        f'<div class="note">{_DEMO_NOTE}</div>'
-        '<div class="tiles" style="margin-bottom:20px">'
-        + _tile("4 830 ⭐", "за 7 дней", "+18% к прошлой неделе")
-        + _tile("41", "оплаты")
-        + _tile("118 ⭐", "средний чек")
-        + _tile("3", "возврата", "60 ⭐")
-        + "</div>"
-        + _card("Фильтры", filters)
-        + _card(
-            "Оплаты",
-            _table(("Когда", "Человек", "Товар", "Цена", "Уплачено", "Статус", ""), rows),
-        )
-    )
-    return shell("payments", content, subtitle="Деньги: что пришло, что вернули", prototype=True)
-
-
 def support_page() -> str:
     """Обращения из «Службы заботы»."""
     rows = [
@@ -212,7 +174,6 @@ def broadcasts_page() -> str:
 
 PROTOTYPES = {
     "people": people_page,
-    "payments": payments_page,
     "support": support_page,
     "broadcasts": broadcasts_page,
 }
