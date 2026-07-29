@@ -346,7 +346,6 @@ async def publish_ask_answer_generate(
     """Разбор ответа «Спроси Астрид»: числа уже посчитаны, worker пишет текст."""
     await _publish(
         ROUTING_ASK_ANSWER_GENERATE,
-    ROUTING_BROADCAST_SEND,
         _task_message(type=TaskType.ASK_ANSWER_GENERATE, reading_id=reading_id),
         settings,
     )
