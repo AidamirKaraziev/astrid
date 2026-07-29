@@ -24,6 +24,7 @@ from astra.admin import timeline as timeline_queries
 from astra.admin.render_metrics import metrics_page
 from astra.admin.timeline import Grain
 from astra.admin.render_queue import queue_page
+from astra.admin.render_settings import settings_page
 from astra.admin.render import catalog_page, login_page
 from astra.admin.service import AdminError
 from astra.core.config import Settings, get_settings
@@ -241,6 +242,60 @@ async def queue_action(
         return _redirect("/admin/queue", err=str(exc))
 
     return _redirect("/admin/queue", ok=message)
+
+
+@router.get("/settings")
+async def settings(
+    request: Request,
+    session: AsyncSession = Depends(get_session),
+) -> Response:
+    """Цены моделей: по ним считается себестоимость каждого вызова."""
+    redirect = _guard(request)
+    if redirect is not None:
+        return redirect
+
+    prices = await service.list_llm_prices(session)
+    error = request.query_params.get("err")
+    return HTMLResponse(
+        settings_page(
+            prices,
+            flash=error or request.query_params.get("ok"),
+            flash_error=bool(error),
+        ),
+    )
+
+
+@router.post("/llm-prices")
+@router.post("/llm-prices/{model}")
+async def save_llm_price(
+    request: Request,
+    model: str = "",
+    session: AsyncSession = Depends(get_session),
+) -> Response:
+    """Завести модель или поправить её цену."""
+    redirect = _guard(request)
+    if redirect is not None:
+        return redirect
+
+    try:
+        form = await _form(request)
+        row = await service.save_llm_price(
+            session,
+            model or form.get("model", ""),
+            input_raw=form.get("input", ""),
+            output_raw=form.get("output", ""),
+            note=form.get("note"),
+        )
+    except AdminError as exc:
+        return _redirect("/admin/settings", err=str(exc))
+
+    log.info(
+        "admin.llm_price_saved",
+        model=row.model,
+        input_per_million=str(row.input_per_million),
+        output_per_million=str(row.output_per_million),
+    )
+    return _redirect("/admin/settings", ok=f"{row.model}: цена сохранена.")
 
 
 @router.get("/{section}")

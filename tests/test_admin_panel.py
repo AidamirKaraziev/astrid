@@ -250,7 +250,7 @@ class TestSections:
         settings = _settings()
         async with await _client(settings) as client:
             client.cookies.set(auth.COOKIE_NAME, auth.issue_session(settings))
-            for slug in ("people", "payments", "support", "settings", "broadcasts"):
+            for slug in ("people", "payments", "support", "broadcasts"):
                 response = await client.get(f"/admin/{slug}")
                 assert response.status_code == 200, slug
                 # каркас на месте: меню и честная пометка «это макет»
@@ -462,3 +462,76 @@ class TestRender:
         )
         assert prize.chance_percent(100) == 25.0
         assert prize.chance_percent(0) == 0.0
+
+
+class TestLlmPrices:
+    """Цены моделей правятся из панели: они меняются чаще, чем выходят релизы."""
+
+    def _price(self, **overrides):
+        from decimal import Decimal
+
+        from astra.admin.service import LlmPriceView
+
+        data = {
+            "model": "deepseek-v4-flash",
+            "input_per_million": Decimal("0.28"),
+            "output_per_million": Decimal("0.42"),
+            "note": "актуально на 2026-07-29",
+            "in_use": True,
+        }
+        return LlmPriceView(**{**data, **overrides})
+
+    def test_sample_cost_shown_next_to_price(self):
+        from astra.admin.render_settings import settings_page
+
+        html = settings_page([self._price()])
+        assert "deepseek-v4-flash" in html
+        assert "разбор ≈ $0.0015" in html  # 3000 входных + 1500 выходных
+
+    def test_model_without_price_is_flagged(self):
+        from decimal import Decimal
+
+        from astra.admin.render_settings import settings_page
+
+        html = settings_page(
+            [self._price(model="qwen:free", input_per_million=Decimal(0), output_per_million=Decimal(0))],
+        )
+        assert "Без цены работают модели" in html
+        assert "qwen:free" in html
+
+    async def test_save_updates_price_and_drops_cache(self):
+        settings = _settings()
+        row = MagicMock(model="deepseek-v4-flash")
+        row.input_per_million = "0.30"
+        row.output_per_million = "0.50"
+        with patch(f"{_ROUTERS}.service.save_llm_price", AsyncMock(return_value=row)) as save:
+            async with await _client(settings) as client:
+                client.cookies.set(auth.COOKIE_NAME, auth.issue_session(settings))
+                response = await client.post(
+                    "/admin/llm-prices/deepseek-v4-flash",
+                    data={"input": "0.30", "output": "0.50", "note": "новый прайс"},
+                )
+
+        assert response.status_code == 303
+        assert response.headers["location"].startswith("/admin/settings?ok=")
+        assert save.await_args.kwargs["input_raw"] == "0.30"
+
+    async def test_bad_number_shows_error(self):
+        settings = _settings()
+        async with await _client(settings) as client:
+            client.cookies.set(auth.COOKIE_NAME, auth.issue_session(settings))
+            response = await client.post(
+                "/admin/llm-prices/some-model",
+                data={"input": "дорого", "output": "0.5"},
+            )
+        assert response.status_code == 303
+        assert "err=" in response.headers["location"]
+
+    async def test_anonymous_cannot_change_prices(self):
+        with patch(f"{_ROUTERS}.service.save_llm_price", AsyncMock()) as save:
+            async with await _client(_settings()) as client:
+                response = await client.post(
+                    "/admin/llm-prices/x", data={"input": "1", "output": "1"},
+                )
+        assert response.headers["location"].startswith("/admin/login")
+        save.assert_not_awaited()

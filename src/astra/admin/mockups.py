@@ -169,50 +169,6 @@ def support_page() -> str:
     return shell("support", content, subtitle="Кто ждёт ответа дольше всех", prototype=True)
 
 
-def settings_page() -> str:
-    """Флаги функций и тексты продуктов."""
-    flags = _table(
-        ("Функция", "Состояние", "Что выключится", ""),
-        [
-            ("Расклады таро", '<span class="badge ok">включено</span>', "раздел таро в меню", _btn("Выключить")),
-            ("Спроси Астрид", '<span class="badge ok">включено</span>', "все платные вопросы", _btn("Выключить")),
-            ("Колесо фортуны", '<span class="badge ok">включено</span>', "кнопка колеса", _btn("Выключить")),
-            ("AI-чат Astrid", '<span class="badge">выключено</span>', "свободный текст вне сценариев", _btn("Включить")),
-            ("Персональные прогнозы", '<span class="badge ok">включено</span>', "перейдём на общий гороскоп по знаку", _btn("Выключить")),
-            ("DeepSeek", '<span class="badge ok">включено</span>', "разборы встанут", _btn("Выключить")),
-        ],
-    )
-    texts = (
-        '<form class="row" style="flex-direction:column;align-items:stretch;gap:14px">'
-        '<div class="field" style="width:100%"><label>Заголовок инвойса</label>'
-        '<input type="text" style="width:100%" value="Будут ли у меня дети"></div>'
-        '<div class="field" style="width:100%"><label>Описание в инвойсе</label>'
-        "<textarea>Разбор по твоей натальной карте: какой у тебя сценарий темы детей, "
-        "сколько показывает карта, когда открываются лучшие окна и что для тебя значит "
-        "родительство.</textarea></div>"
-        '<div class="field" style="width:100%"><label>Тизер перед покупкой</label>'
-        "<textarea>Смотрю твой пятый дом, Луну и Юпитер — ищу, как в твоей карте устроена "
-        "тема детей и когда её лучшие окна ✨</textarea></div>"
-        + _btn("Сохранить", ghost=False)
-        + "</form>"
-    )
-    content = (
-        f'<div class="note">{_DEMO_NOTE}</div>'
-        + _card(
-            "Флаги функций",
-            flags,
-            '<span class="chip">сейчас это .env и перезапуск контейнера</span>',
-        )
-        + '<h2 class="section">Тексты продуктов <span>— сейчас лежат в коде</span></h2>'
-        + _card(
-            "Спроси Астрид · дети",
-            texts,
-            '<span class="chip">ask_love_kids</span>',
-        )
-    )
-    return shell("settings", content, subtitle="Что можно менять без релиза", prototype=True)
-
-
 def broadcasts_page() -> str:
     """Рассылка по сегменту."""
     compose = (
@@ -258,6 +214,5 @@ PROTOTYPES = {
     "people": people_page,
     "payments": payments_page,
     "support": support_page,
-    "settings": settings_page,
     "broadcasts": broadcasts_page,
 }

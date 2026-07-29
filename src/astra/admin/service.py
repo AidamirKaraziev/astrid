@@ -10,10 +10,14 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass
+from decimal import Decimal, InvalidOperation
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from astra.core.config import get_settings
+from astra.llm.accounting import reset_price_cache
+from astra.llm.models import LlmPrice
 from astra.payments.models import Product, ProductPrice
 from astra.payments.service import ProductPriceInfo
 from astra.wheel.models import WheelPrize
@@ -208,3 +212,101 @@ async def update_prize(
     prize.is_active = is_active
     await session.flush()
     return prize
+
+
+@dataclass(frozen=True, slots=True)
+class LlmPriceView:
+    model: str
+    input_per_million: Decimal
+    output_per_million: Decimal
+    note: str | None
+    in_use: bool  # модель прописана в конфиге и реально дёргается
+
+    def cost_of(self, prompt_tokens: int, completion_tokens: int) -> Decimal:
+        """Прикидка «сколько стоит типовой разбор» — чтобы цена не была абстракцией."""
+        million = Decimal(1_000_000)
+        incoming = Decimal(prompt_tokens) * self.input_per_million / million
+        outgoing = Decimal(completion_tokens) * self.output_per_million / million
+        return (incoming + outgoing).quantize(Decimal("0.0001"))
+
+
+def _models_in_use() -> set[str]:
+    """Модели из конфига: у них цена обязана быть, иначе себестоимость слепая."""
+    cfg = get_settings()
+    return {
+        cfg.deepseek_model,
+        cfg.openai_model,
+        cfg.gemini_model,
+        cfg.grok_model,
+        cfg.openrouter_model,
+    }
+
+
+async def list_llm_prices(session: AsyncSession) -> list[LlmPriceView]:
+    """Прайс + модели из конфига, у которых цены ещё нет (с нулями)."""
+    rows = (await session.execute(select(LlmPrice).order_by(LlmPrice.model))).scalars().all()
+    in_use = _models_in_use()
+    known = {row.model for row in rows}
+
+    prices = [
+        LlmPriceView(
+            model=row.model,
+            input_per_million=row.input_per_million,
+            output_per_million=row.output_per_million,
+            note=row.note,
+            in_use=row.model in in_use,
+        )
+        for row in rows
+    ]
+    prices += [
+        LlmPriceView(
+            model=model,
+            input_per_million=Decimal(0),
+            output_per_million=Decimal(0),
+            note="цены нет — себестоимость не считается",
+            in_use=True,
+        )
+        for model in sorted(in_use - known)
+        if model
+    ]
+    return prices
+
+
+def _parse_price(raw: str, label: str) -> Decimal:
+    try:
+        value = Decimal(raw.strip().replace(",", "."))
+    except (InvalidOperation, AttributeError):
+        raise AdminError(f"«{label}» — число, а пришло «{raw}».") from None
+    if value < 0:
+        raise AdminError(f"«{label}» не может быть отрицательной.")
+    return value
+
+
+async def save_llm_price(
+    session: AsyncSession,
+    model: str,
+    *,
+    input_raw: str,
+    output_raw: str,
+    note: str | None = None,
+) -> LlmPrice:
+    """Завести или поправить цену модели. Прайс кешируется — сбрасываем кеш."""
+    model = model.strip()
+    if not model:
+        raise AdminError("Укажите модель.")
+
+    incoming = _parse_price(input_raw, "Вход")
+    outgoing = _parse_price(output_raw, "Выход")
+
+    row = await session.get(LlmPrice, model)
+    if row is None:
+        row = LlmPrice(model=model)
+        session.add(row)
+    row.input_per_million = incoming
+    row.output_per_million = outgoing
+    row.note = (note or "").strip()[:128] or None
+    await session.flush()
+
+    # Иначе следующие вызовы посчитаются по старой цене — кеш живёт пять минут.
+    reset_price_cache()
+    return row
