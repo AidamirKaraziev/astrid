@@ -27,7 +27,7 @@ def test_profile_card_a2_layout() -> None:
         timezone="Europe/Moscow",
     )
     text = format_profile_card(user, profile)
-    assert text.startswith("✨ Твой профиль")
+    assert text.startswith("✏️ Твои данные")
     assert "👤 <b>Aidamir</b>" in text
     assert "👨 Мужчина" in text
     assert "📅 14.02.1998" in text

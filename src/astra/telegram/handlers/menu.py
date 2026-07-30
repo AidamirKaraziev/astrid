@@ -11,15 +11,19 @@ from astra.telegram.button_texts import (
     BTN_INVITE,
     BTN_PROFILE,
     BTN_TIME_UNKNOWN,
+    CB_PROFILE_BACK,
+    CB_PROFILE_EDIT,
     CB_PROFILE_TIME_UNKNOWN,
 )
 from astra.telegram.keyboards import (
     main_menu_keyboard,
     profile_birth_time_keyboard,
+    profile_edit_keyboard,
     profile_gender_inline_keyboard,
     profile_menu_keyboard,
     share_keyboard,
 )
+from astra.telegram.profile_portrait import build_portrait_text
 from astra.telegram.profile_gender_prompt import GENDER_SAVED_TEXT
 from astra.telegram.states import ProfileStates
 from astra.telegram.utils import parse_birth_date, parse_birth_time
@@ -44,6 +48,20 @@ async def _get_user_from_message(session: AsyncSession, message: Message):
     if tg_id is None:
         return None
     return await _get_user(session, tg_id)
+
+
+async def _send_portrait(message: Message, session: AsyncSession, user) -> None:  # noqa: ANN001
+    """Показать портрет после правки данных о рождении.
+
+    Смысл правки — в том, что меняется в карте: вписал время — увидел
+    асцендент и дома. Без этого человек читает «сохранено» и не понимает,
+    что именно он получил.
+    """
+    await message.answer(
+        await build_portrait_text(session, user, user.profile),
+        parse_mode="HTML",
+        reply_markup=profile_menu_keyboard(),
+    )
 
 
 @router.callback_query(F.data == "menu:home")
@@ -83,10 +101,45 @@ async def show_profile(message: Message, session: AsyncSession) -> None:
         await message.answer("Сначала: /start")
         return
     await message.answer(
-        format_profile_card(user, user.profile),
+        await build_portrait_text(session, user, user.profile),
         parse_mode="HTML",
         reply_markup=profile_menu_keyboard(),
     )
+
+
+@router.callback_query(F.data == CB_PROFILE_BACK)
+async def cb_profile_back(callback: CallbackQuery, session: AsyncSession) -> None:
+    """Возврат к портрету — из экрана правки и из архивов разборов."""
+    if callback.message is None or callback.from_user is None:
+        await callback.answer()
+        return
+    user = await _get_user(session, callback.from_user.id)
+    if user is None or user.profile is None:
+        await callback.answer("Сначала: /start", show_alert=True)
+        return
+    await callback.message.answer(
+        await build_portrait_text(session, user, user.profile),
+        parse_mode="HTML",
+        reply_markup=profile_menu_keyboard(),
+    )
+    await callback.answer()
+
+
+@router.callback_query(F.data == CB_PROFILE_EDIT)
+async def cb_profile_edit(callback: CallbackQuery, session: AsyncSession) -> None:
+    if callback.message is None or callback.from_user is None:
+        await callback.answer()
+        return
+    user = await _get_user(session, callback.from_user.id)
+    if user is None or user.profile is None:
+        await callback.answer("Сначала: /start", show_alert=True)
+        return
+    await callback.message.answer(
+        format_profile_card(user, user.profile),
+        parse_mode="HTML",
+        reply_markup=profile_edit_keyboard(),
+    )
+    await callback.answer()
 
 
 @router.callback_query(F.data == "profile:name")
@@ -183,8 +236,8 @@ async def save_birth_date(message: Message, state: FSMContext, session: AsyncSes
     await message.answer(
         f"Дата сохранена: {parsed.strftime('%d.%m.%Y')} ✨\n"
         "Предсказание на сегодня обновится при следующем запросе.",
-        reply_markup=main_menu_keyboard(),
     )
+    await _send_portrait(message, session, user)
 
 
 @router.callback_query(F.data == "profile:time")
@@ -226,8 +279,8 @@ async def cb_birth_time_unknown(
         "Многие его не знают — считаю по знакам и аспектам. "
         "Найдётся время — впиши, добавлю асцендент и дома.",
         parse_mode="HTML",
-        reply_markup=main_menu_keyboard(),
     )
+    await _send_portrait(callback.message, session, user)
     await callback.answer()
 
 
@@ -248,8 +301,8 @@ async def save_birth_time(message: Message, state: FSMContext, session: AsyncSes
         f"Время сохранено ✨\nТочность теперь: <b>{p.accuracy_percent}%</b>\n"
         "Предсказание на сегодня обновится при следующем запросе.",
         parse_mode="HTML",
-        reply_markup=main_menu_keyboard(),
     )
+    await _send_portrait(message, session, user)
 
 
 @router.callback_query(F.data == "profile:notification_city")
@@ -293,5 +346,5 @@ async def save_birth_place(message: Message, state: FSMContext, session: AsyncSe
         f"Место сохранено ✨\nТочность теперь: <b>{p.accuracy_percent}%</b>\n"
         "Предсказание на сегодня обновится при следующем запросе.",
         parse_mode="HTML",
-        reply_markup=main_menu_keyboard(),
     )
+    await _send_portrait(message, session, user)

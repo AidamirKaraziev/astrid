@@ -54,6 +54,10 @@ async def test_unknown_clears_saved_birth_time() -> None:
             "astra.telegram.handlers.menu.users_crud.clear_birth_time",
             new_callable=AsyncMock,
         ) as clear_birth_time,
+        patch(
+            "astra.telegram.handlers.menu._send_portrait",
+            new_callable=AsyncMock,
+        ) as send_portrait,
     ):
         await cb_birth_time_unknown(callback, state, session)
 
@@ -63,6 +67,8 @@ async def test_unknown_clears_saved_birth_time() -> None:
     assert "Убрала время рождения" in text
     # Процент точности в этом ответе не показываем — только не пугать цифрой.
     assert "%" not in text
+    # Обновлённый портрет — сразу за подтверждением.
+    send_portrait.assert_awaited_once()
     callback.answer.assert_awaited()
 
 
@@ -89,6 +95,7 @@ async def test_unknown_without_saved_time_says_it_is_fine() -> None:
             "astra.telegram.handlers.menu.users_crud.clear_birth_time",
             new_callable=AsyncMock,
         ),
+        patch("astra.telegram.handlers.menu._send_portrait", new_callable=AsyncMock),
     ):
         await cb_birth_time_unknown(callback, state, session)
 

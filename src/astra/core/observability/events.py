@@ -134,6 +134,7 @@ class Event(StrEnum):
     ONBOARDING_REFERRAL_CODE_FAILED = "onboarding.referral_code_failed"
     GREETING_COMPLETED = "greeting.completed"
     NATAL_CHART_REFRESH_FAILED = "natal_chart.refresh_failed"
+    PROFILE_PORTRAIT_FAILED = "profile.portrait_failed"
 
     # Integrations
     LLM_REQUEST = "llm.request"

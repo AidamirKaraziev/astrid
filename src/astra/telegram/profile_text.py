@@ -1,4 +1,9 @@
-"""Текст карточки «Профиль» в Telegram (вариант A2)."""
+"""Текст экрана «Изменить данные» в Telegram (вариант A2).
+
+Раньше это была и главная карточка «Обо мне». Теперь «Обо мне» показывает
+портрет по натальной карте (`profile_portrait.py`), а здесь — только сами
+поля: что вписано и чего не хватает.
+"""
 
 from datetime import date, datetime
 from typing import Protocol
@@ -61,9 +66,14 @@ def shorten_place_display(full: str) -> str:
         return _shorten_admin_part(parts[0])
     city = _shorten_admin_part(parts[0])
     region = _shorten_admin_part(parts[1])
-    if region and normalize_place_query(region) != normalize_place_query(city):
-        return f"{city}, {region}"
-    return city
+    if not region:
+        return city
+    city_key = normalize_place_query(city)
+    region_key = normalize_place_query(region)
+    # «Краснодар, Краснодарский край» — регион ничего не добавляет к городу.
+    if region_key == city_key or region_key.startswith(city_key):
+        return city
+    return f"{city}, {region}"
 
 
 def shorten_city_label(full: str) -> str:
@@ -112,7 +122,7 @@ def _format_notification_block(profile: _ProfileView) -> list[str]:
 
 def format_profile_card(user: _UserView, profile: _ProfileView) -> str:
     lines = [
-        "✨ Твой профиль",
+        "✏️ Твои данные",
         "",
         f"👤 <b>{profile.display_name}</b>",
         "",

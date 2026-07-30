@@ -60,6 +60,14 @@ CB_PROFILE_REPORTS = "profile:reports"
 # Время рождения: человек его не знает — в профиле сбрасываем, в натале пропускаем.
 BTN_TIME_UNKNOWN = "🤷 Не знаю время"
 CB_PROFILE_TIME_UNKNOWN = "profile:time:unknown"
+
+# «Обо мне»: портрет по карте, поля профиля — на втором экране.
+BTN_PROFILE_EDIT = "✏️ Изменить данные"
+BTN_NATAL_FULL_REPORT = "🌌 Полный разбор карты"
+CB_PROFILE_EDIT = "profile:edit"
+CB_PROFILE_NATAL = "profile:natal"
+# Возврат к портрету. Раньше жил в разделе совместимости — теперь общий.
+CB_PROFILE_BACK = "profile:back"
 CB_COMPAT_CONTEXT_PREFIX = "compatibility:context:"
 CB_COMPAT_CONFIRM = "compatibility:confirm:yes"
 CB_COMPAT_CANCEL = "compatibility:cancel"

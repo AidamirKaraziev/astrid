@@ -31,6 +31,7 @@ from astra.telegram.button_texts import (
     BTN_GENDER_MALE,
     BTN_NATAL,
     BTN_TIME_UNKNOWN,
+    CB_PROFILE_NATAL,
     GENDER_REPLY_BUTTONS,
 )
 from astra.telegram.keyboards import gender_keyboard, main_menu_keyboard, skip_keyboard
@@ -221,6 +222,33 @@ async def start_natal(message: Message, state: FSMContext, session: AsyncSession
     await state.clear()
     profiles = await compatibility_crud.list_natal_profiles(session, user.id)
     await message.answer(
+        "🌌 <b>Разбор натальной карты</b>\n\nДля кого построить разбор?",
+        parse_mode="HTML",
+        reply_markup=_subject_keyboard(profiles),
+    )
+
+
+@router.callback_query(F.data == CB_PROFILE_NATAL)
+async def cb_natal_from_profile(
+    callback: CallbackQuery,
+    state: FSMContext,
+    session: AsyncSession,
+) -> None:
+    """Вход в разбор из портрета «Обо мне».
+
+    Пользователя берём по `callback.from_user`: у сообщения с кнопкой автор —
+    бот, и `_require_user` искал бы в базе его.
+    """
+    await callback.answer()
+    if callback.message is None or callback.from_user is None:
+        return
+    user = await users_crud.get_user_by_telegram_id(session, callback.from_user.id)
+    if user is None or not user.onboarding_completed or user.profile is None:
+        await callback.message.answer("Сначала пройди регистрацию: /start")
+        return
+    await state.clear()
+    profiles = await compatibility_crud.list_natal_profiles(session, user.id)
+    await callback.message.answer(
         "🌌 <b>Разбор натальной карты</b>\n\nДля кого построить разбор?",
         parse_mode="HTML",
         reply_markup=_subject_keyboard(profiles),

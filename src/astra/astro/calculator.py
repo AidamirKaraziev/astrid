@@ -246,6 +246,26 @@ def _chart_point(name: str, body, *, house: int | None) -> ChartPoint:  # noqa: 
     )
 
 
+def moon_sign_bounds(
+    birth_date: date,
+    *,
+    lat: float,
+    lon: float,
+    timezone: str,
+) -> tuple[str, str]:
+    """Знаки Луны в начале и конце суток рождения (по-русски).
+
+    Нужны, когда времени рождения нет: Луна проходит знак примерно за двое
+    суток, поэтому честный ответ — назвать оба знака, а не выбрать один.
+    """
+    tz = ZoneInfo(timezone)
+    start = datetime.combine(birth_date, time(0, 0), tzinfo=tz)
+    end = datetime.combine(birth_date, time(23, 59), tzinfo=tz)
+    moon_start = _make_subject("MoonStart", start, lat=lat, lon=lon, timezone=timezone).moon
+    moon_end = _make_subject("MoonEnd", end, lat=lat, lon=lon, timezone=timezone).moon
+    return _sign_ru(str(moon_start.sign)), _sign_ru(str(moon_end.sign))
+
+
 def _moon_sign_uncertain(
     birth_date: date,
     *,
@@ -253,12 +273,8 @@ def _moon_sign_uncertain(
     lon: float,
     timezone: str,
 ) -> bool:
-    tz = ZoneInfo(timezone)
-    start = datetime.combine(birth_date, time(0, 0), tzinfo=tz)
-    end = datetime.combine(birth_date, time(23, 59), tzinfo=tz)
-    moon_start = _make_subject("MoonStart", start, lat=lat, lon=lon, timezone=timezone).moon
-    moon_end = _make_subject("MoonEnd", end, lat=lat, lon=lon, timezone=timezone).moon
-    return str(moon_start.sign) != str(moon_end.sign)
+    first, last = moon_sign_bounds(birth_date, lat=lat, lon=lon, timezone=timezone)
+    return first != last
 
 
 def build_full_natal_chart(

@@ -19,7 +19,13 @@ from astra.users import crud as users_crud
 from astra.users.models import Profile, User
 
 
-async def _birth_coordinates(session: AsyncSession, profile: Profile) -> tuple[float, float, str]:
+async def birth_coordinates(session: AsyncSession, profile: Profile) -> tuple[float, float, str]:
+    """Координаты места рождения.
+
+    Место не разрешилось в справочник — отдаём Москву. Всё, что зависит от
+    координат (асцендент, MC, дома), при таком fallback показывать нельзя:
+    проверять надо `profile.birth_place_id`, а не процент заполненности.
+    """
     if profile.birth_place_id:
         place = await places_crud.get_place_by_id(session, profile.birth_place_id)
         if place is not None:
@@ -43,7 +49,7 @@ async def compute_and_store_natal_chart(
     user: User,
     profile: Profile,
 ) -> NatalChartData:
-    lat, lon, tz = await _birth_coordinates(session, profile)
+    lat, lon, tz = await birth_coordinates(session, profile)
     chart = build_natal_chart(profile, lat=lat, lon=lon, timezone=tz)
     chart.profile_snapshot = _profile_snapshot(profile)
     await upsert_natal_chart(session, user.id, chart)
@@ -90,7 +96,7 @@ async def build_full_chart_for_user(
     profile: Profile,
 ):
     """FullNatalChart по профилю (координаты из места рождения)."""
-    lat, lon, tz = await _birth_coordinates(session, profile)
+    lat, lon, tz = await birth_coordinates(session, profile)
     return build_full_natal_chart(
         name=profile.display_name,
         birth_date=profile.birth_date,

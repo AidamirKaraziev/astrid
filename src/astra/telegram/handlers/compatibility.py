@@ -718,23 +718,8 @@ async def cb_profile_reports(callback: CallbackQuery, session: AsyncSession) -> 
     await callback.answer()
 
 
-@router.callback_query(F.data == "profile:back")
-async def cb_profile_back(callback: CallbackQuery, session: AsyncSession) -> None:
-    if callback.message is None or callback.from_user is None:
-        await callback.answer()
-        return
-    user = await users_crud.get_user_by_telegram_id(session, callback.from_user.id)
-    if user is None or user.profile is None:
-        await callback.answer()
-        return
-    from astra.telegram.profile_text import format_profile_card
-
-    await callback.message.answer(
-        format_profile_card(user, user.profile),
-        parse_mode="HTML",
-        reply_markup=profile_menu_keyboard(),
-    )
-    await callback.answer()
+# Возврат к портрету («profile:back») живёт в menu.py: он нужен и экрану
+# правки данных, и архивам, а не только разделу совместимости.
 
 
 @router.callback_query(F.data.startswith(CB_COMPAT_REPORT_PREFIX))

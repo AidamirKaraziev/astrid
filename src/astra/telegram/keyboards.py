@@ -16,7 +16,9 @@ from astra.telegram.button_texts import (
     BTN_INVITE,
     BTN_MONTH_FORECAST,
     BTN_NATAL,
+    BTN_NATAL_FULL_REPORT,
     BTN_PROFILE,
+    BTN_PROFILE_EDIT,
     BTN_TAROT_ASK_OWN,
     BTN_TAROT,
     BTN_TAROT_RELATIONS,
@@ -40,6 +42,9 @@ from astra.telegram.button_texts import (
     CB_COMPAT_DELETE_CANCEL_PREFIX,
     CB_DAY_CARD_FORECAST,
     CB_PRODUCT_ASK_STARS,
+    CB_PROFILE_BACK,
+    CB_PROFILE_EDIT,
+    CB_PROFILE_NATAL,
     CB_PROFILE_PEOPLE,
     CB_PROFILE_REPORTS,
     CB_PROFILE_TIME_UNKNOWN,
@@ -150,19 +155,20 @@ def share_keyboard(share_url: str) -> InlineKeyboardMarkup:
 
 
 def profile_menu_keyboard() -> InlineKeyboardMarkup:
+    """Под портретом: продолжение разбора, правка данных, архивы.
+
+    Поля профиля уехали на отдельный экран (`profile_edit_keyboard`): девять
+    кнопок-полей под портретом читались как форма, а не как рассказ о человеке.
+    """
     return InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text="✏️ Имя", callback_data="profile:name")],
-            [InlineKeyboardButton(text="⚧ Пол", callback_data="profile:gender")],
-            [InlineKeyboardButton(text="📅 Дата рождения", callback_data="profile:date")],
-            [InlineKeyboardButton(text="🕐 Время рождения", callback_data="profile:time")],
-            [InlineKeyboardButton(text="📍 Место рождения", callback_data="profile:place")],
             [
                 InlineKeyboardButton(
-                    text="🌍 Город для уведомлений",
-                    callback_data="profile:notification_city",
+                    text=BTN_NATAL_FULL_REPORT,
+                    callback_data=CB_PROFILE_NATAL,
                 ),
             ],
+            [InlineKeyboardButton(text=BTN_PROFILE_EDIT, callback_data=CB_PROFILE_EDIT)],
             [
                 InlineKeyboardButton(
                     text="📚 Мои разборы",
@@ -176,6 +182,26 @@ def profile_menu_keyboard() -> InlineKeyboardMarkup:
                 ),
             ],
             [InlineKeyboardButton(text="🔙 Назад", callback_data="menu:home")],
+        ],
+    )
+
+
+def profile_edit_keyboard() -> InlineKeyboardMarkup:
+    """Поля профиля. «Назад» ведёт к портрету, а не в главное меню."""
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="✏️ Имя", callback_data="profile:name")],
+            [InlineKeyboardButton(text="⚧ Пол", callback_data="profile:gender")],
+            [InlineKeyboardButton(text="📅 Дата рождения", callback_data="profile:date")],
+            [InlineKeyboardButton(text="🕐 Время рождения", callback_data="profile:time")],
+            [InlineKeyboardButton(text="📍 Место рождения", callback_data="profile:place")],
+            [
+                InlineKeyboardButton(
+                    text="🌍 Город для уведомлений",
+                    callback_data="profile:notification_city",
+                ),
+            ],
+            [InlineKeyboardButton(text="🔙 К портрету", callback_data=CB_PROFILE_BACK)],
         ],
     )
 
