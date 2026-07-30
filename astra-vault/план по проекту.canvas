@@ -47,8 +47,6 @@
 		{"id":"dcb969240df291e8","type":"text","text":"Изменить и сделать текст красивее.","x":-2295,"y":-840,"width":250,"height":100,"color":"4"},
 		{"id":"8536084ab7f63e2a","type":"text","text":"Обо мне","x":-2295,"y":-680,"width":250,"height":60,"color":"6"},
 		{"id":"385e881bbf1fcba0","type":"text","text":"Админка","x":-1240,"y":-3380,"width":250,"height":60,"color":"6"},
-		{"id":"774cfe7464cb93ed","type":"text","text":"Добавить возможность делать смс рассылки через админку","x":-1640,"y":-3399,"width":250,"height":98,"color":"4"},
-		{"id":"c1df06b2d1dd6a34","type":"text","text":"сделать аналитику:\n\nсколько человек было в боте\nсколько рефералов привел пользователь","x":-1640,"y":-3660,"width":250,"height":180,"color":"4"},
 		{"id":"8f8523e094da71c0","type":"text","text":"А что если сделать кнопку, найти пару, среди наших пользователей","x":-1006,"y":-3701,"width":250,"height":101,"color":"5"},
 		{"id":"953f99d751e8f8ff","type":"text","text":"Имя","x":-2760,"y":-1020,"width":250,"height":60,"color":"6"},
 		{"id":"c5132c8b44221f99","type":"text","text":"Пол","x":-2760,"y":-930,"width":250,"height":60,"color":"6"},
@@ -104,7 +102,7 @@
 		{"id":"9e830ec22be72034","type":"text","text":"Отправка пдф пользователю","x":395,"y":2902,"width":250,"height":60},
 		{"id":"073beeb01714bf0a","type":"text","text":"добавить кнопку отправить подруге","x":60,"y":2902,"width":250,"height":60,"color":"4"},
 		{"id":"fe536145843e3039","type":"text","text":"найти дизайн красивых пдф, для референса","x":807,"y":2992,"width":250,"height":60,"color":"2"},
-		{"id":"d81deb260a07530b","type":"text","text":"совет или пожелание для команды астрид, что улучшить, чего не хватаетЮ","x":-3301,"y":-1137,"width":250,"height":117,"color":"4"}
+		{"id":"d81deb260a07530b","type":"text","text":"совет или пожелание для команды астрид, что улучшить, чего не хватает?","x":-3301,"y":-1137,"width":250,"height":117,"color":"4"}
 	],
 	"edges":[
 		{"id":"a1a06a76742c1a3a","fromNode":"619efa95be5c4a89","fromSide":"bottom","toNode":"50b7b8dcb35f6929","toSide":"top","color":"5"},
@@ -201,8 +199,6 @@
 		{"id":"0d5e623688f17704","fromNode":"da65bbf0bb8e12b9","fromSide":"bottom","toNode":"d5bc2f8b440de6ce","toSide":"top","color":"4"},
 		{"id":"f98ae779418d173c","fromNode":"2a1e93b4014977fe","fromSide":"bottom","toNode":"da65bbf0bb8e12b9","toSide":"left","color":"6"},
 		{"id":"4f8197060ff5b064","fromNode":"f8d1207cd0526f68","fromSide":"bottom","toNode":"1abe775262ab45b3","toSide":"top","color":"6"},
-		{"id":"7135bf42a10dce1c","fromNode":"385e881bbf1fcba0","fromSide":"left","toNode":"774cfe7464cb93ed","toSide":"right","color":"6"},
-		{"id":"9315b71ef7028f75","fromNode":"d99423f4d9cf01e2","fromSide":"left","toNode":"385e881bbf1fcba0","toSide":"right","color":"6"},
-		{"id":"7b3dd356ebbd5d26","fromNode":"385e881bbf1fcba0","fromSide":"left","toNode":"c1df06b2d1dd6a34","toSide":"right","color":"6"}
+		{"id":"9315b71ef7028f75","fromNode":"d99423f4d9cf01e2","fromSide":"left","toNode":"385e881bbf1fcba0","toSide":"right","color":"6"}
 	]
 }

@@ -218,12 +218,13 @@ async def cb_birth_time_unknown(
     had_time = user.profile.birth_time is not None
     await users_crud.clear_birth_time(session, user.profile)
     await state.clear()
-    p = profile_to_read(user.profile)
     head = "Убрала время рождения ✨" if had_time else "Хорошо, обойдусь без времени ✨"
+    # Процент точности здесь не показываем: человек не виноват, что не знает
+    # своего времени, и цифра читалась бы как приговор профилю.
     await callback.message.answer(
-        f"{head}\nТочность теперь: <b>{p.accuracy_percent}%</b>\n\n"
-        "Считаю по знакам и аспектам — без асцендента и домов. "
-        "Вспомнишь время — впиши, стану точнее.",
+        f"{head}\n\n"
+        "Многие его не знают — считаю по знакам и аспектам. "
+        "Найдётся время — впиши, добавлю асцендент и дома.",
         parse_mode="HTML",
         reply_markup=main_menu_keyboard(),
     )
