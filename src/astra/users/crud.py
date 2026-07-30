@@ -158,6 +158,20 @@ async def update_profile(
     return profile
 
 
+async def clear_birth_time(session: AsyncSession, profile: Profile) -> Profile:
+    """Человек не знает время рождения: стереть его.
+
+    Отдельной функцией, потому что `update_profile` игнорирует None — там это
+    значит «поле не трогать», и сбросить его тем же вызовом нельзя.
+    """
+    before = {key: getattr(profile, key) for key in _ASTRO_PROFILE_FIELDS}
+    profile.birth_time = None
+    await _invalidate_today_predictions_if_astro_changed(session, profile, before)
+    await session.flush()
+    await _try_refresh_natal_chart(session, profile)
+    return profile
+
+
 async def _try_refresh_natal_chart(session: AsyncSession, profile: Profile) -> None:
     from astra.services.astro_service import refresh_natal_chart_for_profile
 

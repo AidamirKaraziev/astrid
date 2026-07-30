@@ -7,9 +7,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from astra.referrals.getters import get_referral_stats
 from astra.telegram.handlers.places import start_profile_notification_place_step
-from astra.telegram.button_texts import BTN_INVITE, BTN_PROFILE
+from astra.telegram.button_texts import (
+    BTN_INVITE,
+    BTN_PROFILE,
+    BTN_TIME_UNKNOWN,
+    CB_PROFILE_TIME_UNKNOWN,
+)
 from astra.telegram.keyboards import (
     main_menu_keyboard,
+    profile_birth_time_keyboard,
     profile_gender_inline_keyboard,
     profile_menu_keyboard,
     share_keyboard,
@@ -185,7 +191,42 @@ async def save_birth_date(message: Message, state: FSMContext, session: AsyncSes
 async def cb_edit_time(callback: CallbackQuery, state: FSMContext) -> None:
     await state.set_state(ProfileStates.edit_birth_time)
     if callback.message:
-        await callback.message.answer("Введи время рождения в формате ЧЧ:ММ (например 14:30):")
+        await callback.message.answer(
+            "Введи время рождения в формате <b>ЧЧ:ММ</b> (например <code>14:30</code>).\n"
+            f"Если не знаешь — нажми «{BTN_TIME_UNKNOWN}», посчитаю без него.",
+            parse_mode="HTML",
+            reply_markup=profile_birth_time_keyboard(),
+        )
+    await callback.answer()
+
+
+@router.callback_query(F.data == CB_PROFILE_TIME_UNKNOWN)
+async def cb_birth_time_unknown(
+    callback: CallbackQuery,
+    state: FSMContext,
+    session: AsyncSession,
+) -> None:
+    """Сброс времени рождения: лучше без него, чем с выдуманным."""
+    if callback.message is None or callback.from_user is None:
+        await callback.answer()
+        return
+    user = await _get_user(session, callback.from_user.id)
+    if user is None or user.profile is None:
+        await callback.answer("Сначала: /start", show_alert=True)
+        return
+
+    had_time = user.profile.birth_time is not None
+    await users_crud.clear_birth_time(session, user.profile)
+    await state.clear()
+    p = profile_to_read(user.profile)
+    head = "Убрала время рождения ✨" if had_time else "Хорошо, обойдусь без времени ✨"
+    await callback.message.answer(
+        f"{head}\nТочность теперь: <b>{p.accuracy_percent}%</b>\n\n"
+        "Считаю по знакам и аспектам — без асцендента и домов. "
+        "Вспомнишь время — впиши, стану точнее.",
+        parse_mode="HTML",
+        reply_markup=main_menu_keyboard(),
+    )
     await callback.answer()
 
 
@@ -196,7 +237,7 @@ async def save_birth_time(message: Message, state: FSMContext, session: AsyncSes
         return
     parsed = parse_birth_time(message.text or "")
     if parsed is None:
-        await message.answer("Не разобрал время. Формат: 14:30")
+        await message.answer(f"Не разобрал время. Формат: 14:30 — или нажми «{BTN_TIME_UNKNOWN}».")
         return
     birth_dt = datetime.combine(user.profile.birth_date, parsed)
     await users_crud.update_profile(session, user.profile, birth_time=birth_dt)

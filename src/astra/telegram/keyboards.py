@@ -22,6 +22,7 @@ from astra.telegram.button_texts import (
     BTN_TAROT_RELATIONS,
     BTN_TAROT_THREE,
     BTN_TAROT_WISH,
+    BTN_TIME_UNKNOWN,
     BTN_WHEEL,
     CB_COMPAT_CANCEL,
     CB_COMPAT_CONFIRM,
@@ -41,6 +42,7 @@ from astra.telegram.button_texts import (
     CB_PRODUCT_ASK_STARS,
     CB_PROFILE_PEOPLE,
     CB_PROFILE_REPORTS,
+    CB_PROFILE_TIME_UNKNOWN,
     CB_SUPPORT_CLOSE,
     CB_SUPPORT_FAQ_PREFIX,
     CB_SUPPORT_HUB,
@@ -174,6 +176,20 @@ def profile_menu_keyboard() -> InlineKeyboardMarkup:
                 ),
             ],
             [InlineKeyboardButton(text="🔙 Назад", callback_data="menu:home")],
+        ],
+    )
+
+
+def profile_birth_time_keyboard() -> InlineKeyboardMarkup:
+    """Ввод времени рождения: можно вписать текстом, а можно честно сказать «не знаю»."""
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text=BTN_TIME_UNKNOWN,
+                    callback_data=CB_PROFILE_TIME_UNKNOWN,
+                ),
+            ],
         ],
     )
 

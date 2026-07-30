@@ -30,6 +30,7 @@ from astra.services.natal_report_service import (
 from astra.telegram.button_texts import (
     BTN_GENDER_MALE,
     BTN_NATAL,
+    BTN_TIME_UNKNOWN,
     GENDER_REPLY_BUTTONS,
 )
 from astra.telegram.keyboards import gender_keyboard, main_menu_keyboard, skip_keyboard
@@ -81,7 +82,7 @@ def _confirm_keyboard() -> InlineKeyboardMarkup:
 def _time_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text="🤷 Не знаю время", callback_data=CB_NATAL_TIME_UNKNOWN)],
+            [InlineKeyboardButton(text=BTN_TIME_UNKNOWN, callback_data=CB_NATAL_TIME_UNKNOWN)],
             [InlineKeyboardButton(text="Отмена", callback_data=CB_NATAL_CANCEL)],
         ],
     )

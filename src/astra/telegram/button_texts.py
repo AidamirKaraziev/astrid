@@ -57,6 +57,9 @@ CB_TAROT_SECTION = "tarot:section"
 
 CB_PRODUCT_ASK_STARS = "product:ask_stars"
 CB_PROFILE_REPORTS = "profile:reports"
+# Время рождения: человек его не знает — в профиле сбрасываем, в натале пропускаем.
+BTN_TIME_UNKNOWN = "🤷 Не знаю время"
+CB_PROFILE_TIME_UNKNOWN = "profile:time:unknown"
 CB_COMPAT_CONTEXT_PREFIX = "compatibility:context:"
 CB_COMPAT_CONFIRM = "compatibility:confirm:yes"
 CB_COMPAT_CANCEL = "compatibility:cancel"
