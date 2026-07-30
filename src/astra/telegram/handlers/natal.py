@@ -43,6 +43,7 @@ from astra.telegram.progress import (
     notify_natal_stage,
 )
 from astra.telegram.states import NatalStates
+from astra.astro.birth_time import wall_clock_at
 from astra.telegram.utils import parse_birth_date, parse_birth_time
 from astra.usage import ACTION_NATAL_REPORT, UsageKind, record_usage
 from astra.users import crud as users_crud
@@ -411,7 +412,7 @@ async def collect_new_birth_time(
         return
     data = await state.get_data()
     birth_date = date.fromisoformat(str(data[f"{_NEW_PERSON_PREFIX}birth_date"]))
-    birth_dt = datetime.combine(birth_date, parsed)
+    birth_dt = wall_clock_at(birth_date, parsed)
     await state.update_data(**{f"{_NEW_PERSON_PREFIX}birth_time": birth_dt.isoformat()})
     from astra.telegram.handlers.places import start_natal_new_birth_place_step
 
@@ -480,13 +481,13 @@ async def collect_birth_time(
 
     profile = await _load_subject_profile(session, user, state)
     if profile is not None:
-        birth_dt = datetime.combine(profile.birth_date, parsed)
+        birth_dt = wall_clock_at(profile.birth_date, parsed)
         await compatibility_crud.update_natal_profile(session, profile, birth_time=birth_dt)
         await session.commit()
         await _show_confirm_profile(message, state, profile)
         return
 
-    birth_dt = datetime.combine(user.profile.birth_date, parsed)
+    birth_dt = wall_clock_at(user.profile.birth_date, parsed)
     await users_crud.update_profile(session, user.profile, birth_time=birth_dt)
     await session.commit()
     await _show_confirm(message, state, user)

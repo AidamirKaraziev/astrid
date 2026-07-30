@@ -5,6 +5,7 @@ from sqlalchemy import BigInteger, Boolean, Date, DateTime, ForeignKey, Integer,
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
+from astra.astro.birth_time import WallClock
 from astra.db.base import Base, TimestampMixin
 from astra.users.gender import Gender
 
@@ -79,7 +80,8 @@ class Profile(Base, TimestampMixin):
     display_name: Mapped[str] = mapped_column(String(255))
     gender: Mapped[Gender | None] = mapped_column(String(16), nullable=True)
     birth_date: Mapped[date] = mapped_column(Date)
-    birth_time: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # Настенные часы места рождения, не момент времени: astra.astro.birth_time
+    birth_time: Mapped[datetime | None] = mapped_column(WallClock(), nullable=True)
     birth_place: Mapped[str | None] = mapped_column(String(255), nullable=True)
     birth_place_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),

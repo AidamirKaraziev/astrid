@@ -44,7 +44,6 @@
 		{"id":"619efa95be5c4a89","type":"text","text":"START","x":395,"y":300,"width":250,"height":60,"color":"6"},
 		{"id":"8849b45d8339a7e0","type":"text","text":"таро","x":2430,"y":840,"width":250,"height":60,"color":"6"},
 		{"id":"1abe775262ab45b3","type":"text","text":"фильтр вопросов, чтобы не задавали ломающие вопросы Астрид","x":-1135,"y":-1680,"width":250,"height":110,"color":"4"},
-		{"id":"dcb969240df291e8","type":"text","text":"Изменить и сделать текст красивее.","x":-2295,"y":-840,"width":250,"height":100,"color":"4"},
 		{"id":"8536084ab7f63e2a","type":"text","text":"Обо мне","x":-2295,"y":-680,"width":250,"height":60,"color":"6"},
 		{"id":"385e881bbf1fcba0","type":"text","text":"Админка","x":-1240,"y":-3380,"width":250,"height":60,"color":"6"},
 		{"id":"8f8523e094da71c0","type":"text","text":"А что если сделать кнопку, найти пару, среди наших пользователей","x":-1006,"y":-3701,"width":250,"height":101,"color":"5"},
@@ -102,7 +101,8 @@
 		{"id":"9e830ec22be72034","type":"text","text":"Отправка пдф пользователю","x":395,"y":2902,"width":250,"height":60},
 		{"id":"073beeb01714bf0a","type":"text","text":"добавить кнопку отправить подруге","x":60,"y":2902,"width":250,"height":60,"color":"4"},
 		{"id":"fe536145843e3039","type":"text","text":"найти дизайн красивых пдф, для референса","x":807,"y":2992,"width":250,"height":60,"color":"2"},
-		{"id":"d81deb260a07530b","type":"text","text":"совет или пожелание для команды астрид, что улучшить, чего не хватает?","x":-3301,"y":-1137,"width":250,"height":117,"color":"4"}
+		{"id":"d81deb260a07530b","type":"text","text":"совет или пожелание для команды астрид, что улучшить, чего не хватает?","x":-3301,"y":-1137,"width":250,"height":117,"color":"4"},
+		{"id":"cf9c367b39d56f20","x":-1252,"y":-1149,"width":612,"height":409,"color":"4","type":"text","text":"мое представление реферальной программы:\n\nстоимость продуктов исчисляется в звездах. \nзвезды можно получить:\n- при оплате \n- и при активностях (ежедневные заходы, приглашение друзей)\n- колесо фортуны дарит каждый подарок\n"}
 	],
 	"edges":[
 		{"id":"a1a06a76742c1a3a","fromNode":"619efa95be5c4a89","fromSide":"bottom","toNode":"50b7b8dcb35f6929","toSide":"top","color":"5"},
@@ -131,7 +131,6 @@
 		{"id":"d0403fc5e1493c23","fromNode":"d26192b49317eb92","fromSide":"top","toNode":"8c09ebf1a9561230","toSide":"bottom","color":"6"},
 		{"id":"45fbfdc21e073ee1","fromNode":"d99423f4d9cf01e2","fromSide":"right","toNode":"d26192b49317eb92","toSide":"left","fromEnd":"arrow","color":"6"},
 		{"id":"a6edb880d911695a","fromNode":"2a1e93b4014977fe","fromSide":"bottom","toNode":"619efa95be5c4a89","toSide":"top","fromEnd":"arrow","color":"6"},
-		{"id":"5918b95f5d460981","fromNode":"8536084ab7f63e2a","fromSide":"top","toNode":"dcb969240df291e8","toSide":"bottom","color":"5"},
 		{"id":"0d81758d8a67c136","fromNode":"13c3a70681dc627d","fromSide":"left","toNode":"2a1e93b4014977fe","toSide":"right","color":"6"},
 		{"id":"37e79fe4c405f9f1","fromNode":"13c3a70681dc627d","fromSide":"right","toNode":"0f200738dd8f17b8","toSide":"left","color":"6"},
 		{"id":"aae55d1812e7a9a2","fromNode":"13c3a70681dc627d","fromSide":"right","toNode":"16f799001a83bd0e","toSide":"left","color":"6"},

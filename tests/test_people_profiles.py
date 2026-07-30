@@ -31,7 +31,7 @@ def _profile(**overrides):
         label="Анжела",
         gender="женщина",
         birth_date=date(1995, 6, 20),
-        birth_time=datetime(1995, 6, 20, 14, 30, tzinfo=timezone.utc),
+        birth_time=datetime(1995, 6, 20, 14, 30),  # настенные часы, без пояса
         birth_place="Москва, Россия",
         birth_place_id=uuid4(),
         timezone="Europe/Moscow",
@@ -91,7 +91,7 @@ def test_format_people_card_full() -> None:
     assert "👤 <b>Анжела</b>" in text
     assert "👩 Женщина" in text
     assert "📅 20.06.1995" in text
-    assert "🕐 18:30" in text  # 14:30 UTC → Europe/Moscow (лето 1995 = +4)
+    assert "🕐 14:30" in text  # ровно то, что вписали: время рождения не переводится
     assert "📍 Москва" in text
 
 
@@ -186,3 +186,9 @@ async def test_upsert_updates_case_variant_instead_of_duplicating() -> None:
     assert row is existing
     assert existing.gender == "женщина"
     session.add.assert_not_called()
+
+
+def test_people_card_never_shifts_a_legacy_aware_time() -> None:
+    """Строки с поясом остались от старой схемы: цифры в них — уже настенные часы."""
+    profile = _profile(birth_time=datetime(1995, 6, 20, 14, 30, tzinfo=timezone.utc))
+    assert "🕐 14:30" in format_people_card(profile)

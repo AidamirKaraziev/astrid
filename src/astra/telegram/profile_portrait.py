@@ -22,10 +22,10 @@ from __future__ import annotations
 
 from datetime import date, datetime
 from typing import Protocol
-from zoneinfo import ZoneInfo
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from astra.astro.birth_time import format_birth_time
 from astra.astro.constants import SIGN_RU_PREPOSITIONAL
 from astra.astro.schemas import FullNatalChart
 from astra.core.observability import Event, get_logger
@@ -101,11 +101,9 @@ def _birth_line(profile: _ProfileView, chart: FullNatalChart | None) -> str:
     day = profile.birth_date.day
     month = RU_MONTHS_GENITIVE[profile.birth_date.month - 1]
     head = f"{day} {month} {profile.birth_date.year}"
-    if profile.birth_time is not None:
-        bt = profile.birth_time
-        if bt.tzinfo is not None:
-            bt = bt.astimezone(ZoneInfo(profile.timezone))
-        head = f"{head}, {bt.strftime('%H:%M')}"
+    clock = format_birth_time(profile.birth_time)
+    if clock:
+        head = f"{head}, {clock}"
     parts = [head]
     place = (profile.birth_place or "").strip()
     if place:

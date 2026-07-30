@@ -5,8 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import date, datetime, time
 from uuid import UUID
-from zoneinfo import ZoneInfo
 
+from astra.astro.birth_time import birth_local_datetime
 from astra.astro.calculator import kerykeion_available
 from astra.astro.constants import ASPECT_EN_TO_RU, PLANET_EN_TO_RU
 from astra.astro.schemas import NatalChartData
@@ -57,18 +57,6 @@ def _theme(p1: str, p2: str) -> str:
     return _default_themes()[idx]
 
 
-def _birth_local_datetime(
-    birth_date: date,
-    birth_time: datetime | None,
-    timezone: str,
-) -> datetime:
-    tz = ZoneInfo(timezone)
-    if birth_time is not None:
-        bt = birth_time
-        if bt.tzinfo is None:
-            return bt.replace(tzinfo=tz)
-        return bt.astimezone(tz)
-    return datetime.combine(birth_date, time(12, 0), tzinfo=tz)
 
 
 def astrological_subject_from_spec(spec: PersonSpec):
@@ -77,7 +65,7 @@ def astrological_subject_from_spec(spec: PersonSpec):
     from kerykeion import AstrologicalSubject
 
     chart = spec.chart
-    local_dt = _birth_local_datetime(spec.birth_date, spec.birth_time, spec.timezone)
+    local_dt = birth_local_datetime(spec.birth_date, spec.birth_time, spec.timezone)
     return AstrologicalSubject(
         spec.name,
         local_dt.year,

@@ -5,6 +5,7 @@ from sqlalchemy import Date, DateTime, ForeignKey, String, Text
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
+from astra.astro.birth_time import WallClock
 from astra.compatibility.enums import PairMode, RelationshipContext, ReportStatus
 from astra.db.base import Base, TimestampMixin
 from astra.users.gender import Gender
@@ -28,7 +29,8 @@ class NatalProfile(Base, TimestampMixin):
     label: Mapped[str] = mapped_column(String(255), index=True)
     gender: Mapped[Gender | None] = mapped_column(String(16), nullable=True)
     birth_date: Mapped[date] = mapped_column(Date)
-    birth_time: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # Настенные часы места рождения, не момент времени: astra.astro.birth_time
+    birth_time: Mapped[datetime | None] = mapped_column(WallClock(), nullable=True)
     birth_place: Mapped[str] = mapped_column(String(255))
     birth_place_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),

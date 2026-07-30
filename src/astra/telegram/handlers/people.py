@@ -4,13 +4,13 @@ from __future__ import annotations
 
 from datetime import datetime
 from uuid import UUID
-from zoneinfo import ZoneInfo
 
 from aiogram import F, Router
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from astra.astro.birth_time import format_birth_time, wall_clock_at, with_birth_date
 from astra.compatibility import crud as compatibility_crud
 from astra.compatibility.models import NatalProfile
 from astra.core.observability import Event, get_logger
@@ -52,13 +52,8 @@ _LIST_TITLE = "👥 <b>Мои люди</b>\nНажми на человека, ч
 def format_people_card(profile: NatalProfile) -> str:
     gender_line = gender_display_label(profile.gender) or "⚧ <i>пол не указан</i>"
 
-    if profile.birth_time is not None:
-        bt = profile.birth_time
-        if bt.tzinfo is not None:
-            bt = bt.astimezone(ZoneInfo(profile.timezone))
-        time_line = f"🕐 {bt.strftime('%H:%M')}"
-    else:
-        time_line = "🕐 <i>время не указано</i>"
+    clock = format_birth_time(profile.birth_time)
+    time_line = f"🕐 {clock}" if clock else "🕐 <i>время не указано</i>"
 
     place = (profile.birth_place or "").strip()
     place_line = f"📍 {shorten_place_display(place)}" if place else "📍 <i>место не указано</i>"
@@ -285,12 +280,9 @@ async def save_people_birth_date(
         return
 
     update_fields: dict[str, object] = {"birth_date": parsed}
-    if profile.birth_time is not None:
-        update_fields["birth_time"] = profile.birth_time.replace(
-            year=parsed.year,
-            month=parsed.month,
-            day=parsed.day,
-        )
+    moved = with_birth_date(profile.birth_time, parsed)
+    if moved is not None:
+        update_fields["birth_time"] = moved
     await compatibility_crud.update_natal_profile(session, profile, **update_fields)
     log.info(Event.NATAL_PROFILE_UPDATED, profile_id=str(profile.id), field="birth_date")
     await state.clear()
@@ -312,7 +304,7 @@ async def save_people_birth_time(
     if parsed is None:
         await message.answer("Не разобрал время. Формат: 14:30")
         return
-    birth_dt = datetime.combine(profile.birth_date, parsed)
+    birth_dt = wall_clock_at(profile.birth_date, parsed)
     await compatibility_crud.update_natal_profile(session, profile, birth_time=birth_dt)
     log.info(Event.NATAL_PROFILE_UPDATED, profile_id=str(profile.id), field="birth_time")
     await state.clear()

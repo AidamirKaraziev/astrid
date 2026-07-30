@@ -3,6 +3,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from astra.astro.birth_time import wall_clock_at, with_birth_date
 from astra.db.session import get_session
 from astra.users import crud
 from astra.users.getters import get_user_me, profile_to_read
@@ -36,16 +37,11 @@ async def patch_profile(
     update_data = payload.model_dump(exclude_unset=True)
     birth_date = update_data.get("birth_date", user.profile.birth_date)
     if "birth_time" in update_data and update_data["birth_time"] is not None:
-        bt = update_data.pop("birth_time")
-        from datetime import datetime
-
-        update_data["birth_time"] = datetime.combine(birth_date, bt)
+        update_data["birth_time"] = wall_clock_at(birth_date, update_data.pop("birth_time"))
     if "birth_date" in update_data and user.profile.birth_time is not None:
-        new_date = update_data["birth_date"]
-        update_data["birth_time"] = user.profile.birth_time.replace(
-            year=new_date.year,
-            month=new_date.month,
-            day=new_date.day,
+        update_data["birth_time"] = with_birth_date(
+            user.profile.birth_time,
+            update_data["birth_date"],
         )
 
     await crud.update_profile(session, user.profile, **update_data)

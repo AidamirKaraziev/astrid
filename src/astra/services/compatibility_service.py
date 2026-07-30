@@ -11,6 +11,7 @@ from zoneinfo import ZoneInfo
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from astra.astro.birth_time import as_wall_clock
 from astra.astro.calculator import build_natal_chart, build_natal_chart_for_birth
 from astra.astro.schemas import NatalChartData
 from astra.astro.synastry import (
@@ -84,10 +85,15 @@ def _birth_time_hhmm(raw: str | None) -> str | None:
 
 
 def _parse_birth_time_iso(raw: str | None) -> datetime | None:
+    """Время рождения из снапшота отчёта.
+
+    В старых снапшотах лежит строка с поясом — цифры в ней уже настенные
+    часы, поэтому пояс срезаем, а не переводим.
+    """
     if not raw:
         return None
     try:
-        return datetime.fromisoformat(raw)
+        return as_wall_clock(datetime.fromisoformat(raw))
     except ValueError:
         return None
 

@@ -10,6 +10,7 @@ from pathlib import Path
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from astra.astro.birth_time import as_wall_clock
 from astra.astro.calculator import build_full_natal_chart
 from astra.astro.chart_features import ChartFeatures, build_chart_features
 from astra.astro.schemas import FullNatalChart
@@ -162,8 +163,8 @@ def _prompt_input_from_report(report: NatalReport):
     chart = FullNatalChart.model_validate(report.chart_data)
     features = ChartFeatures.model_validate(report.features or {})
     snap = report.subject_snapshot
-    birth_time = (
-        datetime.fromisoformat(snap["birth_time"]) if snap.get("birth_time") else None
+    birth_time = as_wall_clock(
+        datetime.fromisoformat(snap["birth_time"]) if snap.get("birth_time") else None,
     )
     return build_natal_prompt_input(
         chart,
@@ -241,8 +242,8 @@ async def generate_natal_report_pdf(
         chart = FullNatalChart.model_validate(report.chart_data)
         output = NatalLlmOutput.model_validate(report.llm_output)
         snap = report.subject_snapshot
-        birth_time = (
-            datetime.fromisoformat(snap["birth_time"]) if snap.get("birth_time") else None
+        birth_time = as_wall_clock(
+            datetime.fromisoformat(snap["birth_time"]) if snap.get("birth_time") else None,
         )
         report_data = llm_output_to_report_data(
             output,

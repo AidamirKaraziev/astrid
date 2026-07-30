@@ -19,6 +19,7 @@ from aiogram.types import (
 )
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from astra.astro.birth_time import as_wall_clock, wall_clock_at
 from astra.compatibility.enums import (
     COMPATIBILITY_IN_FLIGHT_STATUSES,
     PairMode,
@@ -390,12 +391,7 @@ async def cb_pick_person_profile(
     if profile.gender:
         updates[f"{collecting}_gender"] = profile.gender
     if profile.birth_time is not None:
-        birth_time = profile.birth_time
-        if birth_time.tzinfo is not None:
-            from zoneinfo import ZoneInfo
-
-            birth_time = birth_time.astimezone(ZoneInfo(profile.timezone)).replace(tzinfo=None)
-        updates[f"{collecting}_birth_time"] = birth_time.isoformat()
+        updates[f"{collecting}_birth_time"] = as_wall_clock(profile.birth_time).isoformat()
     if collecting == COLLECTING_PERSON_A:
         updates["person_a_picked_profile_id"] = str(profile.id)
     await state.update_data(**updates)
@@ -479,7 +475,7 @@ async def collect_birth_time(message: Message, state: FSMContext, session: Async
     data = await state.get_data()
     collecting = data.get("collecting", COLLECTING_PERSON_B)
     birth_date = date.fromisoformat(str(data[f"{collecting}_birth_date"]))
-    birth_dt = datetime.combine(birth_date, parsed)
+    birth_dt = wall_clock_at(birth_date, parsed)
     await state.update_data(**{f"{collecting}_birth_time": birth_dt.isoformat()})
     await _prompt_next_person_step(message, state, session, message.from_user.id)
 

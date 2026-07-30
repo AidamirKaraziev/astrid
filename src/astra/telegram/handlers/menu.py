@@ -5,6 +5,7 @@ from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from astra.astro.birth_time import wall_clock_at, with_birth_date
 from astra.referrals.getters import get_referral_stats
 from astra.telegram.handlers.places import start_profile_notification_place_step
 from astra.telegram.button_texts import (
@@ -224,12 +225,9 @@ async def save_birth_date(message: Message, state: FSMContext, session: AsyncSes
         return
 
     update_fields: dict[str, object] = {"birth_date": parsed}
-    if user.profile.birth_time is not None:
-        update_fields["birth_time"] = user.profile.birth_time.replace(
-            year=parsed.year,
-            month=parsed.month,
-            day=parsed.day,
-        )
+    moved = with_birth_date(user.profile.birth_time, parsed)
+    if moved is not None:
+        update_fields["birth_time"] = moved
 
     await users_crud.update_profile(session, user.profile, **update_fields)
     await state.clear()
@@ -293,7 +291,7 @@ async def save_birth_time(message: Message, state: FSMContext, session: AsyncSes
     if parsed is None:
         await message.answer(f"Не разобрал время. Формат: 14:30 — или нажми «{BTN_TIME_UNKNOWN}».")
         return
-    birth_dt = datetime.combine(user.profile.birth_date, parsed)
+    birth_dt = wall_clock_at(user.profile.birth_date, parsed)
     await users_crud.update_profile(session, user.profile, birth_time=birth_dt)
     await state.clear()
     p = profile_to_read(user.profile)

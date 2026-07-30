@@ -1,6 +1,7 @@
 from datetime import date, datetime, time
 from zoneinfo import ZoneInfo
 
+from astra.astro.birth_time import birth_local_datetime
 from astra.astro.schemas import ChartPoint, FullNatalChart, HouseCusp, NatalChartData
 from astra.users.getters import calculate_profile_accuracy
 from astra.users.models import Profile
@@ -25,13 +26,7 @@ def _sign_ru(sign_en: str) -> str:
 
 
 def _birth_local_datetime(profile: Profile, timezone: str) -> datetime:
-    tz = ZoneInfo(timezone)
-    if profile.birth_time is not None:
-        bt = profile.birth_time
-        if bt.tzinfo is None:
-            return bt.replace(tzinfo=tz)
-        return bt.astimezone(tz)
-    return datetime.combine(profile.birth_date, time(12, 0), tzinfo=tz)
+    return birth_local_datetime(profile.birth_date, profile.birth_time, timezone)
 
 
 def build_natal_chart(
@@ -112,12 +107,7 @@ def build_natal_chart_for_birth(
             timezone=timezone,
         )
 
-    tz = ZoneInfo(timezone)
-    if birth_time is not None:
-        bt = birth_time
-        local_dt = bt.replace(tzinfo=tz) if bt.tzinfo is None else bt.astimezone(tz)
-    else:
-        local_dt = datetime.combine(birth_date, time(12, 0), tzinfo=tz)
+    local_dt = birth_local_datetime(birth_date, birth_time, timezone)
 
     subject = AstrologicalSubject(
         name,
@@ -298,12 +288,7 @@ def build_full_natal_chart(
     from astra.astro.natal_aspects import compute_natal_aspects
 
     has_time = birth_time is not None
-    tz = ZoneInfo(timezone)
-    if birth_time is not None:
-        bt = birth_time
-        local_dt = bt.replace(tzinfo=tz) if bt.tzinfo is None else bt.astimezone(tz)
-    else:
-        local_dt = datetime.combine(birth_date, time(12, 0), tzinfo=tz)
+    local_dt = birth_local_datetime(birth_date, birth_time, timezone)
 
     subject = _make_subject(name, local_dt, lat=lat, lon=lon, timezone=timezone)
 

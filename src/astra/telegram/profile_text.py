@@ -9,6 +9,7 @@ from datetime import date, datetime
 from typing import Protocol
 from zoneinfo import ZoneInfo
 
+from astra.astro.birth_time import format_birth_time
 from astra.places.normalize import normalize_place_query
 from astra.users.gender import Gender, gender_display_label
 
@@ -94,12 +95,8 @@ def _format_gender_line(profile: _ProfileView) -> str:
 
 
 def _format_birth_time_line(profile: _ProfileView) -> str:
-    if profile.birth_time is None:
-        return _HINT_BIRTH_TIME
-    bt = profile.birth_time
-    if bt.tzinfo is not None:
-        bt = bt.astimezone(ZoneInfo(profile.timezone))
-    return f"🕐 {bt.strftime('%H:%M')}"
+    label = format_birth_time(profile.birth_time)
+    return f"🕐 {label}" if label else _HINT_BIRTH_TIME
 
 
 def _format_birth_place_line(profile: _ProfileView) -> str:
