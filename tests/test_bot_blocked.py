@@ -8,7 +8,13 @@ import pytest
 
 from astra.users import crud as users_crud
 from astra.workers.consumer import _process_message
-from astra.workers.telegram_send import BotBlockedError, _raise_for_status
+import httpx
+
+from astra.workers.telegram_send import (
+    BotBlockedError,
+    TelegramApiError,
+    _raise_for_status,
+)
 
 
 class TestRaiseForStatus:
@@ -19,10 +25,24 @@ class TestRaiseForStatus:
         assert exc_info.value.telegram_id == 42
         response.raise_for_status.assert_not_called()
 
-    def test_other_errors_raise_as_usual(self):
-        response = MagicMock(status_code=500)
-        _raise_for_status(response, 42)
-        response.raise_for_status.assert_called_once()
+    def test_error_carries_telegram_description(self):
+        """Без description в логе остаётся «400 Bad Request» и гадание."""
+        response = httpx.Response(
+            400,
+            json={"ok": False, "error_code": 400, "description": "message is too long"},
+        )
+        with pytest.raises(TelegramApiError) as exc_info:
+            _raise_for_status(response, 42)
+        assert exc_info.value.description == "message is too long"
+        assert exc_info.value.status_code == 400
+
+    def test_non_json_error_body_still_raises(self):
+        response = httpx.Response(502, text="<html>Bad Gateway</html>")
+        with pytest.raises(TelegramApiError):
+            _raise_for_status(response, 42)
+
+    def test_success_passes_through(self):
+        _raise_for_status(httpx.Response(200, json={"ok": True}), 42)
 
 
 class TestMarkBotBlocked:

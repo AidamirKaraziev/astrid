@@ -40,9 +40,26 @@
               "icon": "lucide-layout-dashboard",
               "title": "план по проекту"
             }
+          },
+          {
+            "id": "12eb3be25635600c",
+            "type": "leaf",
+            "state": {
+              "type": "canvas",
+              "state": {
+                "file": "план по проекту.canvas",
+                "viewState": {
+                  "x": -1322.5566923150184,
+                  "y": -1731.6740771254083,
+                  "zoom": -0.09632406064669517
+                }
+              },
+              "icon": "lucide-layout-dashboard",
+              "title": "план по проекту"
+            }
           }
         ],
-        "currentTab": 1
+        "currentTab": 2
       }
     ],
     "direction": "vertical"
@@ -62,7 +79,9 @@
               "type": "file-explorer",
               "state": {
                 "sortOrder": "alphabetical",
-                "autoReveal": false
+                "autoReveal": false,
+                "showSearch": false,
+                "searchQuery": ""
               },
               "icon": "lucide-folder-closed",
               "title": "Файловый менеджер"
@@ -204,7 +223,7 @@
       "bases:Создать новую базу": false
     }
   },
-  "active": "17f53c534db05e46",
+  "active": "12eb3be25635600c",
   "lastOpenFiles": [
     "knowledge/patterns/разметку от модели проверяем до отправки.md",
     "knowledge/patterns/фильтры аудитории как подзапросы по id.md",

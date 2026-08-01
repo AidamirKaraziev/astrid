@@ -13,6 +13,7 @@ from astra.telegram.keyboard_policy import (
     reply_keyboard_for_zone,
     reply_keyboard_to_api_payload,
 )
+from astra.telegram.message_split import split_html_message
 from astra.telegram.keyboards import prediction_followup_keyboard
 
 log = get_logger(__name__)
@@ -30,10 +31,41 @@ class BotBlockedError(Exception):
         self.telegram_id = telegram_id
 
 
+class TelegramApiError(Exception):
+    """Telegram отказал и объяснил причину в поле description.
+
+    Голый `raise_for_status` оставлял в логе только «400 Bad Request» и URL —
+    по такому сообщению нельзя отличить «слишком длинный текст» от «битая
+    разметка», а Telegram всегда пишет, что именно не так.
+    """
+
+    def __init__(self, telegram_id: int, status_code: int, description: str) -> None:
+        super().__init__(f"telegram {status_code}: {description}")
+        self.telegram_id = telegram_id
+        self.status_code = status_code
+        self.description = description
+
+
+def _describe(response: httpx.Response) -> str:
+    try:
+        body = response.json()
+    except ValueError:
+        return response.text[:300]
+    return str(body.get("description") or body)[:300]
+
+
 def _raise_for_status(response: httpx.Response, telegram_id: int) -> None:
     if response.status_code == 403:
         raise BotBlockedError(telegram_id)
-    response.raise_for_status()
+    if response.is_error:
+        description = _describe(response)
+        log.error(
+            Event.TELEGRAM_API_FAILED,
+            telegram_id=telegram_id,
+            status_code=response.status_code,
+            description=description,
+        )
+        raise TelegramApiError(telegram_id, response.status_code, description)
 
 
 def _inline_keyboard_to_api_payload(markup: InlineKeyboardMarkup) -> dict[str, Any]:
@@ -68,26 +100,31 @@ async def send_telegram_html(
     if not cfg.telegram_bot_token:
         raise RuntimeError("TELEGRAM_BOT_TOKEN is not set")
 
-    payload: dict[str, Any] = {
-        "chat_id": telegram_id,
-        "text": text,
-        "parse_mode": "HTML",
-    }
     if isinstance(reply_markup, InlineKeyboardMarkup):
         markup_payload = _inline_keyboard_to_api_payload(reply_markup)
     else:
         markup_payload = _resolve_reply_markup(reply_markup, keyboard_zone=keyboard_zone)
-    if markup_payload is not None:
-        payload["reply_markup"] = markup_payload
+
+    # Длинный разбор уходит несколькими сообщениями: клавиатура — только под
+    # последним, иначе кнопки повторятся посреди текста.
+    parts = split_html_message(text)
 
     url = f"https://api.telegram.org/bot{cfg.telegram_bot_token}/sendMessage"
     client_kwargs: dict[str, Any] = {"timeout": 30.0}
     if proxy := cfg.telegram_proxy_url_effective:
         client_kwargs["proxy"] = proxy
     async with httpx.AsyncClient(**client_kwargs) as client:
-        response = await client.post(url, json=payload)
-        _raise_for_status(response, telegram_id)
-    log.info(Event.TELEGRAM_MESSAGE_SENT, telegram_id=telegram_id)
+        for index, part in enumerate(parts):
+            payload: dict[str, Any] = {
+                "chat_id": telegram_id,
+                "text": part,
+                "parse_mode": "HTML",
+            }
+            if markup_payload is not None and index == len(parts) - 1:
+                payload["reply_markup"] = markup_payload
+            response = await client.post(url, json=payload)
+            _raise_for_status(response, telegram_id)
+    log.info(Event.TELEGRAM_MESSAGE_SENT, telegram_id=telegram_id, parts=len(parts))
 
 
 async def send_compatibility_pdf(
