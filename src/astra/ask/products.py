@@ -41,6 +41,8 @@ log = get_logger(__name__)
 QUESTION_FATED_COUNT = "love_fated_count"
 QUESTION_CHILDREN = "love_kids"
 QUESTION_KIDS_BOND = "love_kids_bond"
+QUESTION_PARTNER_TRAITS = "love_partner_traits"
+QUESTION_PAIN_LOOP = "love_pain_loop"
 
 # Первый продукт писал ответ на калибрующий вопрос в отдельную колонку —
 # у строк, созданных до миграции 020, поля `context` нет.
@@ -62,6 +64,9 @@ class AskProductSpec:
     invoice_title: str
     invoice_description: str
     teaser: str
+    # Продукт зовёт человека по имени: имя подставляет код, не модель.
+    # Тизер такого продукта пишется как продолжение обращения, со строчной.
+    address_by_name: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -115,6 +120,24 @@ class AskProduct:
     @property
     def teaser(self) -> str:
         return self.spec.teaser
+
+    def teaser_for(self, user_name: str | None) -> str:
+        """Тизер с обращением по имени — у продуктов, которые его объявили."""
+        if not self.spec.address_by_name:
+            return self.spec.teaser
+        from astra.ask.naming import address
+
+        return address(self.spec.teaser, user_name)
+
+    def render_answer(self, answer: Any, result: Any, *, user_name: str | None = None) -> str:
+        """Разбор в HTML. Имя уходит только тем продуктам, что его ждут.
+
+        Возможность необязательная, как и `render_card`: соседние продукты
+        рендерят ответ прежней сигнатурой и о новом аргументе не знают.
+        """
+        if self.spec.address_by_name:
+            return self.prompt.render_answer(answer, result, user_name=user_name)
+        return self.prompt.render_answer(answer, result)
 
     def compute(
         self,
@@ -201,6 +224,56 @@ SPECS: dict[str, AskProductSpec] = {
             "Смотрю твой пятый дом, Луну и Меркурий — определяю, какой ты "
             "родитель и как строится связь с ребёнком ✨"
         ),
+    ),
+    QUESTION_PARTNER_TRAITS: AskProductSpec(
+        key=QUESTION_PARTNER_TRAITS,
+        calc_module="astra.ask.partner_traits",
+        prompt_module="astra.llm.prompts.ask.partner_traits",
+        calibration_text=(
+            "Один вопрос перед ответом — от него зависит, как читать твою карту.\n\n"
+            "<b>Сейчас ты в отношениях?</b>\n\n"
+            "<i>Если да — покажу, по каким чертам сверить того, кто рядом.</i>"
+        ),
+        calibration_yes="Сейчас в отношениях",
+        calibration_no="Сейчас свободна/свободен",
+        calibration_field="in_relationship",
+        invoice_title="Черты судьбоносного партнёра",
+        invoice_description=(
+            "Разбор по твоей натальной карте: какой типаж партнёра она показывает, "
+            "какой у него характер, из какой он среды и по каким чертам его узнать."
+        ),
+        # Пишется как продолжение обращения: «Аня, смотрю твой седьмой дом…».
+        teaser=(
+            "смотрю твой седьмой дом, его управителя и Венеру — собираю портрет "
+            "того, кого твоя карта показывает судьбоносным ✨"
+        ),
+        address_by_name=True,
+    ),
+    QUESTION_PAIN_LOOP: AskProductSpec(
+        key=QUESTION_PAIN_LOOP,
+        calc_module="astra.ask.pain_loop",
+        prompt_module="astra.llm.prompts.ask.pain_loop",
+        calibration_text=(
+            "Один вопрос перед ответом — от него зависит, как читать твою карту.\n\n"
+            "<b>Чаще уходишь ты — или уходят от тебя?</b>\n\n"
+            "<i>Отвечай как есть. Одни и те же аспекты карты читаются "
+            "по-разному в этих двух случаях.</i>"
+        ),
+        calibration_yes="Чаще ухожу я",
+        calibration_no="Чаще уходят от меня",
+        calibration_field="leaves_first",
+        invoice_title="Почему я обжигаюсь",
+        invoice_description=(
+            "Разбор по твоей натальной карте: какой сценарий ты повторяешь в отношениях, "
+            "по каким признакам его узнать, в какой момент всё каждый раз ломается "
+            "и что размыкает этот круг."
+        ),
+        # Пишется как продолжение обращения: «Аня, смотрю твою Венеру…».
+        teaser=(
+            "смотрю твою Венеру, Луну и их аспекты — ищу тот самый круг, "
+            "который повторяется у тебя из истории в историю 💫"
+        ),
+        address_by_name=True,
     ),
 }
 

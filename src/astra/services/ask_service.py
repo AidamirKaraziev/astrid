@@ -20,6 +20,7 @@ from pydantic import BaseModel
 from astra.ask import models as ask_crud
 from astra.ask.enums import AskStatus
 from astra.ask.models import AskReading
+from astra.ask.naming import addressable_name
 from astra.ask.products import LEGACY_CALIBRATION_PRODUCT, get_product
 from astra.core.config import Settings, get_settings
 from astra.core.observability import Event, get_logger
@@ -151,7 +152,11 @@ async def generate_ask_answer(
             last_error = validation_error
             continue
         payload = answer.model_dump()
-        payload["html"] = prompt.render_answer(answer, result)
+        payload["html"] = product.render_answer(
+            answer,
+            result,
+            user_name=addressable_name(profile.display_name if profile else None),
+        )
         await ask_crud.save_answer(session, reading, payload)
         log.info(Event.ASK_ANSWER_GENERATED, reading_id=reading.id)
         return reading

@@ -24,6 +24,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from astra.ask import models as ask_crud
 from astra.ask.enums import AskStatus
+from astra.ask.naming import addressable_name
 from astra.core.observability import Event, get_logger
 from astra.messaging.publisher import publish_ask_answer_generate
 from astra.payments.service import (
@@ -371,7 +372,8 @@ async def _fulfill_reading(
     product = get_product(reading.question_key)
     if product is None:
         return
-    await message.answer(product.teaser)
+    name = addressable_name(user.profile.display_name if user.profile else None)
+    await message.answer(product.teaser_for(name))
     await message.chat.do("typing")
 
     try:
@@ -421,20 +423,25 @@ async def _send_card(
     result,
     product,
 ) -> None:
-    """Карточка уходит сразу — она же закрывает паузу ожидания разбора."""
-    caption = product.prompt.card_caption(result)
-    if product.render_card is None:
-        await message.answer(caption)
-        return
+    """Карточка уходит сразу — она же закрывает паузу ожидания разбора.
+
+    Деньги на этом шаге уже списаны и расчёт сохранён, поэтому ни одна ошибка
+    отсюда не должна всплыть наверх: разбор придёт из worker в любом случае.
+    """
+    caption = ""
     try:
-        photo = BufferedInputFile(product.render_card(result), filename="astrid.png")
-        sent = await message.answer_photo(photo, caption=caption)
-        if sent.photo:
-            await ask_crud.save_card_file_id(session, reading, sent.photo[-1].file_id)
-            await session.commit()
+        caption = product.prompt.card_caption(result)
+        if product.render_card is not None:
+            photo = BufferedInputFile(product.render_card(result), filename="astrid.png")
+            sent = await message.answer_photo(photo, caption=caption)
+            if sent.photo:
+                await ask_crud.save_card_file_id(session, reading, sent.photo[-1].file_id)
+                await session.commit()
+            return
     except Exception:
         # Картинка — украшение; если не собралась, ответ всё равно придёт текстом.
         log.exception("ask.card_failed")
+    if caption:
         await message.answer(caption)
 
 
