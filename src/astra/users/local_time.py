@@ -21,11 +21,11 @@ DEFAULT_TIMEZONE = "Europe/Moscow"
 
 def user_timezone(user: User) -> ZoneInfo:
     """Таймзона из профиля; у пользователя без профиля — умолчание."""
-    name = user.profile.timezone if user.profile is not None else DEFAULT_TIMEZONE
+    profile = user.__dict__.get("profile")
+    name = profile.timezone if profile is not None else DEFAULT_TIMEZONE
     try:
         return ZoneInfo(name or DEFAULT_TIMEZONE)
     except Exception:
-        # Мусор в базе не должен ронять начисление серии.
         return ZoneInfo(DEFAULT_TIMEZONE)
 
 

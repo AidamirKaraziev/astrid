@@ -69,6 +69,7 @@ async def create_user(
     )
     session.add(user)
     await session.flush()
+    await session.refresh(user)
     return user
 
 
