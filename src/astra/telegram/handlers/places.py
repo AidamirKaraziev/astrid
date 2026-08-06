@@ -11,8 +11,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from astra.places import crud as places_crud
 from astra.places.geonames_import import ensure_places_catalog
 from astra.places.getters import get_place_read
+from astra.core.config import get_settings
 from astra.core.observability import Event, get_logger
 from astra.db.session import get_session_factory
+from astra.support import crud as support_crud
+from astra.support.service import build_missing_place_card
 from astra.services.greeting_service import run_greeting_phase
 from astra.services.onboarding_service import parse_registration_fsm, run_registration_phase
 from astra.telegram.keyboards import profile_menu_keyboard
@@ -21,12 +24,15 @@ from astra.telegram.states import (
     NatalStates,
     OnboardingStates,
     PeopleStates,
+    PlaceStates,
     ProfileStates,
 )
 from astra.users import crud as users_crud
 from astra.telegram.keyboards_places import (
     PAGE_SIZE,
     REGION_STEP_FROM,
+    missing_place_keyboard,
+    nothing_found_keyboard,
     places_pick_keyboard,
     regions_pick_keyboard,
 )
@@ -46,7 +52,7 @@ PLACE_STATES = (
 SEARCH_HINT = (
     "Начни вводить название — <b>город, посёлок или деревня</b>.\n"
     "Например: <code>Каширское</code>, <code>Вырица</code>, <code>Алматы</code>\n\n"
-    "<i>Своего села нет в списке — подойдёт любой город в пределах 100 км, "
+    "<i>Своего села нет в списке — подойдёт ближайший город в своей области, "
     "на расчёт это не влияет.</i>"
 )
 
@@ -59,10 +65,60 @@ NOTHING_FOUND_TEXT = (
     "Пример: <code>Иваново, Тверская область</code>"
 )
 
+# Почему 70 км, а не «как можно ближе»: сдвиг на 70 км двигает карту на 1,1°,
+# это примерно как ошибиться во времени рождения на четыре минуты. А обычная
+# неточность записанного времени — десять-пятнадцать минут, то есть погрешность
+# места тонет в ней целиком. Настоящее ограничение не километры, а часовой
+# пояс — в России он совпадает с границей региона, поэтому говорим «в своей
+# области», а про пояса не упоминаем вовсе.
+NEARBY_CITY_KM = 70
+
+# Короче этого рассказ бесполезен: «нет города» оператору ничего не даёт.
+_MIN_DESCRIPTION_LENGTH = 12
+
+MISSING_PLACE_TEXT = (
+    "Маленькие сёла и хутора есть в справочнике не всегда — и на разбор "
+    "это не влияет.\n\n"
+    "Карта считается по координатам места. Соседний город в пределах "
+    f"{NEARBY_CITY_KM} км сдвигает её меньше, чем обычная неточность во "
+    "времени рождения: разбор будет таким же точным.\n\n"
+    "Выбери ближайший город <b>в своей области</b> — и продолжим."
+)
+
+DESCRIBE_PLACE_PROMPT = (
+    "Расскажи одним сообщением, какого места не хватает:\n\n"
+    "• название села, хутора или посёлка\n"
+    "• район и область\n"
+    "• страна\n"
+    "• рядом с каким городом и сколько километров\n\n"
+    "Например: <code>хутор Весёлый, Успенский район, Краснодарский край, "
+    "15 км от Армавира</code>"
+)
+
+DESCRIBE_PLACE_ACCEPTED = (
+    "Спасибо, передала команде 💜\nПроверим и добавим.\n\n"
+    "Сейчас выбери ближайший город в своей области — разбор от этого "
+    "не потеряет в точности."
+)
+
+DESCRIBE_PLACE_TOO_SHORT = (
+    "Напиши чуть подробнее: название места, район и область, "
+    "рядом с каким городом 💜"
+)
+
 NOTIFICATION_PLACE_TITLE = (
     "🌍 Где ты сейчас живёшь?\n"
     "<i>Для бесплатных предсказаний в 09:00 по твоему времени</i>"
 )
+
+# Заголовок шага, куда человека надо вернуть после рассказа о нехватке места.
+_STEP_TITLES = {
+    "birth": "📍 Где ты родилась?",
+    "compatibility": "📍 Где родился(ась) этот человек?",
+    "people": "📍 Где родился(ась) этот человек?",
+    "natal_new": "📍 Где родился(ась) этот человек?",
+    "notification": NOTIFICATION_PLACE_TITLE,
+}
 
 
 async def _ensure_places_ready(session: AsyncSession) -> bool:
@@ -236,17 +292,22 @@ async def handle_place_query(
         )
         return
 
+    # Запоминаем запрос до поиска, а не после: если не нашлось ничего, он и
+    # нужен больше всего — именно его увидит оператор в карточке.
+    await state.update_data(place_query=query)
+
     search = await places_crud.prepare_search(session, query)
     if search is None:
+        # Даже здесь не оставляем человека без выхода: кнопка «не нашла свой
+        # город» должна быть под руками, а не только под списком.
         await message.answer(
             NOTHING_FOUND_TEXT,
             parse_mode="HTML",
-            reply_markup=ReplyKeyboardRemove(),
+            reply_markup=nothing_found_keyboard(),
         )
         return
 
     await _keep_place_state(state, context_key)
-    await state.update_data(place_query=query)
 
     # Тёзок много — плоский список бесполезен: человек не отличит одну
     # «Ивановку» от другой и выберет не своё место рождения.
@@ -281,18 +342,147 @@ async def place_step_fallback(message: Message, state: FSMContext) -> None:
     )
 
 
+async def _report_missing_place(
+    message: Message,
+    state: FSMContext,
+    session: AsyncSession,
+    text: str,
+) -> None:
+    """Положить рассказ о недостающем месте карточкой в админ-группу.
+
+    Ошибка здесь никогда не должна ронять онбординг: человек и так уже не
+    нашёл своё село, оставить его ещё и без ответа — верный способ потерять
+    его совсем. Поэтому всё под `try`, а человек в любом случае возвращается
+    к выбору города.
+    """
+    settings = get_settings()
+    admin_chat_id = settings.telegram_admin_group_id
+    if admin_chat_id == 0 or message.bot is None or message.from_user is None:
+        log.warning(Event.SUPPORT_TICKET_CARD_FAILED, stage="missing_place_no_channel")
+        return
+
+    data = await state.get_data()
+    searched = data.get("place_query")
+    region = data.get("place_region")
+    step = _STEP_TITLES.get(str(data.get("place_context") or ""), "место рождения")
+
+    telegram_id = message.from_user.id
+    user = await users_crud.get_user_by_telegram_id(session, telegram_id)
+    if user is None:
+        return
+
+    found: int | None = None
+    if searched:
+        search = await places_crud.prepare_search(session, str(searched))
+        found = search.total if search else 0
+
+    def card(number: int | None) -> str:
+        return build_missing_place_card(
+            number=number,
+            display_name=user.profile.display_name if user.profile else "",
+            telegram_id=telegram_id,
+            username=message.from_user.username,
+            searched=str(searched) if searched else None,
+            region=str(region) if region else None,
+            found=found,
+            step=step.splitlines()[0],
+            text=text,
+        )
+
+    try:
+        card_msg = await message.bot.send_message(admin_chat_id, card(None))
+        ticket = await support_crud.create_ticket(
+            session,
+            user_id=user.id,
+            telegram_id=telegram_id,
+            admin_chat_id=admin_chat_id,
+            admin_message_id=card_msg.message_id,
+            last_message=text,
+        )
+        try:
+            await message.bot.edit_message_text(
+                card(ticket.number),
+                chat_id=admin_chat_id,
+                message_id=card_msg.message_id,
+            )
+        except Exception:
+            log.warning(Event.SUPPORT_TICKET_CARD_FAILED, stage="missing_place_number")
+        log.info(
+            Event.SUPPORT_TICKET_CREATED,
+            ticket=ticket.number,
+            user_id=str(user.id),
+            kind="missing_place",
+            searched=str(searched) if searched else None,
+        )
+    except Exception:
+        log.exception(Event.SUPPORT_TICKET_CARD_FAILED, stage="missing_place_send")
+
+
+async def _restart_place_step(message: Message, state: FSMContext) -> None:
+    """Спросить место заново, вернув человека в тот же сценарий.
+
+    Заголовок берём по контексту: из выбора места человек попадает сюда и из
+    онбординга, и из совместимости, и из «моих людей».
+    """
+    data = await state.get_data()
+    context_key = str(data.get("place_context") or "birth")
+    await state.update_data(place_regions=None, place_region=None, place_offset=0)
+    await _keep_place_state(state, context_key)
+    await send_place_step_prompt(message, title=_STEP_TITLES.get(context_key, "📍 Где это место?"))
+
+
 @router.callback_query(F.data == "place:retry")
 async def cb_place_retry(callback: CallbackQuery, state: FSMContext) -> None:
     if callback.message is None:
         await callback.answer()
         return
-    await state.update_data(place_regions=None, place_region=None, place_offset=0)
-    current = await state.get_state()
-    if current == OnboardingStates.birth_place_query.state:
-        await start_birth_place_step(callback.message, state)
-    elif current == ProfileStates.edit_notification_place_query.state:
-        await start_profile_notification_place_step(callback.message, state)
+    await _restart_place_step(callback.message, state)
     await callback.answer()
+
+
+@router.callback_query(F.data == "place:missing")
+async def cb_place_missing(callback: CallbackQuery, state: FSMContext) -> None:
+    """«Не нашла свой город» — сначала снимаем тревогу, потом предлагаем помочь."""
+    if callback.message is None:
+        await callback.answer()
+        return
+    await callback.message.answer(
+        MISSING_PLACE_TEXT,
+        parse_mode="HTML",
+        reply_markup=missing_place_keyboard(),
+    )
+    await callback.answer()
+
+
+@router.callback_query(F.data == "place:describe")
+async def cb_place_describe(callback: CallbackQuery, state: FSMContext) -> None:
+    """Человек согласился рассказать, какого места не хватает."""
+    if callback.message is None:
+        await callback.answer()
+        return
+    data = await state.get_data()
+    # Запоминаем, откуда забрали: после рассказа надо вернуть ровно туда.
+    await state.update_data(place_context=str(data.get("place_context") or "birth"))
+    await state.set_state(PlaceStates.describing_missing)
+    await callback.message.answer(DESCRIBE_PLACE_PROMPT, parse_mode="HTML")
+    await callback.answer()
+
+
+@router.message(PlaceStates.describing_missing)
+async def receive_missing_place(
+    message: Message,
+    state: FSMContext,
+    session: AsyncSession,
+) -> None:
+    """Рассказ о недостающем месте → карточка в админ-группу → назад к выбору."""
+    text = (message.text or message.caption or "").strip()
+    if len(text) < _MIN_DESCRIPTION_LENGTH:
+        await message.answer(DESCRIBE_PLACE_TOO_SHORT)
+        return
+
+    await _report_missing_place(message, state, session, text)
+    await message.answer(DESCRIBE_PLACE_ACCEPTED)
+    await _restart_place_step(message, state)
 
 
 async def _restore_search(

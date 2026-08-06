@@ -38,6 +38,46 @@ async def latest_payment_summary(session: AsyncSession, user_id: uuid.UUID) -> s
     )
 
 
+def build_missing_place_card(
+    *,
+    number: int | None,
+    display_name: str,
+    telegram_id: int,
+    username: str | None,
+    searched: str | None,
+    region: str | None,
+    found: int | None,
+    step: str,
+    text: str,
+) -> str:
+    """Карточка «нет места в справочнике» — отдельная от обычного обращения.
+
+    Своя разметка и свой значок, потому что читается иначе: тут не проблема
+    клиента, а дырка в наших данных. Оператор должен с одного взгляда понять,
+    искал человек несуществующее место или оно есть, но не находится.
+    """
+    header = (
+        f"🗺 <b>Обращение #{number}</b> · нет места в справочнике"
+        if number
+        else "🗺 <b>Нет места в справочнике</b>"
+    )
+    who = html.escape(display_name or "без имени")
+    handle = f" · @{html.escape(username)}" if username else ""
+
+    lines = [header, f"👤 {who}{handle}", f"🆔 <code>{telegram_id}</code>"]
+    if searched:
+        hits = "0 подходящих" if not found else f"найдено {found}"
+        lines.append(f"🔍 Искала: «{html.escape(searched)}» → {hits}")
+    if region:
+        lines.append(f"📍 Смотрела регион: {html.escape(region)}")
+    lines.append(f"🧭 Шаг: {html.escape(step)}")
+    lines.append("———")
+    lines.append(html.escape(text[:_MAX_TICKET_TEXT]))
+    lines.append("")
+    lines.append("↩️ <i>Ответьте reply на это сообщение — доставим клиенту.</i>")
+    return "\n".join(lines)
+
+
 def build_ticket_card(
     *,
     number: int | None,

@@ -55,6 +55,17 @@ class SupportStates(StatesGroup):
     writing = State()
 
 
+class PlaceStates(StatesGroup):
+    """Человек не нашёл своё место и рассказывает, какого не хватает.
+
+    Отдельное состояние, а не `SupportStates.writing`: сюда человек попадает
+    из середины другого сценария (онбординг, совместимость, «мои люди»), и
+    после отправки его надо вернуть ровно туда, откуда забрали.
+    """
+
+    describing_missing = State()
+
+
 class PeopleStates(StatesGroup):
     """Редактирование сохранённого натального профиля («Мои люди»)."""
 

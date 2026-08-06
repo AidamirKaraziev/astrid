@@ -506,7 +506,7 @@ async def test_place_step_explains_the_nearby_city_rule(
     calls = await bot_harness.send(BIRTH_DATE_INPUT, telegram_id=telegram_id)
 
     prompt = assert_said(calls, "Где ты родилась")
-    assert "100 км" in prompt.text
+    assert "в своей области" in prompt.text
     assert "не влияет" in prompt.text
 
 
@@ -617,3 +617,226 @@ async def test_few_matches_skip_the_region_step(
 
     assert "Выбери населённый пункт" in calls[0].text
     assert _callbacks(calls, "place:pick:")
+
+
+# --------------------------------------------------------------------------
+# «Не нашла свой город»: последняя страховка от тупика
+# --------------------------------------------------------------------------
+
+
+@pytest.fixture
+async def admin_group(monkeypatch):
+    """Админ-группа для карточек обращений. Отправку ловит фейковый Telegram."""
+    from astra.core.config import get_settings
+
+    settings = get_settings()
+    monkeypatch.setattr(settings, "telegram_admin_group_id", -1004419830379, raising=False)
+    return settings.telegram_admin_group_id
+
+
+async def test_missing_city_button_is_always_on_the_list(
+    bot_harness: BotHarness,
+    db_session,
+) -> None:
+    """Тупик выглядит как восемь чужих сёл, а не как пустота."""
+    telegram_id = new_test_telegram_id()
+    await _to_place_step(bot_harness, telegram_id)
+    calls = await bot_harness.send(BIRTH_CITY_QUERY, telegram_id=telegram_id)
+
+    assert "place:missing" in _callbacks(calls, "place:missing")
+    assert any("Не нашла свой город" in button for button in calls[0].buttons())
+
+
+async def test_missing_city_screen_calms_and_offers_two_ways(
+    bot_harness: BotHarness,
+    db_session,
+) -> None:
+    """Сначала снимаем тревогу, потом предлагаем помочь — не наоборот."""
+    telegram_id = new_test_telegram_id()
+    await _to_place_step(bot_harness, telegram_id)
+    await bot_harness.send(BIRTH_CITY_QUERY, telegram_id=telegram_id)
+
+    bot_harness.clear()
+    calls = await bot_harness.click("place:missing", telegram_id=telegram_id)
+
+    screen = calls[0]
+    assert "70 км" in screen.text
+    assert "в своей области" in screen.text
+    assert "таким же точным" in screen.text
+    assert "Выбрать город" in screen.buttons()
+    assert any("Рассказать" in button for button in screen.buttons())
+
+
+async def test_choose_city_returns_to_the_search_step(
+    bot_harness: BotHarness,
+    db_session,
+) -> None:
+    """Кнопка «Выбрать город» возвращает в тот же шаг, а не в никуда."""
+    telegram_id = new_test_telegram_id()
+    await _to_place_step(bot_harness, telegram_id)
+    await bot_harness.send(BIRTH_CITY_QUERY, telegram_id=telegram_id)
+    await bot_harness.click("place:missing", telegram_id=telegram_id)
+
+    bot_harness.clear()
+    calls = await bot_harness.click("place:retry", telegram_id=telegram_id)
+    assert "Где ты родилась" in calls[0].text
+
+    # И поиск снова работает: человек не выпал из онбординга.
+    pick = await reach_place_buttons(bot_harness, telegram_id)
+    assert pick
+
+
+async def test_description_goes_to_operators_with_context(
+    bot_harness: BotHarness,
+    db_session,
+    admin_group,
+) -> None:
+    """Карточка оператору несёт то, чего он сам не узнает: что искал человек."""
+    telegram_id = new_test_telegram_id()
+    await _to_place_step(bot_harness, telegram_id)
+    await bot_harness.send("Ктулхуград", telegram_id=telegram_id)
+    await bot_harness.click("place:missing", telegram_id=telegram_id)
+
+    calls = await bot_harness.click("place:describe", telegram_id=telegram_id)
+    prompt = calls[0]
+    assert "одним сообщением" in prompt.text
+    assert "рядом с каким городом" in prompt.text
+    assert "Весёлый" in prompt.text  # пример, а не голая инструкция
+
+    bot_harness.clear()
+    story = "хутор Весёлый, Успенский район, Краснодарский край, 15 км от Армавира"
+    calls = await bot_harness.send(story, telegram_id=telegram_id)
+
+    # Карточка кладётся дважды: сначала без номера, потом с ним — оператор
+    # видит последнюю.
+    to_admins = [c for c in calls if str(c.payload.get("chat_id")) == str(admin_group)]
+    assert to_admins, "карточка не ушла в админ-группу"
+    card = to_admins[-1]
+    assert "нет места в справочнике" in card.text.lower()
+    assert "Обращение #" in card.text
+    assert "Ктулхуград" in card.text, "оператор не увидит, что человек искал"
+    assert story in card.text
+    assert str(telegram_id) in card.text
+
+
+async def test_after_description_person_continues_registration(
+    bot_harness: BotHarness,
+    db_session,
+    admin_group,
+) -> None:
+    """Главное: человек не остаётся в тупике, а идёт дальше и получает разбор."""
+    telegram_id = new_test_telegram_id()
+    await _to_place_step(bot_harness, telegram_id)
+    await bot_harness.send("Ктулхуград", telegram_id=telegram_id)
+    await bot_harness.click("place:missing", telegram_id=telegram_id)
+    await bot_harness.click("place:describe", telegram_id=telegram_id)
+
+    bot_harness.clear()
+    calls = await bot_harness.send(
+        "хутор Весёлый, Успенский район, Краснодарский край, 15 км от Армавира",
+        telegram_id=telegram_id,
+    )
+    assert any("Спасибо" in call.text for call in calls)
+    assert any("Где ты родилась" in call.text for call in calls)
+
+    pick = await reach_place_buttons(bot_harness, telegram_id)
+    calls = await bot_harness.click(pick, telegram_id=telegram_id)
+    assert_said(calls, "Регистрация завершена")
+
+
+async def test_too_short_description_is_reprompted(
+    bot_harness: BotHarness,
+    db_session,
+    admin_group,
+) -> None:
+    """«Нет города» оператору ничего не даёт — просим подробнее."""
+    telegram_id = new_test_telegram_id()
+    await _to_place_step(bot_harness, telegram_id)
+    await bot_harness.send(BIRTH_CITY_QUERY, telegram_id=telegram_id)
+    await bot_harness.click("place:missing", telegram_id=telegram_id)
+    await bot_harness.click("place:describe", telegram_id=telegram_id)
+
+    bot_harness.clear()
+    calls = await bot_harness.send("нет города", telegram_id=telegram_id)
+    assert "подробнее" in calls[0].text
+    assert not [c for c in calls if str(c.payload.get("chat_id")) == str(admin_group)]
+
+
+async def test_broken_admin_group_does_not_break_onboarding(
+    bot_harness: BotHarness,
+    db_session,
+) -> None:
+    """Админ-группа не настроена — человек всё равно идёт дальше.
+
+    Он и так не нашёл своё село; оставить его ещё и без ответа — верный
+    способ потерять совсем.
+    """
+    telegram_id = new_test_telegram_id()
+    await _to_place_step(bot_harness, telegram_id)
+    await bot_harness.send(BIRTH_CITY_QUERY, telegram_id=telegram_id)
+    await bot_harness.click("place:missing", telegram_id=telegram_id)
+    await bot_harness.click("place:describe", telegram_id=telegram_id)
+
+    bot_harness.clear()
+    calls = await bot_harness.send(
+        "село Иваново, Тверская область, 20 км от Твери",
+        telegram_id=telegram_id,
+    )
+    assert any("Где ты родилась" in call.text for call in calls)
+
+
+async def test_main_menu_does_not_appear_during_the_story(
+    bot_harness: BotHarness,
+    db_session,
+    admin_group,
+) -> None:
+    """Посреди регистрации главное меню — приглашение её бросить.
+
+    Человек рассказывает про своё село, а снизу вылезает «Колесо фортуны»:
+    одно нажатие — и регистрация не закончена.
+    """
+    telegram_id = new_test_telegram_id()
+    await _to_place_step(bot_harness, telegram_id)
+    await bot_harness.send(BIRTH_CITY_QUERY, telegram_id=telegram_id)
+    await bot_harness.click("place:missing", telegram_id=telegram_id)
+    await bot_harness.click("place:describe", telegram_id=telegram_id)
+
+    bot_harness.clear()
+    calls = await bot_harness.send(
+        "село Иваново, Тверская область, 20 км от Твери",
+        telegram_id=telegram_id,
+    )
+    for call in calls:
+        assert "🎡 Колесо фортуны" not in call.buttons(), (
+            f"главное меню посреди онбординга: {call.text[:60]}"
+        )
+
+
+async def test_query_reaches_operators_even_when_nothing_was_found(
+    bot_harness: BotHarness,
+    db_session,
+    admin_group,
+) -> None:
+    """Пустая выдача — самый ценный случай: именно этого места и не хватает.
+
+    Раньше запрос сохранялся только после удачного поиска, и оператор видел
+    рассказ без единственного, что мы знаем точно, — что человек набрал.
+    """
+    telegram_id = new_test_telegram_id()
+    await _to_place_step(bot_harness, telegram_id)
+
+    calls = await bot_harness.send("Ктулхуград", telegram_id=telegram_id)
+    # Выход с экрана есть в любом случае — даже когда список пуст.
+    assert _callbacks(calls, "place:missing")
+
+    await bot_harness.click("place:missing", telegram_id=telegram_id)
+    await bot_harness.click("place:describe", telegram_id=telegram_id)
+
+    bot_harness.clear()
+    calls = await bot_harness.send(
+        "хутор Весёлый, Успенский район, Краснодарский край, 15 км от Армавира",
+        telegram_id=telegram_id,
+    )
+    to_admins = [c for c in calls if str(c.payload.get("chat_id")) == str(admin_group)]
+    assert to_admins
+    assert "Ктулхуград" in to_admins[-1].text

@@ -40,6 +40,39 @@ CB_REGION = "place:region:"
 CB_PAGE = "place:page:"
 CB_REGIONS = "place:regions"
 CB_RETRY = "place:retry"
+CB_MISSING = "place:missing"
+CB_DESCRIBE = "place:describe"
+
+BTN_MISSING = "💜 Не нашла свой город"
+BTN_DESCRIBE = "💜 Рассказать, какого места не хватает"
+BTN_RETRY = "🔍 Ввести другой запрос"
+
+
+def _tail_rows() -> list[list[InlineKeyboardButton]]:
+    """Две последние строки любого списка мест: переспросить и пожаловаться.
+
+    Кнопка «не нашла» стоит всегда, а не только на пустой выдаче: тупик чаще
+    выглядит как восемь чужих сёл на экране, чем как пустота.
+    """
+    return [
+        [InlineKeyboardButton(text=BTN_RETRY, callback_data=CB_RETRY)],
+        [InlineKeyboardButton(text=BTN_MISSING, callback_data=CB_MISSING)],
+    ]
+
+
+def nothing_found_keyboard() -> InlineKeyboardMarkup:
+    """Совсем ничего не нашлось — выход всё равно должен быть на экране."""
+    return InlineKeyboardMarkup(inline_keyboard=_tail_rows())
+
+
+def missing_place_keyboard() -> InlineKeyboardMarkup:
+    """Экран «маленьких сёл нет не всегда»: вернуться к поиску или рассказать."""
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="Выбрать город", callback_data=CB_RETRY)],
+            [InlineKeyboardButton(text=BTN_DESCRIBE, callback_data=CB_DESCRIBE)],
+        ],
+    )
 
 
 def _clip(text: str) -> str:
@@ -105,7 +138,7 @@ def places_pick_keyboard(
     if navigation:
         rows.append(navigation)
 
-    rows.append([InlineKeyboardButton(text="🔍 Ввести другой запрос", callback_data=CB_RETRY)])
+    rows.extend(_tail_rows())
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
@@ -136,5 +169,5 @@ def regions_pick_keyboard(
             ],
         )
 
-    rows.append([InlineKeyboardButton(text="🔍 Ввести другой запрос", callback_data=CB_RETRY)])
+    rows.extend(_tail_rows())
     return InlineKeyboardMarkup(inline_keyboard=rows)
