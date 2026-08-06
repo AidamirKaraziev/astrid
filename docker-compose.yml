@@ -14,9 +14,16 @@
 
 name: astra
 
+# Образы инфраструктуры и базовый образ приложения вынесены в переменные:
+# если docker.io заблокирован, достаточно подставить зеркало в .env, например
+#   PYTHON_IMAGE=mirror.gcr.io/library/python:3.12-slim-bookworm
+#   POSTGRES_IMAGE=mirror.gcr.io/library/postgres:16-alpine
+# (альтернатива — registry-mirrors в /etc/docker/daemon.json, см. README).
 x-app-build: &app-build
   context: .
   dockerfile: Dockerfile
+  args:
+    PYTHON_IMAGE: ${PYTHON_IMAGE:-python:3.12-slim-bookworm}
 
 # Внутренние URL сервисов Docker-сети (перекрывают localhost из .env)
 x-app-env: &app-env
@@ -43,7 +50,7 @@ services:
 
   postgres:
     <<: *restart
-    image: postgres:16-alpine
+    image: ${POSTGRES_IMAGE:-postgres:16-alpine}
     environment:
       POSTGRES_USER: astra
       POSTGRES_PASSWORD: astra
@@ -60,7 +67,7 @@ services:
 
   redis:
     <<: *restart
-    image: redis:7-alpine
+    image: ${REDIS_IMAGE:-redis:7-alpine}
     ports:
       - "6379:6379"
     healthcheck:
@@ -71,7 +78,7 @@ services:
 
   rabbitmq:
     <<: *restart
-    image: rabbitmq:3-management-alpine
+    image: ${RABBITMQ_IMAGE:-rabbitmq:3-management-alpine}
     environment:
       RABBITMQ_DEFAULT_USER: astra
       RABBITMQ_DEFAULT_PASS: astra

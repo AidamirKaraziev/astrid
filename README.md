@@ -116,6 +116,62 @@ make test
 make down
 ```
 
+### Если реестры образов заблокированы
+
+Симптом: `make up` висит на `[internal] load metadata for docker.io/...` или
+слои качаются по 0 B. Docker Hub отдаёт российским адресам отказ, ghcr.io
+режется на стороне провайдера.
+
+`ghcr.io` из сборки убран — uv ставится с PyPI. Остаётся docker.io, лечится
+одним из двух способов.
+
+**1. Зеркало на уровне демона (лечит всё сразу, включая postgres/redis/rabbitmq).**
+`/etc/docker/daemon.json` на сервере:
+
+```json
+{
+  "registry-mirrors": [
+    "https://mirror.gcr.io",
+    "https://dockerhub.timeweb.cloud"
+  ]
+}
+```
+
+```bash
+sudo systemctl restart docker && docker info | grep -A3 'Registry Mirrors'
+```
+
+Оба зеркала проверены 06.08.2026 — отдают манифесты python/postgres/rabbitmq.
+Список живой: проверить кандидата до правки демона можно так (ожидается `200`),
+
+```bash
+curl -s -o /dev/null -w '%{http_code}\n' -H 'Accept: application/vnd.oci.image.index.v1+json' https://mirror.gcr.io/v2/library/python/manifests/3.12-slim-bookworm
+```
+
+а после правки — `docker pull alpine`.
+
+**2. Переменные в `.env` (если менять демон нельзя).** Каждый образ можно
+перенаправить точечно:
+
+```env
+PYTHON_IMAGE=mirror.gcr.io/library/python:3.12-slim-bookworm
+POSTGRES_IMAGE=mirror.gcr.io/library/postgres:16-alpine
+REDIS_IMAGE=mirror.gcr.io/library/redis:7-alpine
+RABBITMQ_IMAGE=mirror.gcr.io/library/rabbitmq:3-management-alpine
+```
+
+**3. Свой прокси наружу** — самый надёжный вариант, если он есть. Прокси
+прописывается демону, а не в compose:
+
+```bash
+sudo systemctl edit docker
+# [Service]
+# Environment="HTTPS_PROXY=http://<host>:<port>"
+sudo systemctl restart docker
+```
+
+PyPI и deb.debian.org не блокируются — остальная часть сборки проходит как есть.
+
 Сервисы: **api** (8000), **worker**, **postgres**, **redis**, **rabbitmq** (15672 — UI).
 В `.env` можно оставить `localhost` — в Compose для контейнеров подставляются внутренние URL (`postgres`, `redis`, …).
 

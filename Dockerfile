@@ -9,11 +9,21 @@
 # uv.lock ДО копирования кода. Изменение src/ не инвалидирует слой с
 # зависимостями — gcc и компиляция pyswisseph выполняются только при
 # изменении uv.lock.
+#
+# Реестры: базовый образ задаётся аргументом PYTHON_IMAGE — если docker.io
+# недоступен (блокировки), собирать через зеркало:
+#   docker compose build --build-arg PYTHON_IMAGE=mirror.gcr.io/library/python:3.12-slim-bookworm
+# либо прописать registry-mirrors в /etc/docker/daemon.json (см. README).
 # =============================================================================
 
-FROM python:3.12-slim-bookworm AS base
+ARG PYTHON_IMAGE=python:3.12-slim-bookworm
+FROM ${PYTHON_IMAGE} AS base
 
-COPY --from=ghcr.io/astral-sh/uv:0.9 /uv /uvx /bin/
+# uv ставим из PyPI, а не `COPY --from=ghcr.io/astral-sh/uv` — ghcr.io
+# недоступен из России, а registry-mirrors на него не распространяются.
+# Бинарник тот же, приезжает колесом с PyPI.
+ARG UV_VERSION=0.9.*
+RUN pip install --no-cache-dir --root-user-action=ignore "uv==${UV_VERSION}"
 
 WORKDIR /app
 
