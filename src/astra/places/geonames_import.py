@@ -275,8 +275,14 @@ def build_rows(root: Path) -> tuple[list[dict], ImportResult]:
         msg = f"дампы GeoNames не найдены в {root}"
         raise FileNotFoundError(msg)
 
-    official = load_official_names(root / f"{ALTERNATE_NAMES_FILE}.txt")
     admin1_codes = load_admin1_codes(root / ADMIN1_FILE)
+    # Сужаем словарь названий до того, что реально импортируем: в файле шесть
+    # сотен тысяч русских имён на весь мир, а нужны места пятнадцати стран и
+    # их регионы. На восьмигигабайтном сервере лишние сотни мегабайт — это
+    # разница между импортом и убитым по памяти контейнером.
+    needed = {place.geoname_id for place in raw}
+    needed |= {entry.geoname_id for entry in admin1_codes.values()}
+    official = load_official_names(root / f"{ALTERNATE_NAMES_FILE}.txt", needed=needed)
 
     # Сначала имена: ориентир должен подписываться тем же названием, которое
     # человек увидит в списке, иначе «12 км от Cherepovets» рядом с

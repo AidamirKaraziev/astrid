@@ -134,6 +134,9 @@ services:
       COMPATIBILITY_PDF_DIR: /data/compatibility
     volumes:
       - compatibility_data:/data/compatibility
+      # Дампы GeoNames — 300 МБ. Без тома они лежали бы в слое контейнера и
+      # качались заново при каждой пересборке образа.
+      - geonames_data:/app/data/geonames
     ports:
       - "8000:8000"
     depends_on:
@@ -219,3 +222,4 @@ services:
 volumes:
   postgres_data:
   compatibility_data:
+  geonames_data:

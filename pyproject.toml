@@ -43,6 +43,9 @@ astra-api = "astra.main:run"
 astra-worker = "astra.workers.main:run"
 # Панель отдельным процессом: нужна, когда /admin надо увести с публичного порта
 astra-admin = "astra.admin.app:run"
+# Переимпорт справочника мест. Точкой входа, а не скриптом: scripts/ не
+# копируется в образ, и на сервере запускать было бы нечего.
+astra-places = "astra.places.cli:run"
 
 [build-system]
 requires = ["hatchling"]
