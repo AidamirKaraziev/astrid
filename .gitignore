@@ -11,9 +11,9 @@ htmlcov/
 *.egg-info/
 dist/
 build/
-data/geonames/RU.txt
-data/geonames/RU.zip
-data/geonames/admin1CodesASCII.txt
+data/geonames/*.txt
+data/geonames/*.zip
+!data/geonames/README.md
 cache/
 RU.zip
 .DS_Store

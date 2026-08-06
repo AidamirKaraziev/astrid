@@ -24,14 +24,14 @@ uv sync --all-extras
 uv run alembic upgrade head
 ```
 
-### 3.1. Справочник городов и деревень РФ (GeoNames, бесплатно)
+### 3.1. Справочник городов и деревень СНГ (GeoNames, бесплатно)
 
-При первом запуске API **автоматически** скачивает GeoNames и импортирует ~200k населённых пунктов РФ, если таблица `places` пуста. Отключить: `GEONAMES_AUTO_IMPORT=false` в `.env`.
+При первом запуске API **автоматически** скачивает GeoNames и импортирует ~337k населённых пунктов пятнадцати постсоветских стран, если таблица `places` пуста. Отключить: `GEONAMES_AUTO_IMPORT=false` в `.env`.
 
-Ручной переимпорт (очистка и загрузка заново):
+Ручной переимпорт (обновляет записи по `geoname_id`, места рождения людей не теряются):
 
 ```bash
-uv run python scripts/import_geonames_ru.py
+uv run python scripts/import_geonames.py
 ```
 
 Подробнее: `data/geonames/README.md`
