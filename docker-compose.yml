@@ -105,6 +105,9 @@ services:
       TELEGRAM_BOT_TOKEN: "0000000000:TEST_TOKEN_FOR_CI"
       TELEGRAM_BOT_USERNAME: TestAstraBot
       TELEGRAM_MODE: polling
+      # Тесты регистрации ходят в живые Postgres и Redis. Здесь они есть, и
+      # молча пропуститься не должны: пропущенный тест старта = реклама в пустоту.
+      CI: "true"
     depends_on:
       postgres:
         condition: service_healthy

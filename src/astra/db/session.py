@@ -48,7 +48,7 @@ async def get_session() -> AsyncGenerator[AsyncSession, None]:
     if async_session_factory is None:
         init_engine()
     assert async_session_factory is not None
-    async with async_session_factory as session:
+    async with async_session_factory() as session:
         try:
             yield session
             await session.commit()

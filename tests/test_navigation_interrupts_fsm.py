@@ -99,11 +99,11 @@ async def test_paid_stub_answers_without_breaking_flow() -> None:
 
 @pytest.mark.asyncio
 async def test_navigation_router_registered_before_flow_routers() -> None:
-    from astra.core.config import Settings
-    from astra.telegram.bot import create_dispatcher
+    # Диспетчер один на процесс: роутеры — модульные синглтоны и ко второму
+    # `Dispatcher` не приклеиваются (см. tests/fake_telegram.py).
+    from fake_telegram import get_shared_dispatcher
 
-    settings = Settings(fsm_storage="memory", ai_chat_enabled=False)
-    dp = await create_dispatcher(settings)
+    dp = await get_shared_dispatcher()
 
     names = [r.name for r in dp.sub_routers]
     assert "navigation" in names
