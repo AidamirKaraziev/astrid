@@ -93,7 +93,16 @@ LANDMARK_MIN_POPULATION = 5_000
 LANDMARK_MAX_KM = 100
 
 BATCH_SIZE = 2000
-DOWNLOAD_TIMEOUT = 600.0
+DOWNLOAD_CONNECT_TIMEOUT = 30.0
+# Загрузка с geonames.org виснет посреди файла: соединение живо, байты не
+# идут. Ждать десять минут в такой тишине бессмысленно — минуты хватает,
+# чтобы понять, что поток встал, и переоткрыть соединение с докачкой.
+DOWNLOAD_READ_TIMEOUT = 60.0
+# Сдаёмся не по числу обрывов, а по числу обрывов подряд, не принёсших ни
+# байта: на подвисающем канале файл доезжает кусками по мегабайту, и считать
+# такие попытки неудачами — значит не докачать ничего никогда.
+DOWNLOAD_STALL_ATTEMPTS = 8
+DOWNLOAD_MAX_ATTEMPTS = 100
 
 # Postgres не принимает больше 32767 подстановок в одном запросе, а колонок у
 # места девятнадцать. Размер пачки считаем от их числа, чтобы новая колонка
@@ -124,14 +133,68 @@ class ImportResult:
 
 
 async def _download(url: str, dest: Path) -> None:
+    """Скачать файл, докачивая его с места обрыва.
+
+    Одной попытки мало: с сервера загрузка обрывается на середине —
+    `alternateNamesV2.zip` весит 200 МБ, и дойти до конца с первого раза он
+    успевает не всегда. Поэтому байты копятся в файле `.part`, следующая
+    попытка просит остаток через `Range`, и готовым `dest` становится только
+    целиком скачанный файл. Обрезанный архив под правильным именем — худшее,
+    что тут может остаться: импорт упадёт уже на распаковке.
+    """
     dest.parent.mkdir(parents=True, exist_ok=True)
+    partial = dest.with_name(dest.name + ".part")
     log.info(Event.GEONAMES_DOWNLOAD, url=url, dest=str(dest))
-    async with httpx.AsyncClient(timeout=DOWNLOAD_TIMEOUT, follow_redirects=True) as client:
-        async with client.stream("GET", url) as response:
-            response.raise_for_status()
-            with dest.open("wb") as handle:
-                async for chunk in response.aiter_bytes():
-                    handle.write(chunk)
+
+    def downloaded() -> int:
+        return partial.stat().st_size if partial.exists() else 0
+
+    timeout = httpx.Timeout(DOWNLOAD_READ_TIMEOUT, connect=DOWNLOAD_CONNECT_TIMEOUT)
+    stalled = 0
+    async with httpx.AsyncClient(timeout=timeout, follow_redirects=True) as client:
+        for attempt in range(1, DOWNLOAD_MAX_ATTEMPTS + 1):
+            done = downloaded()
+            headers = {"Range": f"bytes={done}-"} if done else {}
+            try:
+                async with client.stream("GET", url, headers=headers) as response:
+                    if response.status_code == httpx.codes.REQUESTED_RANGE_NOT_SATISFIABLE:
+                        # Скачано всё, а обрыв случился на последнем байте.
+                        break
+                    if done and response.status_code != httpx.codes.PARTIAL_CONTENT:
+                        # Докачку не поняли — начинаем файл заново.
+                        done = 0
+                    response.raise_for_status()
+                    with partial.open("ab" if done else "wb") as handle:
+                        async for chunk in response.aiter_bytes():
+                            handle.write(chunk)
+                break
+            except httpx.HTTPError as exc:
+                stalled = 0 if downloaded() > done else stalled + 1
+                if stalled >= DOWNLOAD_STALL_ATTEMPTS or attempt == DOWNLOAD_MAX_ATTEMPTS:
+                    raise
+                log.warning(
+                    Event.GEONAMES_DOWNLOAD_RETRY,
+                    url=url,
+                    attempt=attempt,
+                    downloaded=downloaded(),
+                    stalled=stalled,
+                    error=f"{type(exc).__name__}: {exc}",
+                )
+                await asyncio.sleep(min(2**stalled, 30))
+
+    partial.replace(dest)
+
+
+def _try_extract(archive: Path, stem: str, root: Path) -> bool:
+    """Распаковать уже лежащий архив. False, если его нет или он битый."""
+    if not archive.exists():
+        return False
+    try:
+        with zipfile.ZipFile(archive) as zf:
+            zf.extract(f"{stem}.txt", root)
+    except (zipfile.BadZipFile, KeyError, EOFError):
+        return False
+    return True
 
 
 async def _ensure_unpacked(root: Path, stem: str) -> Path:
@@ -140,9 +203,14 @@ async def _ensure_unpacked(root: Path, stem: str) -> Path:
     if target.exists():
         return target
     archive = root / f"{stem}.zip"
-    await _download(f"{GEONAMES_BASE_URL}/{stem}.zip", archive)
-    with zipfile.ZipFile(archive) as zf:
-        zf.extract(f"{stem}.txt", root)
+    # Архив мог приехать в том руками: там, где до geonames не достучаться,
+    # это единственный способ поднять справочник. Верить имени файла при этом
+    # нельзя — от прошлого обрыва остаётся обрубок под тем же именем, поэтому
+    # решает не наличие файла, а то, распаковывается ли он.
+    if not _try_extract(archive, stem, root):
+        await _download(f"{GEONAMES_BASE_URL}/{stem}.zip", archive)
+        with zipfile.ZipFile(archive) as zf:
+            zf.extract(f"{stem}.txt", root)
     log.info(Event.GEONAMES_EXTRACTED, file=str(target))
     return target
 

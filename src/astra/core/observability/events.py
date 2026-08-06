@@ -146,6 +146,7 @@ class Event(StrEnum):
 
     # GeoNames
     GEONAMES_DOWNLOAD = "geonames.download"
+    GEONAMES_DOWNLOAD_RETRY = "geonames.download_retry"
     GEONAMES_EXTRACTED = "geonames.extracted"
     GEONAMES_IMPORT_PROGRESS = "geonames.import_progress"
     GEONAMES_IMPORT_DONE = "geonames.import_done"
