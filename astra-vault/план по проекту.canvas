@@ -99,10 +99,13 @@
 		{"id":"a5175be6d7ed7682","type":"text","text":"База знаний","x":-1442,"y":-2849,"width":250,"height":60,"color":"6"},
 		{"id":"d99423f4d9cf01e2","type":"text","text":"Проект","x":145,"y":-3010,"width":250,"height":60,"color":"6"},
 		{"id":"385e881bbf1fcba0","type":"text","text":"Админка","x":-1240,"y":-3380,"width":250,"height":60,"color":"6"},
-		{"id":"5025b3bf5d98416c","type":"text","text":"Идеи","x":1320,"y":-3540,"width":250,"height":60,"color":"6"},
 		{"id":"8c09ebf1a9561230","type":"text","text":"Изучить защиту персональных данных\n\nсообщение от Насти","x":3080,"y":-3220,"width":250,"height":120,"color":"2"},
 		{"id":"d26192b49317eb92","type":"text","text":"Бюрократия","x":3080,"y":-3040,"width":250,"height":60,"color":"6"},
-		{"id":"0878315d61693a94","x":1320,"y":-3760,"width":250,"height":60,"color":"4","type":"text","text":"Добавить вопросы в раздел спроси астрид"}
+		{"id":"5025b3bf5d98416c","type":"text","text":"Идеи","x":1320,"y":-3540,"width":250,"height":60,"color":"6"},
+		{"id":"0878315d61693a94","type":"text","text":"Добавить вопросы в раздел спроси астрид","x":1320,"y":-3760,"width":250,"height":60,"color":"4"},
+		{"id":"b9635eb997368783","x":691,"y":-3595,"width":250,"height":60,"color":"4","type":"text","text":"улучшить /commit-message"},
+		{"id":"97966a52e8a134ab","x":795,"y":-3807,"width":250,"height":107,"color":"4","type":"text","text":"/start починить и написать тесты end to end  с онбордингом"},
+		{"id":"1a48583cad4241ae","x":795,"y":-4000,"width":250,"height":108,"color":"4","type":"text","text":"сделать кнопку по удалению пользователя в админке"}
 	],
 	"edges":[
 		{"id":"a1a06a76742c1a3a","fromNode":"619efa95be5c4a89","fromSide":"bottom","toNode":"50b7b8dcb35f6929","toSide":"top","color":"5"},
