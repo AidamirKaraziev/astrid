@@ -29,6 +29,9 @@ class Place(Base, TimestampMixin):
     # русскому запросу можно только так (astra.places.translit).
     name_latin: Mapped[str] = mapped_column(String(255), default="")
     search_latin: Mapped[str] = mapped_column(Text, default="")
+    # Имена места через разделитель: «|санкт-петербург|ленинград|питер|».
+    # По нему ищется целое бывшее название, а не слово внутри чужого имени.
+    search_names: Mapped[str] = mapped_column(Text, default="")
     # Ориентир для тёзок: «Горка · 12 км от Устюжны». Район в GeoNames
     # заполнен у 1,3% записей, поэтому третий уровень адреса считаем сами.
     nearest_city: Mapped[str | None] = mapped_column(String(255), nullable=True)

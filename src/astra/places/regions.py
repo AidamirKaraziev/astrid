@@ -70,6 +70,23 @@ def load_admin1_codes(path: Path) -> dict[str, Admin1]:
     return result
 
 
+# Слова, которые в источнике приезжают с большой буквы: «Минская Область».
+_LOWERCASE_TAIL = ("Область", "Край", "Округ", "Район", "Республика", "Автономный")
+
+
+def tidy_region_name(name: str) -> str:
+    """«Минская Область» → «Минская область».
+
+    В источнике родовое слово часто с большой буквы, и в списке регионов это
+    бросается в глаза рядом с российскими областями, набранными правильно.
+    """
+    words = name.split()
+    return " ".join(
+        word.lower() if index and word in _LOWERCASE_TAIL else word
+        for index, word in enumerate(words)
+    )
+
+
 def region_name_ru(
     country_code: str,
     admin1_code: str | None,
@@ -91,7 +108,8 @@ def region_name_ru(
     entry = admin1_codes.get(f"{country_code}.{admin1_code}")
     if entry is None:
         return None
-    return official_names.get(entry.geoname_id) or entry.name_en or None
+    name = official_names.get(entry.geoname_id) or entry.name_en or None
+    return tidy_region_name(name) if name else None
 
 
 def country_name_ru(country_code: str) -> str:

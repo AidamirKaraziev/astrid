@@ -32,8 +32,8 @@ BEGIN_BUTTON = "Привет, Астрид 🫶🏻"
 BIRTH_DATE_INPUT = "15.03.1990"
 BIRTH_DATE = date(1990, 3, 15)
 BIRTH_CITY_QUERY = "Москва"
-# Заведомо не существующий населённый пункт: важно, чтобы не находился даже
-# по нечёткому поиску pg_trgm, иначе тест проверял бы не то.
+# Выдуманное название: проверяем не «ничего не нашла», а что человек не
+# оказывается в тупике — ему предлагают похожие варианты и путь вперёд.
 UNKNOWN_CITY_QUERY = "Ктулхуград"
 
 
@@ -111,27 +111,47 @@ async def load_user(session, telegram_id: int):
     return result.scalar_one_or_none()
 
 
+def _callbacks(calls: list, prefix: str) -> list[str]:
+    return [
+        data for call in calls for data in call.callback_data() if data.startswith(prefix)
+    ]
+
+
+async def reach_place_buttons(
+    harness: BotHarness,
+    telegram_id: int,
+    query: str = BIRTH_CITY_QUERY,
+) -> str:
+    """Ввести город и дойти до кнопок мест, пройдя шаг региона, если он есть.
+
+    Тёзок много — бот сначала спрашивает регион; на маленьком справочнике в CI
+    того же города может быть один, и шаг пропускается. Тест обязан работать
+    в обоих случаях, иначе он проверяет не воронку, а размер базы.
+    """
+    calls = await harness.send(query, telegram_id=telegram_id)
+
+    regions = _callbacks(calls, "place:region:")
+    if regions:
+        assert "В каком регионе" in calls[0].text
+        calls = await harness.click(regions[0], telegram_id=telegram_id)
+
+    picks = _callbacks(calls, "place:pick:")
+    assert picks, f"справочник не отдал места: {[c.text for c in calls]}"
+    return picks[0]
+
+
 async def walk_to_city_list(
     harness: BotHarness,
     telegram_id: int,
     *,
     start_command: str = "/start",
 ) -> str:
-    """Пройти онбординг до списка городов и вернуть callback_data первого."""
+    """Пройти онбординг до выбора места и вернуть callback_data первого."""
     await harness.send(start_command, telegram_id=telegram_id)
     await harness.send(BEGIN_BUTTON, telegram_id=telegram_id)
     await harness.send(BTN_GENDER_FEMALE, telegram_id=telegram_id)
     await harness.send(BIRTH_DATE_INPUT, telegram_id=telegram_id)
-    calls = await harness.send(BIRTH_CITY_QUERY, telegram_id=telegram_id)
-
-    picks = [
-        data
-        for call in calls
-        for data in call.callback_data()
-        if data.startswith("place:pick:")
-    ]
-    assert picks, f"справочник городов не отдал варианты: {[c.text for c in calls]}"
-    return picks[0]
+    return await reach_place_buttons(harness, telegram_id)
 
 
 async def register_fully(
@@ -182,14 +202,11 @@ async def test_new_user_walks_from_start_to_finished_profile(
     calls = await bot_harness.send(BIRTH_DATE_INPUT, telegram_id=telegram_id)
     assert_said(calls, "Где ты родилась")
 
-    # 5. Город — список из справочника
-    calls = await bot_harness.send(BIRTH_CITY_QUERY, telegram_id=telegram_id)
-    picker = assert_said(calls, "Выбери населённый пункт")
-    picks = [data for data in picker.callback_data() if data.startswith("place:pick:")]
-    assert picks, "справочник городов пуст — онбординг обрывается на выборе города"
+    # 5. Город — список из справочника (через шаг региона, если тёзок много)
+    pick = await reach_place_buttons(bot_harness, telegram_id)
 
     # 6. Выбор города — регистрация завершена
-    calls = await bot_harness.click(picks[0], telegram_id=telegram_id)
+    calls = await bot_harness.click(pick, telegram_id=telegram_id)
     done = assert_said(calls, "Регистрация завершена")
     assert "✨ Обо мне" in done.buttons(), "после регистрации не выдали главное меню"
 
@@ -275,13 +292,7 @@ async def test_start_with_referral_code_registers_and_links(
     await bot_harness.send(BEGIN_BUTTON, telegram_id=invitee_id)
     await bot_harness.send(BTN_GENDER_FEMALE, telegram_id=invitee_id)
     await bot_harness.send(BIRTH_DATE_INPUT, telegram_id=invitee_id)
-    calls = await bot_harness.send(BIRTH_CITY_QUERY, telegram_id=invitee_id)
-    pick = next(
-        data
-        for call in calls
-        for data in call.callback_data()
-        if data.startswith("place:pick:")
-    )
+    pick = await reach_place_buttons(bot_harness, invitee_id)
     await bot_harness.click(pick, telegram_id=invitee_id)
 
     referral = await referral_row()
@@ -369,11 +380,33 @@ async def test_unknown_city_reprompts_and_flow_continues(
     await bot_harness.send(BTN_GENDER_FEMALE, telegram_id=telegram_id)
     await bot_harness.send(BIRTH_DATE_INPUT, telegram_id=telegram_id)
 
+    # Выдуманное название не должно ронять шаг: человек вводит ещё раз и идёт
+    # дальше. Что именно ответит бот — «ничего не нашла» или похожие города —
+    # зависит от размера справочника, и это проверяется отдельно.
     calls = await bot_harness.send(UNKNOWN_CITY_QUERY, telegram_id=telegram_id)
-    assert_said(calls, "Ничего не нашла")
+    assert calls, "бот промолчал на непонятный запрос"
 
-    calls = await bot_harness.send(BIRTH_CITY_QUERY, telegram_id=telegram_id)
-    assert_said(calls, "Выбери населённый пункт")
+    pick = await reach_place_buttons(bot_harness, telegram_id)
+    assert pick
+
+
+async def test_unknown_city_offers_similar_names_instead_of_dead_end(
+    bot_harness: BotHarness,
+    db_session,
+    full_catalog,
+) -> None:
+    """Опечатка приводит к похожим городам, а не к «ничего не нашла».
+
+    Человек редко переспрашивает дважды: если на выдуманном названии он видит
+    пустоту, он уходит. Поэтому нижний порог похожести и второй проход.
+    """
+    telegram_id = new_test_telegram_id()
+    await _to_place_step(bot_harness, telegram_id)
+
+    calls = await bot_harness.send(UNKNOWN_CITY_QUERY, telegram_id=telegram_id)
+    assert _callbacks(calls, "place:pick:") or _callbacks(calls, "place:region:"), (
+        f"тупик на «{UNKNOWN_CITY_QUERY}»: {[c.text for c in calls]}"
+    )
 
 
 async def test_wrong_gender_input_reprompts_with_buttons(
@@ -446,3 +479,141 @@ async def test_activity_middleware_survives_user_without_profile(
     ).scalar_one()
     assert user.streak_current >= 1, "серия не начислена новому пользователю"
     assert user.last_active_date is not None
+
+
+# --------------------------------------------------------------------------
+# Выбор места: два шага вместо пяти неразличимых строк
+# --------------------------------------------------------------------------
+
+
+async def _to_place_step(harness: BotHarness, telegram_id: int) -> None:
+    await harness.send("/start", telegram_id=telegram_id)
+    await harness.send(BEGIN_BUTTON, telegram_id=telegram_id)
+    await harness.send(BTN_GENDER_FEMALE, telegram_id=telegram_id)
+    await harness.send(BIRTH_DATE_INPUT, telegram_id=telegram_id)
+    harness.clear()
+
+
+async def test_place_step_explains_the_nearby_city_rule(
+    bot_harness: BotHarness,
+    db_session,
+) -> None:
+    """Подсказка должна читаться не вчитываясь — иначе человек уйдёт."""
+    telegram_id = new_test_telegram_id()
+    await bot_harness.send("/start", telegram_id=telegram_id)
+    await bot_harness.send(BEGIN_BUTTON, telegram_id=telegram_id)
+    await bot_harness.send(BTN_GENDER_FEMALE, telegram_id=telegram_id)
+    calls = await bot_harness.send(BIRTH_DATE_INPUT, telegram_id=telegram_id)
+
+    prompt = assert_said(calls, "Где ты родилась")
+    assert "100 км" in prompt.text
+    assert "не влияет" in prompt.text
+
+
+async def test_many_namesakes_ask_for_region_first(
+    bot_harness: BotHarness,
+    db_session,
+    full_catalog,
+) -> None:
+    """Тёзок много — сначала регион с числом мест, а не пять одинаковых строк."""
+    from astra.places import crud
+
+    search = await crud.prepare_search(db_session, "Красное")
+    if search is None or search.total <= 8:
+        pytest.skip("в справочнике нет тёзок — шаг региона не нужен")
+
+    telegram_id = new_test_telegram_id()
+    await _to_place_step(bot_harness, telegram_id)
+    calls = await bot_harness.send("Красное", telegram_id=telegram_id)
+
+    step = calls[0]
+    assert "В каком регионе" in step.text
+    assert _callbacks([step], "place:region:"), "нет кнопок регионов"
+    # Счётчик рядом с регионом: человек видит, сколько там вариантов.
+    assert any(" · " in button for button in step.buttons())
+
+
+async def test_places_inside_region_carry_a_landmark(
+    bot_harness: BotHarness,
+    db_session,
+    full_catalog,
+) -> None:
+    """Внутри региона строки различаются ближайшим городом, а не молчат."""
+    from astra.places import crud
+
+    search = await crud.prepare_search(db_session, "Красное")
+    if search is None or search.total <= 8:
+        pytest.skip("в справочнике нет тёзок")
+
+    telegram_id = new_test_telegram_id()
+    await _to_place_step(bot_harness, telegram_id)
+    calls = await bot_harness.send("Красное", telegram_id=telegram_id)
+    region = _callbacks(calls, "place:region:")[0]
+
+    calls = await bot_harness.click(region, telegram_id=telegram_id)
+    picker = calls[0]
+    labels = picker.buttons()[:-2]  # без навигации
+    assert len(labels) >= 3
+    assert len(set(labels)) == len(labels), f"строки неразличимы: {labels}"
+    assert any("км" in label for label in labels), "нет ориентира"
+
+
+async def test_back_from_region_returns_to_the_region_list(
+    bot_harness: BotHarness,
+    db_session,
+    full_catalog,
+) -> None:
+    """Ошибся регионом — можно вернуться, а не начинать всё заново."""
+    from astra.places import crud
+
+    search = await crud.prepare_search(db_session, "Красное")
+    if search is None or search.total <= 8:
+        pytest.skip("в справочнике нет тёзок")
+
+    telegram_id = new_test_telegram_id()
+    await _to_place_step(bot_harness, telegram_id)
+    calls = await bot_harness.send("Красное", telegram_id=telegram_id)
+    await bot_harness.click(_callbacks(calls, "place:region:")[0], telegram_id=telegram_id)
+
+    bot_harness.clear()
+    calls = await bot_harness.click("place:regions", telegram_id=telegram_id)
+    assert "В каком регионе" in calls[0].text
+
+
+async def test_more_button_shows_the_next_page(
+    bot_harness: BotHarness,
+    db_session,
+    full_catalog,
+) -> None:
+    """Раньше дальше пятой строки было не пройти вовсе."""
+    from astra.places import crud
+
+    search = await crud.prepare_search(db_session, "Красное")
+    if search is None or search.total <= 8:
+        pytest.skip("в справочнике нет тёзок")
+
+    telegram_id = new_test_telegram_id()
+    await _to_place_step(bot_harness, telegram_id)
+    calls = await bot_harness.send("Красное", telegram_id=telegram_id)
+    first_page = calls[0].buttons()
+
+    more = _callbacks(calls, "place:page:")
+    assert more, "нет кнопки «ещё» — часть регионов недостижима"
+
+    calls = await bot_harness.click(more[0], telegram_id=telegram_id)
+    second_page = calls[0].buttons()
+    assert set(first_page) != set(second_page), "вторая страница повторяет первую"
+
+
+async def test_few_matches_skip_the_region_step(
+    bot_harness: BotHarness,
+    db_session,
+    full_catalog,
+) -> None:
+    """Ради двух вариантов лишний шаг только раздражает."""
+    telegram_id = new_test_telegram_id()
+    await _to_place_step(bot_harness, telegram_id)
+    calls = await bot_harness.send("Коноково", telegram_id=telegram_id)
+
+    assert "Выбери населённый пункт" in calls[0].text
+    assert _callbacks(calls, "place:pick:")

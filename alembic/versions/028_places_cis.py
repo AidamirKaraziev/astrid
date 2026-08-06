@@ -35,6 +35,14 @@ def upgrade() -> None:
         "places",
         sa.Column("search_latin", sa.Text(), nullable=False, server_default=""),
     )
+    # Имена места через разделитель: «|санкт-петербург|ленинград|питер|».
+    # Нужен, чтобы отличить целое бывшее имя от слова внутри чужого названия:
+    # «Ленинград» обязан находить Петербург, но «Красное» не должно цеплять
+    # «Красное Эхо» и раздувать счётчик тёзок втрое.
+    op.add_column(
+        "places",
+        sa.Column("search_names", sa.Text(), nullable=False, server_default=""),
+    )
     # Ориентир для различения тёзок: «Горка · 12 км от Устюжны». Района в
     # GeoNames нет у 98,7% записей, поэтому третий уровень адреса считаем сами.
     op.add_column("places", sa.Column("nearest_city", sa.String(255), nullable=True))
@@ -58,6 +66,13 @@ def upgrade() -> None:
         postgresql_using="gin",
         postgresql_ops={"search_latin": "gin_trgm_ops"},
     )
+    op.create_index(
+        "ix_places_search_names_trgm",
+        "places",
+        ["search_names"],
+        postgresql_using="gin",
+        postgresql_ops={"search_names": "gin_trgm_ops"},
+    )
     # Точное совпадение имени внутри страны — первая ступень ранжирования,
     # она обязана быть мгновенной: по ней проходит каждый запрос.
     op.create_index(
@@ -69,10 +84,12 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     op.drop_index("ix_places_country_name_latin", table_name="places")
+    op.drop_index("ix_places_search_names_trgm", table_name="places")
     op.drop_index("ix_places_search_latin_trgm", table_name="places")
     op.drop_index("ix_places_name_latin_trgm", table_name="places")
     op.drop_column("places", "country_name")
     op.drop_column("places", "nearest_city_km")
     op.drop_column("places", "nearest_city")
+    op.drop_column("places", "search_names")
     op.drop_column("places", "search_latin")
     op.drop_column("places", "name_latin")

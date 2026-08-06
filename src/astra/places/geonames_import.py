@@ -229,6 +229,21 @@ def read_dumps(root: Path) -> list[RawPlace]:
     return places
 
 
+NAME_SEPARATOR = "|"
+
+
+def build_name_index(name: str, alternates: tuple[str, ...]) -> str:
+    """«|санкт-петербург|ленинград|питер|» — все имена места с границами.
+
+    Разделители нужны, чтобы «Ленинград» находил Петербург (целое бывшее имя),
+    но «Красное» не цепляло «Красное Эхо» — там это лишь слово внутри другого
+    названия, и без границ счётчик тёзок раздувался втрое.
+    """
+    names = [normalize_place_query(value) for value in (name, *alternates)]
+    unique = list(dict.fromkeys(part for part in names if part))
+    return NAME_SEPARATOR + NAME_SEPARATOR.join(unique) + NAME_SEPARATOR
+
+
 def build_search_blob(
     *,
     name: str,
@@ -330,6 +345,7 @@ def build_rows(root: Path) -> tuple[list[dict], ImportResult]:
                 "display_name": build_display_name(name, region, country),
                 "search_text": search_text,
                 "search_latin": latin_key(search_text),
+                "search_names": build_name_index(name, alternates),
                 "nearest_city": nearest_city,
                 "nearest_city_km": nearest_city_km,
                 "country_code": place.country_code,
@@ -366,6 +382,7 @@ _UPDATABLE = (
     "display_name",
     "search_text",
     "search_latin",
+    "search_names",
     "nearest_city",
     "nearest_city_km",
     "country_code",

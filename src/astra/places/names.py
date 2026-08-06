@@ -93,7 +93,11 @@ def _is_russian_spelling(name: str) -> bool:
     return bool(letters) and all(ch in _RUSSIAN_LETTERS for ch in letters)
 
 
-def iter_official_names(path: Path, *, language: str = RUSSIAN) -> Iterator[tuple[int, int, str]]:
+def iter_official_names(
+    path: Path,
+    *,
+    language: str = RUSSIAN,
+) -> Iterator[tuple[int, tuple[int, int], str]]:
     """(geoname_id, ранг, название) по всем пригодным строкам файла.
 
     Отдельным генератором, потому что файл на 112 МБ и держать его в памяти
@@ -115,7 +119,10 @@ def iter_official_names(path: Path, *, language: str = RUSSIAN) -> Iterator[tupl
                 rank = _RANK_SHORT
             else:
                 rank = _RANK_PLAIN
-            yield int(parts[_COL_GEONAME_ID]), rank, name
+            # Кириллица важнее при равных флагах: у Ставрополя два русских
+            # варианта без пометок — «Ставрополь» и латинское «Stavropol’»,
+            # и без этого признака побеждал тот, что стоял в файле выше.
+            yield int(parts[_COL_GEONAME_ID]), (rank, int(has_cyrillic(name))), name
 
 
 def load_official_names(
@@ -129,7 +136,7 @@ def load_official_names(
     `needed` сужает выборку до мест, которые мы реально импортируем: без него
     словарь распухает на весь мир, а нужны пятнадцать стран.
     """
-    best: dict[int, tuple[int, str]] = {}
+    best: dict[int, tuple[tuple[int, int], str]] = {}
     for geoname_id, rank, name in iter_official_names(path, language=language):
         if needed is not None and geoname_id not in needed:
             continue

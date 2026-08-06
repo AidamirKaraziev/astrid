@@ -229,6 +229,26 @@ async def places_catalog(session_factory) -> AsyncIterator[None]:
 
 
 @pytest.fixture
+async def full_catalog(session_factory, places_catalog) -> None:
+    """Тест требует настоящий справочник, а не три засеянных города.
+
+    Приёмка на контрольном списке городов возможна только на полном
+    справочнике. В CI его нет осознанно: качать 200 МБ GeoNames на каждый
+    прогон незачем, и та же проверка выполняется при импорте
+    (`scripts/import_geonames.py` падает, если хоть один город не находится).
+    """
+    from astra.places.crud import count_places
+
+    async with session_factory() as session:
+        total = await count_places(session)
+    if total < 100_000:
+        pytest.skip(
+            f"в справочнике {total} мест: приёмка на контрольном списке идёт "
+            "при импорте, а не здесь (uv run python scripts/import_geonames.py)",
+        )
+
+
+@pytest.fixture
 async def purge_test_users(session_factory) -> AsyncIterator[None]:
     """Чистит тестовый диапазон telegram_id до и после теста.
 
