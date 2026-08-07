@@ -219,7 +219,7 @@ def _shared_context_block(prompt_input: NatalPromptInput) -> str:
     features = "\n".join(f"- {line}" for line in prompt_input.feature_lines) or "- (нет)"
     return dedent(
         f"""\
-        Человек: {person.name}, родился(ась) {person.birth_date.isoformat()}
+        Человек: {person.name}, дата рождения {person.birth_date.isoformat()}
         {f"в {person.birth_time} " if person.birth_time else ""}в {person.birth_place}.
         {gender_line}{angles}
         Планеты и точки карты:

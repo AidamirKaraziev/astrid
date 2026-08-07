@@ -114,7 +114,7 @@ async def _require_user(message: Message, session: AsyncSession):
         return None
     user = await users_crud.get_user_by_telegram_id(session, message.from_user.id)
     if user is None or not user.onboarding_completed or user.profile is None:
-        await message.answer("Сначала пройди регистрацию: /start")
+        await message.answer("Сначала давай познакомимся — жми /start ✨")
         return None
     return user
 

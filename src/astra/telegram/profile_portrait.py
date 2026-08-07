@@ -80,11 +80,16 @@ _CHART_UNAVAILABLE = (
     "портрет будет здесь.</i>"
 )
 
+_CHART_NEEDS_BIRTH_DATE = (
+    "🌌 <i>Здесь появится твой портрет по натальной карте. "
+    "Для него нужна дата рождения — спрошу, когда откроешь разбор.</i>"
+)
+
 
 class _ProfileView(Protocol):
     display_name: str
     gender: Gender | None
-    birth_date: date
+    birth_date: date | None
     birth_time: datetime | None
     birth_place: str | None
     notification_place_id: object | None
@@ -98,6 +103,8 @@ class _UserView(Protocol):
 
 
 def _birth_line(profile: _ProfileView, chart: FullNatalChart | None) -> str:
+    if profile.birth_date is None:
+        return "<i>дата рождения пока не указана</i>"
     day = profile.birth_date.day
     month = RU_MONTHS_GENITIVE[profile.birth_date.month - 1]
     head = f"{day} {month} {profile.birth_date.year}"
@@ -222,6 +229,10 @@ def _hints_paragraph(profile: _ProfileView, *, has_birth_coords: bool) -> str | 
     а не «добавить».
     """
     hints: list[str] = []
+    if profile.birth_date is None:
+        # Без даты подсказки про время и место — шум: человеку и так уже
+        # сказано, с чего начать, а список из трёх нехваток пугает.
+        return None
     if profile.birth_time is None:
         hints.append(_HINT_TIME)
     if not has_birth_coords:
@@ -269,7 +280,11 @@ def format_portrait_card(
         title = f"{title} · {sun_sign}"
 
     paragraphs: list[str | None] = [f"{title}\n{_birth_line(profile, chart)}"]
-    if chart is None:
+    if profile.birth_date is None:
+        # Данных ещё не спрашивали — это не поломка, и говорить «загляни
+        # позже» здесь нельзя: от человека как раз что-то требуется.
+        paragraphs.append(_CHART_NEEDS_BIRTH_DATE)
+    elif chart is None:
         paragraphs.append(_CHART_UNAVAILABLE)
     else:
         paragraphs += [
@@ -297,6 +312,17 @@ async def build_portrait_text(session: AsyncSession, user, profile) -> str:  # n
 
     chart: FullNatalChart | None
     moon_bounds: tuple[str, str] | None = None
+    if profile.birth_date is None:
+        # Без даты рождения карты нет вовсе — и это не сбой расчёта, а
+        # человек, который ещё не дошёл до продукта, где дату спрашивают.
+        # Ловить это исключением из kerykeion было бы враньём в логах.
+        return format_portrait_card(
+            user,
+            profile,
+            None,
+            has_birth_coords=False,
+            moon_bounds=None,
+        )
     try:
         chart = await build_full_chart_for_user(session, user, profile)
         if chart.moon_sign_uncertain:

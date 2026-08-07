@@ -70,7 +70,9 @@ from astra.telegram.keyboards import (
     ask_questions_keyboard,
 )
 from astra.telegram.states import ProfileStates
+from astra.telegram.birth_data_gate import ensure_birth_data
 from astra.users import crud as users_crud
+from astra.users.birth_data import Product
 from astra.users.gender import Gender
 from astra.usage import UsageKind, record_usage
 from astra.users.models import User
@@ -166,6 +168,42 @@ async def cb_ask_question(callback: CallbackQuery, state: FSMContext, session: A
     await _edit_or_answer(callback, text, ask_back_keyboard(f"{CB_ASK_TOPIC_PREFIX}{topic}"))
 
 
+async def _question_screen(
+    state: FSMContext,
+    session: AsyncSession,
+    user: User,
+    *,
+    question_key: str,
+    skip_archive: bool,
+) -> tuple[str, InlineKeyboardMarkup] | None:
+    """Что показать на платном вопросе: архив, уточнение времени или калибровку.
+
+    Отдельно от отправки, потому что показать это нужно двумя способами:
+    правкой текущего экрана (человек нажал кнопку) и новым сообщением (человек
+    вернулся сюда после того, как назвал дату рождения).
+    """
+    archived = (
+        None
+        if skip_archive
+        else await ask_crud.get_ready_reading(
+            session,
+            user_id=user.id,
+            question_key=question_key,
+        )
+    )
+    if archived is not None:
+        log.info(Event.ASK_ANSWER_FROM_ARCHIVE, reading_id=archived.id, user_id=user.id)
+        return A.ASK_ARCHIVE_TEXT, ask_archive_keyboard(question_key)
+
+    product = get_product(question_key)
+    if product is None:
+        return None
+    await state.update_data(ask_question_key=question_key)
+    if user.profile.birth_time is None:
+        return A.ASK_GATE_TIME_TEXT, ask_gate_keyboard()
+    return product.calibration_text, ask_status_keyboard(product)
+
+
 async def _start_paid_question(
     callback: CallbackQuery,
     state: FSMContext,
@@ -180,36 +218,61 @@ async def _start_paid_question(
     ведём в обычную покупку.
     """
     user = await _current_user(callback, session)
-    if user is None or user.profile is None or user.profile.birth_date is None:
-        await _edit_or_answer(callback, A.ASK_NEED_PROFILE_TEXT, ask_back_keyboard())
+    if user is None:
         return
 
-    archived = (
-        None
-        if skip_archive
-        else await ask_crud.get_ready_reading(
-            session,
-            user_id=user.id,
-            question_key=question_key,
+    msg = callback.message
+    if isinstance(msg, Message):
+        # Даты рождения нет — спрашиваем прямо здесь и возвращаем человека
+        # к этому же вопросу, а не в раздел «Обо мне» за данными.
+        allowed = await ensure_birth_data(
+            msg,
+            Product.ASK_ANSWER,
+            user.profile,
+            state=state,
+            payload=question_key,
         )
+        if not allowed:
+            return
+    elif user.profile is None or user.profile.birth_date is None:
+        return
+
+    screen = await _question_screen(
+        state,
+        session,
+        user,
+        question_key=question_key,
+        skip_archive=skip_archive,
     )
-    if archived is not None:
-        log.info(Event.ASK_ANSWER_FROM_ARCHIVE, reading_id=archived.id, user_id=user.id)
-        await _edit_or_answer(
-            callback,
-            A.ASK_ARCHIVE_TEXT,
-            ask_archive_keyboard(question_key),
-        )
+    if screen is None:
         return
+    await _edit_or_answer(callback, *screen)
 
-    product = get_product(question_key)
-    if product is None:
+
+async def resume_paid_question(
+    message: Message,
+    state: FSMContext,
+    session: AsyncSession,
+    user: User,
+    *,
+    question_key: str | None,
+) -> None:
+    """Вернуть человека к вопросу, ради которого он назвал дату рождения."""
+    if not question_key or not is_ready(question_key):
+        await open_ask_hub(message)
         return
-    await state.update_data(ask_question_key=question_key)
-    if user.profile.birth_time is None:
-        await _edit_or_answer(callback, A.ASK_GATE_TIME_TEXT, ask_gate_keyboard())
+    screen = await _question_screen(
+        state,
+        session,
+        user,
+        question_key=question_key,
+        skip_archive=False,
+    )
+    if screen is None:
+        await open_ask_hub(message)
         return
-    await _edit_or_answer(callback, product.calibration_text, ask_status_keyboard(product))
+    text, markup = screen
+    await message.answer(text, reply_markup=markup)
 
 
 @router.callback_query(F.data.startswith(CB_ASK_REDO_PREFIX))
@@ -236,8 +299,8 @@ async def cb_ask_gate_time(callback: CallbackQuery, state: FSMContext) -> None:
     msg = callback.message
     if isinstance(msg, Message):
         await msg.answer(
-            "Введи время рождения в формате ЧЧ:ММ (например 14:30) — "
-            "и возвращайся к вопросу, посчитаю точнее ✨",
+            "🕐 Напиши время рождения — например <code>14:30</code>\n"
+            "Возвращайся к вопросу, посчитаю точнее ✨",
         )
 
 

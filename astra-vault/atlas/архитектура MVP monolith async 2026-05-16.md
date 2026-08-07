@@ -5,7 +5,7 @@ date: 2026-07-21
 
 # Архитектура MVP monolith async (2026-05-16)
 
-Актуализировано 2026-07-21. Два процесса: **api** (FastAPI + aiogram + scheduler) и **worker** (RabbitMQ consumer для LLM-задач).
+Актуализировано 2026-08-07. Два процесса: **api** (FastAPI + aiogram + scheduler) и **worker** (RabbitMQ consumer для LLM-задач).
 
 ## Диаграмма
 
@@ -27,8 +27,14 @@ Scheduler (09:00 TZ, в процессе api) ──► RabbitMQ (генерац
 | `tarot` | колода 78 карт, расклады, карта дня |
 | `payments` | Telegram Stars: каталог `products`/`product_prices`, снапшоты, refund |
 | `compatibility` | синастрия пары, PDF-отчёт |
-| `natal_report` | разбор натала (ветка feature/natal-report) |
+| `natal_report` | разбор натала (на `main`, продукт не выставлен в каталог) |
 | `points`, `referrals` | баллы, ledger, реферальные коды |
+| `wheel` | колесо фортуны: бесплатное вращение раз в день, платные за Stars |
+| `ask` | раздел «Спроси Астрид» — вопросы к своей карте, товар на каждый |
+| `support` | служба заботы: FAQ и релей обращений через админ-группу |
+| `broadcasts` | рассылки: аудитория по фильтрам, ИИ-редактор, отправка воркером |
+| `usage` | журнал использования продуктов, дни активности, вызовы LLM |
+| `admin` | панель `/admin`: каталог, очередь, платежи, метрики, рассылки |
 | `llm` | провайдеры (DeepSeek), промпты на продукт |
 | `astro` | эфемериды, наталы, транзиты |
 | `messaging`, `workers` | RabbitMQ publish/consume, обработчики задач |

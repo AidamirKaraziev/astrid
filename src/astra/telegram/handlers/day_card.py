@@ -49,7 +49,7 @@ async def cb_day_card_forecast(callback: CallbackQuery, session: AsyncSession) -
         return
     user = await users_crud.get_user_by_telegram_id(session, callback.from_user.id)
     if user is None or user.profile is None:
-        await callback.answer("Сначала: /start", show_alert=True)
+        await callback.answer("Сначала давай познакомимся — жми /start ✨", show_alert=True)
         return
 
     await callback.answer("Читаю твой день по карте…")

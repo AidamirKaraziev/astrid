@@ -34,4 +34,4 @@ date: 2026-06-14
 - E2E **deadtiger + TG** — ручной чеклист в `docs/e2e/astrid-v3-e2e.md`
 - PERF-2: latency/RAM на deadtiger
 
-Связано: [[промпт Astrid v3 — вопрос дня gemma4 e2b]] · [[продукт Astra telegram предсказания RU аудитория]]
+Связано: промпт Astrid v3 (заметка удалена, актуален [[промпт Astrid v4 — вопрос дня на DeepSeek с архетипами]]) · [[продукт Astra telegram предсказания RU аудитория]]

@@ -79,7 +79,9 @@ class Profile(Base, TimestampMixin):
     )
     display_name: Mapped[str] = mapped_column(String(255))
     gender: Mapped[Gender | None] = mapped_column(String(16), nullable=True)
-    birth_date: Mapped[date] = mapped_column(Date)
+    # Пусто у того, кто прошёл короткий онбординг и ещё не открывал продукт,
+    # которому нужна дата: астроданные добираются по мере надобности.
+    birth_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     # Настенные часы места рождения, не момент времени: astra.astro.birth_time
     birth_time: Mapped[datetime | None] = mapped_column(WallClock(), nullable=True)
     birth_place: Mapped[str | None] = mapped_column(String(255), nullable=True)

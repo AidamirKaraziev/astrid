@@ -77,7 +77,7 @@ async def cb_menu_home(callback: CallbackQuery, state: FSMContext) -> None:
 async def invite_friend(message: Message, session: AsyncSession) -> None:
     user = await _get_user_from_message(session, message)
     if user is None:
-        await message.answer("Сначала: /start")
+        await message.answer("Сначала давай познакомимся — жми /start ✨")
         return
     stats = await get_referral_stats(session, user.id)
     from urllib.parse import quote
@@ -99,7 +99,7 @@ async def invite_friend(message: Message, session: AsyncSession) -> None:
 async def show_profile(message: Message, session: AsyncSession) -> None:
     user = await _get_user_from_message(session, message)
     if user is None or user.profile is None:
-        await message.answer("Сначала: /start")
+        await message.answer("Сначала давай познакомимся — жми /start ✨")
         return
     await message.answer(
         await build_portrait_text(session, user, user.profile),
@@ -116,7 +116,7 @@ async def cb_profile_back(callback: CallbackQuery, session: AsyncSession) -> Non
         return
     user = await _get_user(session, callback.from_user.id)
     if user is None or user.profile is None:
-        await callback.answer("Сначала: /start", show_alert=True)
+        await callback.answer("Сначала давай познакомимся — жми /start ✨", show_alert=True)
         return
     await callback.message.answer(
         await build_portrait_text(session, user, user.profile),
@@ -133,7 +133,7 @@ async def cb_profile_edit(callback: CallbackQuery, session: AsyncSession) -> Non
         return
     user = await _get_user(session, callback.from_user.id)
     if user is None or user.profile is None:
-        await callback.answer("Сначала: /start", show_alert=True)
+        await callback.answer("Сначала давай познакомимся — жми /start ✨", show_alert=True)
         return
     await callback.message.answer(
         format_profile_card(user, user.profile),
@@ -182,7 +182,7 @@ async def cb_save_gender(callback: CallbackQuery, session: AsyncSession) -> None
         return
     user = await _get_user(session, callback.from_user.id)
     if user is None or user.profile is None:
-        await callback.answer("Сначала: /start", show_alert=True)
+        await callback.answer("Сначала давай познакомимся — жми /start ✨", show_alert=True)
         return
 
     gender = GENDER_MALE if callback.data == "profile:gender:male" else GENDER_FEMALE
@@ -207,7 +207,7 @@ async def cb_edit_birth_date(callback: CallbackQuery, state: FSMContext) -> None
     await state.set_state(ProfileStates.edit_birth_date)
     if callback.message:
         await callback.message.answer(
-            "Введи дату рождения в формате <b>ДД.ММ.ГГГГ</b>\n"
+            "🌌 Напиши новую дату рождения цифрами\n"
             "Например: <code>15.03.1990</code>",
             parse_mode="HTML",
         )
@@ -221,7 +221,7 @@ async def save_birth_date(message: Message, state: FSMContext, session: AsyncSes
         return
     parsed = parse_birth_date(message.text or "")
     if parsed is None:
-        await message.answer("Не разобрал дату. Формат: ДД.ММ.ГГГГ (например 15.03.1990)")
+        await message.answer("Не разобрала дату. Напиши цифрами — например 15.03.1990")
         return
 
     update_fields: dict[str, object] = {"birth_date": parsed}
@@ -243,8 +243,8 @@ async def cb_edit_time(callback: CallbackQuery, state: FSMContext) -> None:
     await state.set_state(ProfileStates.edit_birth_time)
     if callback.message:
         await callback.message.answer(
-            "Введи время рождения в формате <b>ЧЧ:ММ</b> (например <code>14:30</code>).\n"
-            f"Если не знаешь — нажми «{BTN_TIME_UNKNOWN}», посчитаю без него.",
+            "🕐 Напиши время рождения — например <code>14:30</code>\n"
+            f"Не знаешь — нажми «{BTN_TIME_UNKNOWN}», посчитаю без него.",
             parse_mode="HTML",
             reply_markup=profile_birth_time_keyboard(),
         )
@@ -263,7 +263,7 @@ async def cb_birth_time_unknown(
         return
     user = await _get_user(session, callback.from_user.id)
     if user is None or user.profile is None:
-        await callback.answer("Сначала: /start", show_alert=True)
+        await callback.answer("Сначала давай познакомимся — жми /start ✨", show_alert=True)
         return
 
     had_time = user.profile.birth_time is not None
@@ -289,7 +289,13 @@ async def save_birth_time(message: Message, state: FSMContext, session: AsyncSes
         return
     parsed = parse_birth_time(message.text or "")
     if parsed is None:
-        await message.answer(f"Не разобрал время. Формат: 14:30 — или нажми «{BTN_TIME_UNKNOWN}».")
+        await message.answer(f"Не разобрала время. Напиши как 14:30 — или нажми «{BTN_TIME_UNKNOWN}».")
+        return
+    if user.profile.birth_date is None:
+        # Время рождения хранится настенными часами на дату рождения: без
+        # даты его некуда положить.
+        await message.answer("Сначала добавь дату рождения — время привязывается к ней 📅")
+        await state.clear()
         return
     birth_dt = wall_clock_at(user.profile.birth_date, parsed)
     await users_crud.update_profile(session, user.profile, birth_time=birth_dt)
@@ -314,7 +320,7 @@ async def cb_edit_notification_city(
         return
     user = await _get_user(session, callback.from_user.id)
     if user is None or user.profile is None:
-        await callback.answer("Сначала: /start", show_alert=True)
+        await callback.answer("Сначала давай познакомимся — жми /start ✨", show_alert=True)
         return
     await start_profile_notification_place_step(callback.message, state)
     await callback.answer()

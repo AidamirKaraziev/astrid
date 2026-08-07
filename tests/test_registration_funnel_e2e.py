@@ -13,6 +13,7 @@
 
 from __future__ import annotations
 
+import re
 from datetime import date
 from unittest.mock import AsyncMock, patch
 
@@ -23,12 +24,13 @@ from sqlalchemy.orm import selectinload
 from conftest import new_test_telegram_id
 from fake_telegram import BotHarness, assert_said, build_bot, build_test_dispatcher
 
-from astra.telegram.button_texts import BTN_GENDER_FEMALE, BTN_PROFILE
+from astra.telegram.button_texts import BTN_GENDER_FEMALE, BTN_NATAL, BTN_PROFILE
+from astra.telegram.handlers.natal import CB_NATAL_SUBJECT_SELF
 from astra.users.gender import GENDER_FEMALE
 
 pytestmark = pytest.mark.usefixtures("purge_test_users")
 
-BEGIN_BUTTON = "Привет, Астрид 🫶🏻"
+BEGIN_BUTTON = "Зови меня Аида"
 BIRTH_DATE_INPUT = "15.03.1990"
 BIRTH_DATE = date(1990, 3, 15)
 BIRTH_CITY_QUERY = "Москва"
@@ -111,6 +113,18 @@ async def load_user(session, telegram_id: int):
     return result.scalar_one_or_none()
 
 
+def assert_welcome_screen(text: str) -> None:
+    """Первый экран: здоровается Астрид и спрашивает, как обращаться.
+
+    Проверяем смысл, а не вёрстку: текст приветствия правится часто, и тест,
+    приколоченный к конкретному <b>, ломается на каждой правке запятой — а
+    сломанный тест воронки перестают читать.
+    """
+    plain = re.sub(r"<[^>]+>", "", text).lower()
+    assert "астрид" in plain, f"на первом экране никто не представился: {text!r}"
+    assert "обращаться" in plain, f"не спросили, как обращаться: {text!r}"
+
+
 def _callbacks(calls: list, prefix: str) -> list[str]:
     return [
         data for call in calls for data in call.callback_data() if data.startswith(prefix)
@@ -140,28 +154,58 @@ async def reach_place_buttons(
     return picks[0]
 
 
-async def walk_to_city_list(
-    harness: BotHarness,
-    telegram_id: int,
-    *,
-    start_command: str = "/start",
-) -> str:
-    """Пройти онбординг до выбора места и вернуть callback_data первого."""
-    await harness.send(start_command, telegram_id=telegram_id)
-    await harness.send(BEGIN_BUTTON, telegram_id=telegram_id)
-    await harness.send(BTN_GENDER_FEMALE, telegram_id=telegram_id)
-    await harness.send(BIRTH_DATE_INPUT, telegram_id=telegram_id)
-    return await reach_place_buttons(harness, telegram_id)
-
-
 async def register_fully(
     harness: BotHarness,
     telegram_id: int,
     *,
     start_command: str = "/start",
 ) -> None:
-    """Весь путь новичка от команды старта до готового профиля."""
-    pick = await walk_to_city_list(harness, telegram_id, start_command=start_command)
+    """Весь путь новичка: старт → как обращаться → пол. Три касания."""
+    await harness.send(start_command, telegram_id=telegram_id)
+    await harness.send(BEGIN_BUTTON, telegram_id=telegram_id)
+    await harness.send(BTN_GENDER_FEMALE, telegram_id=telegram_id)
+
+
+async def open_birth_place_step(
+    harness: BotHarness,
+    telegram_id: int,
+    *,
+    start_command: str = "/start",
+) -> None:
+    """Довести человека до вопроса «Где ты родилась?».
+
+    Путь один на все тесты шага места: регистрация → разбор натала для себя →
+    дата рождения. Дальше начинается то, что эти тесты и проверяют, — поиск,
+    регионы, страницы и кнопка «не нашла свой город».
+    """
+    await register_fully(harness, telegram_id, start_command=start_command)
+    await harness.send(BTN_NATAL, telegram_id=telegram_id)
+    await harness.click(CB_NATAL_SUBJECT_SELF, telegram_id=telegram_id)
+    await harness.send(BIRTH_DATE_INPUT, telegram_id=telegram_id)
+
+
+async def walk_to_city_list(
+    harness: BotHarness,
+    telegram_id: int,
+    *,
+    start_command: str = "/start",
+) -> str:
+    """Дойти до выбора места рождения и вернуть callback_data первого.
+
+    Дверь к этому шагу теперь не в онбординге, а в продукте: человек
+    открывает разбор натала, у него нет данных — и бот спрашивает сначала
+    дату, потом место.
+    """
+    await open_birth_place_step(harness, telegram_id, start_command=start_command)
+    return await reach_place_buttons(harness, telegram_id)
+
+
+async def fill_birth_data(
+    harness: BotHarness,
+    telegram_id: int,
+) -> None:
+    """Профиль с полными данными рождения: через добор в разборе натала."""
+    pick = await walk_to_city_list(harness, telegram_id)
     await harness.click(pick, telegram_id=telegram_id)
 
 
@@ -177,40 +221,29 @@ async def test_new_user_walks_from_start_to_finished_profile(
 ) -> None:
     telegram_id = new_test_telegram_id()
 
-    # 1. /start — приветствие с кнопкой начала
+    # 1. /start — приветствие, оно же вопрос об имени
     calls = await bot_harness.send("/start", telegram_id=telegram_id)
     assert "sendVideo" in [call.api_method for call in calls]
     welcome = calls[0]
-    assert "Добро пожаловать в Astra" in welcome.text
-    assert BEGIN_BUTTON in welcome.buttons()
+    assert_welcome_screen(welcome.text)
+    assert BEGIN_BUTTON in welcome.buttons(), "имя из Telegram не предложено кнопкой"
 
     user = await load_user(db_session, telegram_id)
     assert user is not None, "пользователь не создан на /start"
     assert user.onboarding_completed is False
 
-    # 2. «Привет, Астрид» — спрашиваем пол
+    # 2. Имя — спрашиваем пол, последнее, что нужно на старте
     calls = await bot_harness.send(BEGIN_BUTTON, telegram_id=telegram_id)
-    gender_prompt = assert_said(calls, "Укажи свой пол")
+    gender_prompt = assert_said(calls, "укажи свой пол")
     assert BTN_GENDER_FEMALE in gender_prompt.buttons()
     assert BTN_PROFILE in gender_prompt.text  # подсказка, где менять имя
 
-    # 3. Пол — спрашиваем дату рождения
+    # 3. Пол — регистрация завершена, дальше человека никто не держит
     calls = await bot_harness.send(BTN_GENDER_FEMALE, telegram_id=telegram_id)
-    assert_said(calls, "дату рождения")
-
-    # 4. Дата — спрашиваем место рождения
-    calls = await bot_harness.send(BIRTH_DATE_INPUT, telegram_id=telegram_id)
-    assert_said(calls, "Где ты родилась")
-
-    # 5. Город — список из справочника (через шаг региона, если тёзок много)
-    pick = await reach_place_buttons(bot_harness, telegram_id)
-
-    # 6. Выбор города — регистрация завершена
-    calls = await bot_harness.click(pick, telegram_id=telegram_id)
-    done = assert_said(calls, "Регистрация завершена")
+    done = assert_said(calls, "будем знакомы")
     assert "✨ Обо мне" in done.buttons(), "после регистрации не выдали главное меню"
 
-    # 7. В базе — полноценный профиль
+    # 4. В базе — профиль без астроданных: их спросят у продукта
     db_session.expire_all()
     user = await load_user(db_session, telegram_id)
     assert user is not None
@@ -218,14 +251,56 @@ async def test_new_user_walks_from_start_to_finished_profile(
     assert user.profile is not None, "профиль не создан"
     assert user.profile.display_name == "Аида"
     assert user.profile.gender == GENDER_FEMALE
-    assert user.profile.birth_date == BIRTH_DATE
-    assert user.profile.birth_place_id is not None
-    assert user.profile.timezone, "без таймзоны не уйдёт ежедневная рассылка"
+    assert user.profile.birth_date is None, "дату рождения на старте не спрашиваем"
+    assert user.profile.timezone, "без таймзоны не уйдёт рассылка"
     assert user.referral_code is not None, "реферальный код не выдан"
 
-    # 8. Первое предсказание поставлено в очередь
-    enqueued_predictions.assert_awaited_once()
-    assert enqueued_predictions.await_args.args[1] == user.id
+    # 5. Предсказание не обещаем: строить его не от чего
+    enqueued_predictions.assert_not_awaited()
+
+
+async def test_natal_asks_for_missing_data_and_returns_to_the_report(
+    bot_harness: BotHarness,
+    db_session,
+) -> None:
+    """Данные спрашиваются там, где понадобились, и человек не теряет продукт."""
+    telegram_id = new_test_telegram_id()
+    await register_fully(bot_harness, telegram_id)
+
+    # Разбор натала для себя — данных нет, бот спрашивает дату
+    await bot_harness.send(BTN_NATAL, telegram_id=telegram_id)
+    calls = await bot_harness.click(CB_NATAL_SUBJECT_SELF, telegram_id=telegram_id)
+    assert_said(calls, "нужна дата рождения")
+
+    # Дата — следом место
+    calls = await bot_harness.send(BIRTH_DATE_INPUT, telegram_id=telegram_id)
+    assert_said(calls, "Где ты родилась")
+
+    # Место — и человек снова в разборе, а не в главном меню
+    pick = await reach_place_buttons(bot_harness, telegram_id)
+    calls = await bot_harness.click(pick, telegram_id=telegram_id)
+    assert_said(calls, "Разбор натальной карты")
+
+    db_session.expire_all()
+    user = await load_user(db_session, telegram_id)
+    assert user.profile.birth_date == BIRTH_DATE
+    assert user.profile.birth_place_id is not None
+
+
+async def test_birth_data_is_asked_only_once(
+    bot_harness: BotHarness,
+    db_session,
+) -> None:
+    """Названное однажды сохраняется в профиль и больше не спрашивается."""
+    telegram_id = new_test_telegram_id()
+    await fill_birth_data(bot_harness, telegram_id)
+
+    await bot_harness.send(BTN_NATAL, telegram_id=telegram_id)
+    calls = await bot_harness.click(CB_NATAL_SUBJECT_SELF, telegram_id=telegram_id)
+
+    said = " ".join(call.text or "" for call in calls)
+    assert "нужна дата рождения" not in said
+    assert "Где ты родилась" not in said
 
 
 # --------------------------------------------------------------------------
@@ -242,7 +317,7 @@ async def test_start_from_ad_deep_link_registers_user(bot_harness: BotHarness, d
     telegram_id = new_test_telegram_id()
 
     calls = await bot_harness.send("/start utm_ads_2026", telegram_id=telegram_id)
-    assert "Добро пожаловать в Astra" in calls[0].text
+    assert_welcome_screen(calls[0].text)
     assert BEGIN_BUTTON in calls[0].buttons()
 
     user = await load_user(db_session, telegram_id)
@@ -291,9 +366,6 @@ async def test_start_with_referral_code_registers_and_links(
     # Приглашённый доходит до конца — только теперь бонусы.
     await bot_harness.send(BEGIN_BUTTON, telegram_id=invitee_id)
     await bot_harness.send(BTN_GENDER_FEMALE, telegram_id=invitee_id)
-    await bot_harness.send(BIRTH_DATE_INPUT, telegram_id=invitee_id)
-    pick = await reach_place_buttons(bot_harness, invitee_id)
-    await bot_harness.click(pick, telegram_id=invitee_id)
 
     referral = await referral_row()
     assert referral is not None
@@ -312,7 +384,7 @@ async def test_repeated_start_before_onboarding_does_not_duplicate_user(
     await bot_harness.send("/start", telegram_id=telegram_id)
     calls = await bot_harness.send("/start", telegram_id=telegram_id)
 
-    assert "Добро пожаловать в Astra" in calls[0].text
+    assert_welcome_screen(calls[0].text)
     count = (
         await db_session.execute(select(User).where(User.telegram_id == telegram_id))
     ).scalars().all()
@@ -345,7 +417,7 @@ async def test_start_restart_arg_runs_onboarding_again(
 
     bot_harness.clear()
     calls = await bot_harness.send("/start restart", telegram_id=telegram_id)
-    assert "Добро пожаловать в Astra" in calls[0].text
+    assert_welcome_screen(calls[0].text)
     assert BEGIN_BUTTON in calls[0].buttons()
 
 
@@ -359,12 +431,12 @@ async def test_invalid_birth_date_reprompts_and_flow_continues(
     db_session,
 ) -> None:
     telegram_id = new_test_telegram_id()
-    await bot_harness.send("/start", telegram_id=telegram_id)
-    await bot_harness.send(BEGIN_BUTTON, telegram_id=telegram_id)
-    await bot_harness.send(BTN_GENDER_FEMALE, telegram_id=telegram_id)
+    await register_fully(bot_harness, telegram_id)
+    await bot_harness.send(BTN_NATAL, telegram_id=telegram_id)
+    await bot_harness.click(CB_NATAL_SUBJECT_SELF, telegram_id=telegram_id)
 
     calls = await bot_harness.send("вчера", telegram_id=telegram_id)
-    assert_said(calls, "Не могу разобрать дату")
+    assert_said(calls, "Не разобрала дату")
 
     calls = await bot_harness.send(BIRTH_DATE_INPUT, telegram_id=telegram_id)
     assert_said(calls, "Где ты родилась")
@@ -375,10 +447,7 @@ async def test_unknown_city_reprompts_and_flow_continues(
     db_session,
 ) -> None:
     telegram_id = new_test_telegram_id()
-    await bot_harness.send("/start", telegram_id=telegram_id)
-    await bot_harness.send(BEGIN_BUTTON, telegram_id=telegram_id)
-    await bot_harness.send(BTN_GENDER_FEMALE, telegram_id=telegram_id)
-    await bot_harness.send(BIRTH_DATE_INPUT, telegram_id=telegram_id)
+    await open_birth_place_step(bot_harness, telegram_id)
 
     # Выдуманное название не должно ронять шаг: человек вводит ещё раз и идёт
     # дальше. Что именно ответит бот — «ничего не нашла» или похожие города —
@@ -487,10 +556,7 @@ async def test_activity_middleware_survives_user_without_profile(
 
 
 async def _to_place_step(harness: BotHarness, telegram_id: int) -> None:
-    await harness.send("/start", telegram_id=telegram_id)
-    await harness.send(BEGIN_BUTTON, telegram_id=telegram_id)
-    await harness.send(BTN_GENDER_FEMALE, telegram_id=telegram_id)
-    await harness.send(BIRTH_DATE_INPUT, telegram_id=telegram_id)
+    await open_birth_place_step(harness, telegram_id)
     harness.clear()
 
 
@@ -500,9 +566,9 @@ async def test_place_step_explains_the_nearby_city_rule(
 ) -> None:
     """Подсказка должна читаться не вчитываясь — иначе человек уйдёт."""
     telegram_id = new_test_telegram_id()
-    await bot_harness.send("/start", telegram_id=telegram_id)
-    await bot_harness.send(BEGIN_BUTTON, telegram_id=telegram_id)
-    await bot_harness.send(BTN_GENDER_FEMALE, telegram_id=telegram_id)
+    await register_fully(bot_harness, telegram_id)
+    await bot_harness.send(BTN_NATAL, telegram_id=telegram_id)
+    await bot_harness.click(CB_NATAL_SUBJECT_SELF, telegram_id=telegram_id)
     calls = await bot_harness.send(BIRTH_DATE_INPUT, telegram_id=telegram_id)
 
     prompt = assert_said(calls, "Где ты родилась")
@@ -741,7 +807,7 @@ async def test_after_description_person_continues_registration(
 
     pick = await reach_place_buttons(bot_harness, telegram_id)
     calls = await bot_harness.click(pick, telegram_id=telegram_id)
-    assert_said(calls, "Регистрация завершена")
+    assert_said(calls, "Разбор натальной карты")
 
 
 async def test_too_short_description_is_reprompted(

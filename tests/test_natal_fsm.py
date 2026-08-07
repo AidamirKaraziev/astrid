@@ -94,7 +94,7 @@ async def test_self_flow_asks_time_when_missing() -> None:
 
     assert await state.get_state() == NatalStates.collect_birth_time.state
     text = callback.message.answer.await_args.args[0]
-    assert "время рождения" in text.lower()
+    assert "временем рождения" in text.lower()
 
 
 @pytest.mark.anyio

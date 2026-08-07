@@ -1,12 +1,18 @@
 ---
 tags: [decision, llm, compatibility, pydantic]
 date: 2026-07-02
-status: черновик — ждёт утверждения
+status: реализовано
 ---
 
 # Split Contract: LLM и Pydantic для совместимости
 
 Связано: [[промпт совместимости синастрия JSON для LLM]] · [[2026-07-02 staged progress pipelines и диагностика LLM совместимости]]
+
+> **Статус 2026-08-07: вариант B реализован и распространён на натал.**
+> `src/astra/llm/compatibility_assemble.py` и `src/astra/llm/natal_assemble.py`,
+> тесты `tests/test_compatibility_assemble.py`, `tests/test_natal_assemble.py`.
+> Позже добавилась обрезка лишних аспектов —
+> [[аспекты совместимости не влезали в раздел и роняли собранный отчёт]].
 
 ## Проблема
 

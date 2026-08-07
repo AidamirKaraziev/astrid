@@ -16,6 +16,7 @@ from astra.predictions import crud as predictions_crud
 from astra.predictions.models import Prediction
 from astra.predictions.status import PredictionStatus
 from astra.users import crud as users_crud
+from astra.users.birth_data import BirthDataMissing, BirthField
 from astra.users.models import Profile, User
 
 
@@ -36,7 +37,7 @@ async def birth_coordinates(session: AsyncSession, profile: Profile) -> tuple[fl
 def _profile_snapshot(profile: Profile) -> dict[str, str | None]:
     birth_time = profile.birth_time.isoformat() if profile.birth_time else None
     return {
-        "birth_date": profile.birth_date.isoformat(),
+        "birth_date": profile.birth_date.isoformat() if profile.birth_date else None,
         "birth_time": birth_time,
         "birth_place": profile.birth_place,
         "birth_place_id": str(profile.birth_place_id) if profile.birth_place_id else None,
@@ -60,8 +61,16 @@ async def refresh_natal_chart_for_profile(
     session: AsyncSession,
     profile: Profile,
 ) -> NatalChartData | None:
-    """Пересчитать натал по актуальному профилю (после flush)."""
+    """Пересчитать натал по актуальному профилю (после flush).
+
+    None — считать нечего. Профиль без даты рождения это нормальное
+    состояние (короткий онбординг), и пытаться строить по нему карту, чтобы
+    поймать исключение, значило бы писать в лог ошибку на каждую правку
+    имени или пола.
+    """
     await session.refresh(profile)
+    if profile.birth_date is None:
+        return None
     user = await users_crud.get_user_by_id(session, profile.user_id)
     if user is None:
         return None
@@ -96,6 +105,8 @@ async def build_full_chart_for_user(
     profile: Profile,
 ):
     """FullNatalChart по профилю (координаты из места рождения)."""
+    if profile.birth_date is None:
+        raise BirthDataMissing((BirthField.DATE,))
     lat, lon, tz = await birth_coordinates(session, profile)
     return build_full_natal_chart(
         name=profile.display_name,

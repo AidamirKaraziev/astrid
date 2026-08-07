@@ -46,7 +46,9 @@ from astra.telegram.states import NatalStates
 from astra.astro.birth_time import wall_clock_at
 from astra.telegram.utils import parse_birth_date, parse_birth_time
 from astra.usage import ACTION_NATAL_REPORT, UsageKind, record_usage
+from astra.telegram.birth_data_gate import ensure_birth_data
 from astra.users import crud as users_crud
+from astra.users.birth_data import Product
 from astra.users.gender import GENDER_FEMALE, GENDER_MALE
 
 log = get_logger(__name__)
@@ -95,7 +97,7 @@ async def _require_user(message: Message, session: AsyncSession):
         return None
     user = await users_crud.get_user_by_telegram_id(session, message.from_user.id)
     if user is None or not user.onboarding_completed or user.profile is None:
-        await message.answer("Сначала пройди регистрацию: /start")
+        await message.answer("Сначала давай познакомимся — жми /start ✨")
         return None
     return user
 
@@ -199,15 +201,25 @@ async def _load_subject_profile(
     return profile
 
 
-async def _begin_self_flow(message: Message, state: FSMContext, user) -> None:  # noqa: ANN001
-    """Разбор для самого пользователя: спросить время, если его нет, иначе подтверждение."""
+async def begin_self_natal_flow(message: Message, state: FSMContext, user) -> None:  # noqa: ANN001
+    """Разбор для самого пользователя: спросить время, если его нет, иначе подтверждение.
+
+    Проверка данных стоит именно здесь, а не на входе в раздел: разбор для
+    нового человека берёт его данные с нуля и в профиль владельца не смотрит
+    вовсе — закрывать ему дверь из-за пустого профиля было бы неверно.
+
+    Публичная функция: в неё же возвращается человек, у которого данных не
+    хватило и который их только что назвал.
+    """
+    if not await ensure_birth_data(message, Product.NATAL_REPORT, user.profile, state=state):
+        return
     await state.update_data(**{_SUBJECT_PROFILE_KEY: None})
     if user.profile.birth_time is None:
         await state.set_state(NatalStates.collect_birth_time)
         await message.answer(
             "🌌 <b>Разбор натальной карты</b>\n\n"
-            "Для асцендента и домов нужно время рождения.\n"
-            "Напиши его в формате <b>14:30</b> — или нажми «Не знаю».",
+            "Со временем рождения я увижу асцендент и дома.\n"
+            "Напиши его — например <code>14:30</code>, или нажми «Не знаю».",
             parse_mode="HTML",
             reply_markup=_time_keyboard(),
         )
@@ -245,7 +257,7 @@ async def cb_natal_from_profile(
         return
     user = await users_crud.get_user_by_telegram_id(session, callback.from_user.id)
     if user is None or not user.onboarding_completed or user.profile is None:
-        await callback.message.answer("Сначала пройди регистрацию: /start")
+        await callback.message.answer("Сначала давай познакомимся — жми /start ✨")
         return
     await state.clear()
     profiles = await compatibility_crud.list_natal_profiles(session, user.id)
@@ -285,7 +297,7 @@ async def cb_natal_subject_self(
     user = await users_crud.get_user_by_telegram_id(session, callback.from_user.id)
     if user is None or user.profile is None:
         return
-    await _begin_self_flow(callback.message, state, user)
+    await begin_self_natal_flow(callback.message, state, user)
 
 
 @router.callback_query(F.data.startswith(CB_NATAL_SUBJECT_PICK_PREFIX))
@@ -314,8 +326,8 @@ async def cb_natal_subject_pick(
         await state.set_state(NatalStates.collect_birth_time)
         await callback.message.answer(
             f"🌌 Разбор для <b>{profile.label}</b>.\n\n"
-            "Для асцендента и домов нужно время рождения.\n"
-            "Напиши его в формате <b>14:30</b> — или нажми «Не знаю».",
+            "Со временем рождения я увижу асцендент и дома.\n"
+            "Напиши его — например <code>14:30</code>, или нажми «Не знаю».",
             parse_mode="HTML",
             reply_markup=_time_keyboard(),
         )
@@ -358,7 +370,7 @@ async def collect_new_gender(message: Message, state: FSMContext, session: Async
     await state.update_data(**{f"{_NEW_PERSON_PREFIX}gender": gender})
     await state.set_state(NatalStates.new_birth_date)
     await message.answer(
-        "Дата рождения (ДД.ММ.ГГГГ):",
+        "📅 Дата рождения — например <code>15.03.1990</code>",
         reply_markup=ReplyKeyboardRemove(),
     )
 
@@ -373,13 +385,13 @@ async def collect_new_birth_date(
         return
     parsed = parse_birth_date(message.text or "")
     if parsed is None:
-        await message.answer("Не разобрала дату. Формат: ДД.ММ.ГГГГ")
+        await message.answer("Не разобрала дату. Напиши цифрами — например 15.03.1990")
         return
     await state.update_data(**{f"{_NEW_PERSON_PREFIX}birth_date": parsed.isoformat()})
     await state.set_state(NatalStates.new_birth_time)
     await message.answer(
-        "Время рождения (ЧЧ:ММ).\n"
-        "Для асцендента и домов оно важно — но если не знаешь, нажми «⏭ Пропустить».",
+        "🕐 Время рождения — например <code>14:30</code>\n"
+        "С ним я увижу асцендент и дома. Не знаешь — нажми «⏭ Пропустить».",
         reply_markup=skip_keyboard(),
     )
 
@@ -408,7 +420,7 @@ async def collect_new_birth_time(
         return
     parsed = parse_birth_time(message.text or "")
     if parsed is None:
-        await message.answer("Не разобрала время. Формат: 14:30 или «⏭ Пропустить».")
+        await message.answer("Не разобрала время. Напиши как 14:30 — или нажми «⏭ Пропустить».")
         return
     data = await state.get_data()
     birth_date = date.fromisoformat(str(data[f"{_NEW_PERSON_PREFIX}birth_date"]))
@@ -433,7 +445,7 @@ async def complete_natal_new_birth_place(
     user = await users_crud.get_user_by_telegram_id(session, actor_telegram_id)
     if user is None:
         await state.clear()
-        await message.answer("Что-то пошло не так. Нажми /start")
+        await message.answer("Что-то сбилось. Начнём заново — жми /start")
         return
     data = await state.get_data()
     name = str(data.get(f"{_NEW_PERSON_PREFIX}name") or "").strip()
@@ -476,7 +488,7 @@ async def collect_birth_time(
         return
     parsed = parse_birth_time(message.text or "")
     if parsed is None:
-        await message.answer("Не разобрала время. Формат: 14:30 — или нажми «Не знаю» выше.")
+        await message.answer("Не разобрала время. Напиши как 14:30 — или нажми «Не знаю» выше.")
         return
 
     profile = await _load_subject_profile(session, user, state)
@@ -531,7 +543,7 @@ async def cb_natal_confirm(
         return
     user = await users_crud.get_user_by_telegram_id(session, callback.from_user.id)
     if user is None or user.profile is None:
-        await callback.answer("Сначала: /start", show_alert=True)
+        await callback.answer("Сначала давай познакомимся — жми /start ✨", show_alert=True)
         return
 
     try:

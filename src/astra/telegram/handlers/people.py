@@ -35,7 +35,12 @@ from astra.telegram.profile_text import shorten_place_display
 from astra.telegram.states import PeopleStates
 from astra.telegram.utils import parse_birth_date, parse_birth_time
 from astra.users import crud as users_crud
-from astra.users.gender import GENDER_FEMALE, GENDER_MALE, gender_display_label
+from astra.users.gender import (
+    GENDER_FEMALE,
+    GENDER_MALE,
+    gender_display_label,
+    normalize_gender,
+)
 from astra.users.models import User
 
 log = get_logger(__name__)
@@ -114,7 +119,7 @@ async def cb_people_list(callback: CallbackQuery, session: AsyncSession) -> None
         return
     user = await _get_user(session, callback)
     if user is None:
-        await callback.answer("Сначала: /start", show_alert=True)
+        await callback.answer("Сначала давай познакомимся — жми /start ✨", show_alert=True)
         return
     await _send_people_list(callback.message, session, user)
     await callback.answer()
@@ -127,7 +132,7 @@ async def cb_people_card(callback: CallbackQuery, session: AsyncSession) -> None
         return
     user = await _get_user(session, callback)
     if user is None:
-        await callback.answer("Сначала: /start", show_alert=True)
+        await callback.answer("Сначала давай познакомимся — жми /start ✨", show_alert=True)
         return
     profile = await _load_owned_profile(
         session,
@@ -153,7 +158,7 @@ async def cb_people_edit(
     field, _, raw_id = callback.data.removeprefix(CB_PEOPLE_EDIT_PREFIX).partition(":")
     user = await _get_user(session, callback)
     if user is None:
-        await callback.answer("Сначала: /start", show_alert=True)
+        await callback.answer("Сначала давай познакомимся — жми /start ✨", show_alert=True)
         return
     profile = await _load_owned_profile(session, user, UUID(raw_id))
     if profile is None:
@@ -176,19 +181,24 @@ async def cb_people_edit(
     elif field == "date":
         await state.set_state(PeopleStates.edit_birth_date)
         await callback.message.answer(
-            f"Дата рождения — <b>{profile.label}</b> (ДД.ММ.ГГГГ):",
+            f"📅 Дата рождения — <b>{profile.label}</b>\nНапиши цифрами, например <code>15.03.1990</code>",
             parse_mode="HTML",
         )
     elif field == "time":
         await state.set_state(PeopleStates.edit_birth_time)
         await callback.message.answer(
-            f"Время рождения — <b>{profile.label}</b> (ЧЧ:ММ, например 14:30):",
+            f"🕐 Время рождения — <b>{profile.label}</b>\nНапиши как <code>14:30</code>",
             parse_mode="HTML",
         )
     elif field == "place":
         from astra.telegram.handlers.places import start_people_birth_place_step
 
-        await start_people_birth_place_step(callback.message, state, label=profile.label)
+        await start_people_birth_place_step(
+            callback.message,
+            state,
+            label=profile.label,
+            gender=normalize_gender(profile.gender),
+        )
     else:
         await callback.answer("Неизвестное поле", show_alert=True)
         return
@@ -203,7 +213,7 @@ async def cb_people_save_gender(callback: CallbackQuery, session: AsyncSession) 
     value, _, raw_id = callback.data.removeprefix(CB_PEOPLE_GENDER_PREFIX).partition(":")
     user = await _get_user(session, callback)
     if user is None:
-        await callback.answer("Сначала: /start", show_alert=True)
+        await callback.answer("Сначала давай познакомимся — жми /start ✨", show_alert=True)
         return
     profile = await _load_owned_profile(session, user, UUID(raw_id))
     if profile is None:
@@ -239,7 +249,7 @@ async def save_people_name(message: Message, state: FSMContext, session: AsyncSe
     profile = await _profile_from_state(message, state, session)
     if profile is None:
         await state.clear()
-        await message.answer("Что-то пошло не так. Открой профиль заново.")
+        await message.answer("Что-то сбилось. Открой профиль заново.")
         return
     name = (message.text or "").strip()
     if len(name) < 2:
@@ -272,11 +282,11 @@ async def save_people_birth_date(
     profile = await _profile_from_state(message, state, session)
     if profile is None:
         await state.clear()
-        await message.answer("Что-то пошло не так. Открой профиль заново.")
+        await message.answer("Что-то сбилось. Открой профиль заново.")
         return
     parsed = parse_birth_date(message.text or "")
     if parsed is None:
-        await message.answer("Не разобрал дату. Формат: ДД.ММ.ГГГГ (например 15.03.1990)")
+        await message.answer("Не разобрала дату. Напиши цифрами — например 15.03.1990")
         return
 
     update_fields: dict[str, object] = {"birth_date": parsed}
@@ -298,11 +308,11 @@ async def save_people_birth_time(
     profile = await _profile_from_state(message, state, session)
     if profile is None:
         await state.clear()
-        await message.answer("Что-то пошло не так. Открой профиль заново.")
+        await message.answer("Что-то сбилось. Открой профиль заново.")
         return
     parsed = parse_birth_time(message.text or "")
     if parsed is None:
-        await message.answer("Не разобрал время. Формат: 14:30")
+        await message.answer("Не разобрала время. Напиши как 14:30")
         return
     birth_dt = wall_clock_at(profile.birth_date, parsed)
     await compatibility_crud.update_natal_profile(session, profile, birth_time=birth_dt)
@@ -332,7 +342,7 @@ async def complete_people_birth_place(
     )
     if profile is None:
         await state.clear()
-        await message.answer("Что-то пошло не так. Открой профиль заново.")
+        await message.answer("Что-то сбилось. Открой профиль заново.")
         return
     await compatibility_crud.update_natal_profile(
         session,
@@ -353,7 +363,7 @@ async def cb_people_delete_confirm(callback: CallbackQuery, session: AsyncSessio
         return
     user = await _get_user(session, callback)
     if user is None:
-        await callback.answer("Сначала: /start", show_alert=True)
+        await callback.answer("Сначала давай познакомимся — жми /start ✨", show_alert=True)
         return
     profile_id = UUID(callback.data.removeprefix(CB_PEOPLE_DELETE_CONFIRM_PREFIX))
     deleted = await compatibility_crud.delete_natal_profile(session, profile_id, user.id)
@@ -383,7 +393,7 @@ async def cb_people_delete_prompt(callback: CallbackQuery, session: AsyncSession
         return
     user = await _get_user(session, callback)
     if user is None:
-        await callback.answer("Сначала: /start", show_alert=True)
+        await callback.answer("Сначала давай познакомимся — жми /start ✨", show_alert=True)
         return
     profile = await _load_owned_profile(
         session,
