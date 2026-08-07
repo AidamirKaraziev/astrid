@@ -138,7 +138,7 @@ def test_missing_data_text_lists_everything_at_once() -> None:
         Product.NATAL_REPORT,
         (BirthField.DATE, BirthField.PLACE),
     )
-    assert "дата рождения и место рождения" in text
+    assert "дата и место рождения" in text  # слово «рождения» не повторяется трижды
 
 
 @pytest.mark.asyncio
@@ -147,7 +147,7 @@ async def test_gate_stops_product_and_explains() -> None:
     allowed = await ensure_birth_data(message, Product.NATAL_REPORT, _profile())
     assert allowed is False
     message.answer.assert_awaited_once()
-    assert "дата рождения" in message.answer.await_args.args[0]
+    assert "дата рождения" in message.answer.await_args.args[0].replace(" и место", "")
 
 
 @pytest.mark.asyncio

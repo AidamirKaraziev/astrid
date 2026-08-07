@@ -33,6 +33,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from astra.telegram.states import BirthDataStates
 from astra.users import crud as users_crud
 from astra.users.birth_data import BirthField, Product, blocked_by
+from astra.users.gender import normalize_gender
 from astra.users.models import Profile, User
 
 # Продукт, в который надо вернуться, когда данные собраны.
@@ -55,19 +56,33 @@ _PRODUCT_LABELS: dict[Product, str] = {
     Product.PROFILE_PORTRAIT: "портрета по карте",
 }
 
+# Значок берётся от продукта, а не общий календарь: 📅 тащит за собой дедлайн,
+# а дата рождения — точка на небе, а не срок.
+_PRODUCT_EMOJI: dict[Product, str] = {
+    Product.NATAL_REPORT: "🌌",
+    Product.COMPATIBILITY: "💕",
+    Product.ASK_ANSWER: "✨",
+    Product.DAILY_PREDICTION: "🔮",
+    Product.PROFILE_PORTRAIT: "🪐",
+}
+
+# Формат-аббревиатура ДД.ММ.ГГГГ — артефакт формы ввода: пример показывает и
+# порядок, и разделитель, и четырёхзначный год, а <code> копируется одним тапом.
 _ASK_DATE = (
-    "📅 Для {what} нужна дата рождения.\n\n"
-    "Напиши её в формате <b>ДД.ММ.ГГГГ</b> — например <code>15.03.1990</code>"
+    "{emoji} Для {what} мне нужна дата рождения.\n\n"
+    "Напиши её цифрами — например <code>15.03.1990</code>"
 )
 
 def missing_data_text(product: Product, missing: tuple[BirthField, ...]) -> str:
     """Что сказать человеку, у которого не хватает данных."""
     labels = [_FIELD_LABELS[field] for field in missing]
     if len(labels) == 1:
-        what = labels[0]
-    else:
-        what = ", ".join(labels[:-1]) + " и " + labels[-1]
-    return f"✨ Для {_PRODUCT_LABELS[product]} нужна {what}."
+        return f"{_PRODUCT_EMOJI[product]} Для {_PRODUCT_LABELS[product]} мне нужна {labels[0]}."
+    # «дата рождения, время рождения и место рождения» — три раза одно слово.
+    # Оставляем его только в конце: «дата, время и место рождения».
+    short = [label.removesuffix(" рождения") for label in labels[:-1]]
+    what = ", ".join(short) + " и " + labels[-1]
+    return f"{_PRODUCT_EMOJI[product]} Для {_PRODUCT_LABELS[product]} мне нужны {what}."
 
 
 async def ensure_birth_data(
@@ -130,7 +145,10 @@ async def _ask_next(
     if missing[0] is BirthField.DATE:
         await state.set_state(BirthDataStates.date)
         await message.answer(
-            _ASK_DATE.format(what=_PRODUCT_LABELS[product]),
+            _ASK_DATE.format(
+                emoji=_PRODUCT_EMOJI[product],
+                what=_PRODUCT_LABELS[product],
+            ),
             parse_mode="HTML",
         )
         return True
@@ -139,7 +157,11 @@ async def _ask_next(
     # «не нашла свой город». Дублировать его здесь нельзя.
     from astra.telegram.handlers.places import start_own_birth_place_step
 
-    await start_own_birth_place_step(message, state)
+    await start_own_birth_place_step(
+        message,
+        state,
+        gender=normalize_gender(profile.gender if profile else None),
+    )
     return True
 
 

@@ -43,7 +43,7 @@ async def receive_ticket(message: Message, state: FSMContext, session: AsyncSess
         from astra.telegram.keyboards import support_writing_keyboard
 
         await message.answer(
-            "Напишите, пожалуйста, что случилось — обычным текстом 💜",
+            "Напиши, что случилось — обычным текстом 💜",
             reply_markup=support_writing_keyboard(),
         )
         return

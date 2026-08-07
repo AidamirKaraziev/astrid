@@ -26,6 +26,7 @@ from astra.telegram.states import (
     ProfileStates,
 )
 from astra.users import crud as users_crud
+from astra.users.gender import GENDER_FEMALE, GENDER_MALE, Gender, normalize_gender
 from astra.telegram.keyboards_places import (
     PAGE_SIZE,
     REGION_STEP_FROM,
@@ -109,14 +110,39 @@ NOTIFICATION_PLACE_TITLE = (
     "<i>Для бесплатных предсказаний в 09:00 по твоему времени</i>"
 )
 
-# Заголовок шага, куда человека надо вернуть после рассказа о нехватке места.
+# Запасной заголовок шага: сюда попадают карточка для оператора и возврат из
+# рассказа о нехватке места, где пол взять неоткуда. Формы без рода — не
+# «родился(ась)»: скобки и слэш — это бланк, а не речь.
 _STEP_TITLES = {
-    "birth": "📍 Где ты родилась?",
-    "compatibility": "📍 Где родился(ась) этот человек?",
-    "people": "📍 Где родился(ась) этот человек?",
-    "natal_new": "📍 Где родился(ась) этот человек?",
+    "birth": "📍 Где твоё место рождения?",
+    "compatibility": "📍 Где место рождения этого человека?",
+    "people": "📍 Где место рождения этого человека?",
+    "natal_new": "📍 Где место рождения этого человека?",
     "notification": NOTIFICATION_PLACE_TITLE,
 }
+
+# Заголовок, который уже показали человеку: возврат к шагу должен повторить его
+# слово в слово, иначе род поедет.
+_PLACE_TITLE_KEY = "place_title"
+
+
+def birth_place_question(gender: Gender | None, who: str | None = None) -> str:
+    """Вопрос про место рождения в роде того, о ком спрашиваем.
+
+    `who` — имя или подпись человека; None — спрашиваем про самого собеседника.
+    Пол не задан — берём формулировку, в которой рода нет вовсе.
+    """
+    if who is None:
+        if gender == GENDER_FEMALE:
+            return "📍 Где ты родилась?"
+        if gender == GENDER_MALE:
+            return "📍 Где ты родился?"
+        return "📍 Где твоё место рождения?"
+    if gender == GENDER_FEMALE:
+        return f"📍 Где родилась {who}?"
+    if gender == GENDER_MALE:
+        return f"📍 Где родился {who}?"
+    return "📍 Где место рождения этого человека?"
 
 
 async def _ensure_places_ready(session: AsyncSession) -> bool:
@@ -149,15 +175,21 @@ async def send_place_step_prompt(message: Message, *, title: str) -> None:
     )
 
 
-async def start_own_birth_place_step(message: Message, state: FSMContext) -> None:
+async def start_own_birth_place_step(
+    message: Message,
+    state: FSMContext,
+    *,
+    gender: Gender | None = None,
+) -> None:
     """Место рождения самого пользователя — спрашивается посреди продукта.
 
     Раньше этот шаг был частью онбординга; теперь в него попадают из разбора
     или совместимости, когда в профиле места не оказалось.
     """
+    title = birth_place_question(gender)
     await state.set_state(BirthDataStates.place_query)
-    await state.update_data(place_context="birth")
-    await send_place_step_prompt(message, title="📍 Где ты родилась?")
+    await state.update_data(place_context="birth", **{_PLACE_TITLE_KEY: title})
+    await send_place_step_prompt(message, title=title)
 
 
 async def start_compatibility_birth_place_step(
@@ -166,10 +198,20 @@ async def start_compatibility_birth_place_step(
     *,
     collecting: str,
 ) -> None:
+    # Пол этого человека уже спросили шагом раньше — берём его из состояния,
+    # а не гадаем. Подписи в именительном падеже: они подставляются в «Где
+    # родился …», где родительный сломал бы фразу.
+    data = await state.get_data()
+    gender = normalize_gender(data.get(f"{collecting}_gender"))
+    label = "первый человек" if collecting == "person_a" else "партнёр"
+    title = birth_place_question(gender, who=label)
     await state.set_state(CompatibilityStates.birth_place_query)
-    await state.update_data(place_context="compatibility", collecting=collecting)
-    label = "первого человека" if collecting == "person_a" else "партнёра"
-    await send_place_step_prompt(message, title=f"📍 Где родился(ась) {label}?")
+    await state.update_data(
+        place_context="compatibility",
+        collecting=collecting,
+        **{_PLACE_TITLE_KEY: title},
+    )
+    await send_place_step_prompt(message, title=title)
 
 
 async def start_people_birth_place_step(
@@ -177,16 +219,21 @@ async def start_people_birth_place_step(
     state: FSMContext,
     *,
     label: str,
+    gender: Gender | None = None,
 ) -> None:
+    title = birth_place_question(gender, who=label)
     await state.set_state(PeopleStates.edit_birth_place_query)
-    await state.update_data(place_context="people")
-    await send_place_step_prompt(message, title=f"📍 Где родился(ась) {label}?")
+    await state.update_data(place_context="people", **{_PLACE_TITLE_KEY: title})
+    await send_place_step_prompt(message, title=title)
 
 
 async def start_natal_new_birth_place_step(message: Message, state: FSMContext) -> None:
+    data = await state.get_data()
+    gender = normalize_gender(data.get("natal_new_gender"))
+    title = birth_place_question(gender, who=str(data.get("natal_new_name") or "").strip() or None)
     await state.set_state(NatalStates.new_birth_place_query)
-    await state.update_data(place_context="natal_new")
-    await send_place_step_prompt(message, title="📍 Где родился(ась) этот человек?")
+    await state.update_data(place_context="natal_new", **{_PLACE_TITLE_KEY: title})
+    await send_place_step_prompt(message, title=title)
 
 
 async def start_profile_notification_place_step(message: Message, state: FSMContext) -> None:
@@ -429,9 +476,13 @@ async def _restart_place_step(message: Message, state: FSMContext) -> None:
     """
     data = await state.get_data()
     context_key = str(data.get("place_context") or "birth")
+    title = str(data.get(_PLACE_TITLE_KEY) or "").strip()
     await state.update_data(place_regions=None, place_region=None, place_offset=0)
     await _keep_place_state(state, context_key)
-    await send_place_step_prompt(message, title=_STEP_TITLES.get(context_key, "📍 Где это место?"))
+    await send_place_step_prompt(
+        message,
+        title=title or _STEP_TITLES.get(context_key, "📍 Где это место?"),
+    )
 
 
 @router.callback_query(F.data == "place:retry")
@@ -601,7 +652,7 @@ async def _save_own_birth_place(
 
     user = await users_crud.get_user_by_telegram_id(session, actor_telegram_id)
     if user is None or user.profile is None:
-        await message.answer("Сначала: /start")
+        await message.answer("Сначала давай познакомимся — жми /start ✨")
         return
 
     updates: dict[str, object] = {
@@ -630,7 +681,7 @@ async def _save_profile_notification_place(
 ) -> None:
     user = await users_crud.get_user_by_telegram_id(session, actor_telegram_id)
     if user is None or user.profile is None:
-        await message.answer("Сначала: /start")
+        await message.answer("Сначала давай познакомимся — жми /start ✨")
         return
 
     place = await get_place_read(session, place_id)
@@ -730,7 +781,7 @@ async def _apply_place_selection(
         )
         return
 
-    await message.answer("Что-то пошло не так. Нажми /start")
+    await message.answer("Что-то сбилось. Начнём заново — жми /start")
 
 
 @router.callback_query(F.data.startswith("place:pick:"))

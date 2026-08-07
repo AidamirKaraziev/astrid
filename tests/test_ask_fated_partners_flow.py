@@ -128,7 +128,7 @@ async def test_without_birth_date_asks_it_right_here() -> None:
 
     asked = callback.message.answer.await_args.args[0]
     assert "дата рождения" in asked
-    assert "ДД.ММ.ГГГГ" in asked
+    assert "15.03.1990" in asked  # пример вместо формата-аббревиатуры
 
     data = await state.get_data()
     assert data[RETURN_PRODUCT_KEY] == Product.ASK_ANSWER.value

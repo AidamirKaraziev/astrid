@@ -59,11 +59,13 @@ router = Router(name="wheel")
 
 _INTRO_TEXT = (
     "🎡 <b>Колесо фортуны</b>\n\n"
-    "Одно бесплатное вращение в день — приз выпадает всегда.\n"
-    "Бесплатный приз сгорает в полночь, купленный ждёт сколько угодно."
+    "Одно вращение в день бесплатно — приз выпадает всегда.\n"
+    "Приз забирай до полуночи, купленный ждёт сколько угодно."
 )
-_FREE_READY_LINE = "\n\nСегодня бесплатное вращение ещё не использовано ✨"
-_FREE_USED_LINE = "\n\nБесплатное вращение вернётся завтра 🌙"
+# Строка ведёт к кнопке, поэтому выделена. У «потрачено» выделения нет:
+# она объясняет отсутствие кнопки, а не зовёт нажать.
+_FREE_READY_LINE = "\n\n<b>Сегодня вращение ещё твоё ✨</b>"
+_FREE_USED_LINE = "\n\nСегодня бесплатное уже потрачено — новое завтра 🌙"
 _ALREADY_SPUN_TEXT = "Сегодня колесо уже крутилось — возвращайся завтра 🌙"
 _POOL_EMPTY_TEXT = "Колесо сейчас на паузе — призы вот-вот появятся ✨"
 _NO_PRIZES_TEXT = "Активных призов пока нет — крути колесо ✨"
@@ -80,7 +82,7 @@ async def _require_user(message: Message, session: AsyncSession):
         return None
     user = await users_crud.get_user_by_telegram_id(session, message.from_user.id)
     if user is None or not user.onboarding_completed or user.profile is None:
-        await message.answer("Сначала пройди регистрацию: /start")
+        await message.answer("Сначала давай познакомимся — жми /start ✨")
         return None
     return user
 
@@ -283,7 +285,7 @@ async def cb_spin_paid(callback: CallbackQuery, session: AsyncSession) -> None:
 async def wheel_pre_checkout(query: PreCheckoutQuery, session: AsyncSession) -> None:
     user = await users_crud.get_user_by_telegram_id(session, query.from_user.id)
     if user is None or user.profile is None:
-        await query.answer(ok=False, error_message="Сначала пройди регистрацию: /start")
+        await query.answer(ok=False, error_message="Сначала давай познакомимся — жми /start ✨")
         log.warning(Event.PAYMENT_PRE_CHECKOUT_REJECTED, reason="wheel_user_missing")
         return
     if not await wheel_crud.list_active_prizes(session):
@@ -394,7 +396,7 @@ async def cb_activate_prize(
         return
     user = await users_crud.get_user_by_telegram_id(session, callback.from_user.id)
     if user is None or not user.onboarding_completed or user.profile is None:
-        await callback.message.answer("Сначала пройди регистрацию: /start")
+        await callback.message.answer("Сначала давай познакомимся — жми /start ✨")
         return
     try:
         win_id = UUID(callback.data.removeprefix(CB_WHEEL_ACTIVATE_PREFIX))

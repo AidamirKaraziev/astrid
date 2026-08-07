@@ -299,8 +299,8 @@ async def cb_ask_gate_time(callback: CallbackQuery, state: FSMContext) -> None:
     msg = callback.message
     if isinstance(msg, Message):
         await msg.answer(
-            "Введи время рождения в формате ЧЧ:ММ (например 14:30) — "
-            "и возвращайся к вопросу, посчитаю точнее ✨",
+            "🕐 Напиши время рождения — например <code>14:30</code>\n"
+            "Возвращайся к вопросу, посчитаю точнее ✨",
         )
 
 

@@ -145,4 +145,6 @@ async def test_unknown_without_profile_asks_for_start() -> None:
         await cb_birth_time_unknown(callback, AsyncMock(), AsyncMock())
 
     callback.message.answer.assert_not_awaited()
-    callback.answer.assert_awaited_once_with("Сначала: /start", show_alert=True)
+    callback.answer.assert_awaited_once_with(
+        "Сначала давай познакомимся — жми /start ✨", show_alert=True,
+    )

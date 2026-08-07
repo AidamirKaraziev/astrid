@@ -104,7 +104,7 @@ async def _require_user(message: Message, session: AsyncSession):
         return None
     user = await users_crud.get_user_by_telegram_id(session, message.from_user.id)
     if user is None or not user.onboarding_completed or user.profile is None:
-        await message.answer("Сначала пройди регистрацию: /start")
+        await message.answer("Сначала давай познакомимся — жми /start ✨")
         return None
     return user
 
@@ -244,15 +244,15 @@ async def _prompt_next_person_step(
     if f"{collecting}_birth_date" not in data:
         await state.set_state(CompatibilityStates.collect_birth_date)
         await message.answer(
-            f"Дата рождения {label} (ДД.ММ.ГГГГ):",
+            f"📅 Дата рождения {label} — например <code>15.03.1990</code>",
             reply_markup=ReplyKeyboardRemove(),
         )
         return
     if f"{collecting}_birth_time" not in data:
         await state.set_state(CompatibilityStates.collect_birth_time)
         await message.answer(
-            f"Время рождения {label} (ЧЧ:ММ).\n"
-            "Если не знаешь — нажми «⏭ Пропустить».",
+            f"🕐 Время рождения {label} — например <code>14:30</code>\n"
+            "Не знаешь — нажми «⏭ Пропустить».",
             reply_markup=skip_keyboard(),
         )
         return
@@ -308,9 +308,9 @@ async def cb_compat_self_first(
         state,
         session,
         actor_telegram_id=callback.from_user.id,
-        heading="Данные о <b>тебе</b> возьму из профиля.\n\n👥 Кто <b>партнёр</b>?",
+        heading="Тебя я уже знаю — возьму из профиля.\n\n👥 Кто <b>партнёр</b>?",
         name_prompt=(
-            "Данные о <b>тебе</b> возьму из профиля.\n\n"
+            "Тебя я уже знаю — возьму из профиля.\n\n"
             "Как зовут <b>партнёра</b>?"
         ),
     )
@@ -371,7 +371,7 @@ async def cb_pick_person_profile(
         return
     user = await users_crud.get_user_by_telegram_id(session, callback.from_user.id)
     if user is None:
-        await callback.answer("Сначала: /start", show_alert=True)
+        await callback.answer("Сначала давай познакомимся — жми /start ✨", show_alert=True)
         return
     profile = await compatibility_crud.get_natal_profile_by_id(
         session,
@@ -446,7 +446,7 @@ async def collect_birth_date(message: Message, state: FSMContext, session: Async
         return
     parsed = parse_birth_date(message.text or "")
     if parsed is None:
-        await message.answer("Не разобрал дату. Формат: ДД.ММ.ГГГГ")
+        await message.answer("Не разобрала дату. Напиши цифрами — например 15.03.1990")
         return
     data = await state.get_data()
     collecting = data.get("collecting", COLLECTING_PERSON_B)
@@ -474,7 +474,7 @@ async def collect_birth_time(message: Message, state: FSMContext, session: Async
         return
     parsed = parse_birth_time(message.text or "")
     if parsed is None:
-        await message.answer("Не разобрал время. Формат: 14:30 или «⏭ Пропустить».")
+        await message.answer("Не разобрала время. Напиши как 14:30 — или нажми «⏭ Пропустить».")
         return
     data = await state.get_data()
     collecting = data.get("collecting", COLLECTING_PERSON_B)
@@ -575,7 +575,7 @@ async def cb_compat_confirm(
         return
     user = await users_crud.get_user_by_telegram_id(session, callback.from_user.id)
     if user is None or user.profile is None:
-        await callback.answer("Сначала: /start", show_alert=True)
+        await callback.answer("Сначала давай познакомимся — жми /start ✨", show_alert=True)
         return
 
     data = await state.get_data()
@@ -697,7 +697,7 @@ async def cb_profile_reports(callback: CallbackQuery, session: AsyncSession) -> 
         return
     user = await users_crud.get_user_by_telegram_id(session, callback.from_user.id)
     if user is None:
-        await callback.answer("Сначала: /start", show_alert=True)
+        await callback.answer("Сначала давай познакомимся — жми /start ✨", show_alert=True)
         return
 
     reports = await compatibility_crud.list_compatibility_reports(session, user.id, limit=15)

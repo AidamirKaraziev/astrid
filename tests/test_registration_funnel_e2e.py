@@ -436,7 +436,7 @@ async def test_invalid_birth_date_reprompts_and_flow_continues(
     await bot_harness.click(CB_NATAL_SUBJECT_SELF, telegram_id=telegram_id)
 
     calls = await bot_harness.send("вчера", telegram_id=telegram_id)
-    assert_said(calls, "Не могу разобрать дату")
+    assert_said(calls, "Не разобрала дату")
 
     calls = await bot_harness.send(BIRTH_DATE_INPUT, telegram_id=telegram_id)
     assert_said(calls, "Где ты родилась")

@@ -51,12 +51,12 @@ async def complete_short_onboarding(
     fsm_data = await state.get_data()
     reg = parse_registration_fsm(fsm_data)
     if reg is None:
-        await message.answer("Что-то пошло не так. Нажми /start", reply_markup=ReplyKeyboardRemove())
+        await message.answer("Что-то сбилось. Начнём заново — жми /start", reply_markup=ReplyKeyboardRemove())
         return
 
     user = await users_crud.get_user_by_id(session, reg.user_id)
     if user is None:
-        await message.answer("Что-то пошло не так. Нажми /start", reply_markup=ReplyKeyboardRemove())
+        await message.answer("Что-то сбилось. Начнём заново — жми /start", reply_markup=ReplyKeyboardRemove())
         return
 
     await run_registration_phase(session, user, reg)

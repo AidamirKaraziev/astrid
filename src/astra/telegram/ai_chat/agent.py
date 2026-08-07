@@ -28,7 +28,7 @@ def _fallback(reason: str) -> AstridReply:
     """Если LLM недоступен или вернул мусор — не падаем, отвечаем по-человечески."""
     log.warning("ai_chat.fallback", reason=reason)
     return AstridReply(
-        reply="Немного потерялась в звёздах ✨ Повтори, пожалуйста, что ты хочешь?",
+        reply="Немного потерялась в звёздах ✨ Повтори, что ты хочешь?",
         intent=Intent.smalltalk,
         ready_to_route=False,
     )

@@ -29,15 +29,15 @@ async def collect_birth_date(
         return
     user = await users_crud.get_user_by_telegram_id(session, message.from_user.id)
     if user is None or user.profile is None:
-        await message.answer("Сначала: /start")
+        await message.answer("Сначала давай познакомимся — жми /start ✨")
         await state.set_state(None)
         return
 
     parsed = parse_birth_date(message.text or "")
     if parsed is None:
         await message.answer(
-            "Не могу разобрать дату. Попробуй ещё раз в формате "
-            "<b>ДД.ММ.ГГГГ</b> — например <code>15.03.1990</code>",
+            "Не разобрала дату. Попробуй ещё раз цифрами — "
+            "например <code>15.03.1990</code>",
         )
         return
 
