@@ -1,11 +1,15 @@
 ---
 tags: [decision, ai-chat, llm, telegram]
 date: 2026-07-09
-status: prototype
-branch: feature/ai-chat-astrid
+status: прототип на main, выключен флагом
 ---
 
 # AI-чат Astrid: свободный текст вместо кнопок
+
+> **Статус 2026-08-07.** Код в `src/astra/telegram/ai_chat/` живёт на `main`
+> (ветка `feature/ai-chat-astrid` слита и удалена), но флаг
+> `ai_chat_enabled` в `core/config.py` по умолчанию `False` — в проде раздел
+> не включён. Этапы 1–5 ниже не сделаны.
 
 ## Идея
 

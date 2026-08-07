@@ -82,12 +82,13 @@ class TestMarkupCheck:
         problems = check("**жирный**")
         assert any("markdown" in problem for problem in problems)
 
-    def test_interface_emoji_rejected(self):
-        problems = check("Готово ✅")
-        assert any("служебные значки" in problem for problem in problems)
+    def test_emoji_with_foreign_context_rejected(self):
+        problems = check("Настройки ⚙️ обновились")
+        assert any("чужой контекст" in problem for problem in problems)
 
-    def test_palette_emoji_allowed(self):
+    def test_emoji_picked_by_meaning_allowed(self):
         assert check("Твоя карта дня 🔮 уже ждёт ✨") == ()
+        assert check("Готово ✅ — подарок 🎁 ждёт тебя") == ()
 
     def test_empty_message_caught(self):
         assert any("пустое" in problem for problem in check("   "))
@@ -115,9 +116,12 @@ class TestPrompt:
         assert "WRITE IN RUSSIAN" in SYSTEM_PROMPT
         assert "Astrid" in SYSTEM_PROMPT
 
-    def test_forbids_interface_emoji(self):
-        for emoji in ("🔁", "⚙️", "➡️"):
+    def test_forbids_emoji_with_foreign_context(self):
+        """Запрещено то, что тащит админку, плеер и рекламу, — не значки как класс."""
+        for emoji in ("🔁", "⚙️", "📢"):
             assert emoji in FORBIDDEN_EMOJI
+        for emoji in ("➡️", "✅", "🎁"):
+            assert emoji not in FORBIDDEN_EMOJI
         assert FORBIDDEN_EMOJI in SYSTEM_PROMPT
 
     def test_limits_length_and_markup(self):

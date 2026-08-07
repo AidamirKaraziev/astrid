@@ -46,7 +46,9 @@ from astra.telegram.states import NatalStates
 from astra.astro.birth_time import wall_clock_at
 from astra.telegram.utils import parse_birth_date, parse_birth_time
 from astra.usage import ACTION_NATAL_REPORT, UsageKind, record_usage
+from astra.telegram.birth_data_gate import ensure_birth_data
 from astra.users import crud as users_crud
+from astra.users.birth_data import Product
 from astra.users.gender import GENDER_FEMALE, GENDER_MALE
 
 log = get_logger(__name__)
@@ -199,8 +201,18 @@ async def _load_subject_profile(
     return profile
 
 
-async def _begin_self_flow(message: Message, state: FSMContext, user) -> None:  # noqa: ANN001
-    """Разбор для самого пользователя: спросить время, если его нет, иначе подтверждение."""
+async def begin_self_natal_flow(message: Message, state: FSMContext, user) -> None:  # noqa: ANN001
+    """Разбор для самого пользователя: спросить время, если его нет, иначе подтверждение.
+
+    Проверка данных стоит именно здесь, а не на входе в раздел: разбор для
+    нового человека берёт его данные с нуля и в профиль владельца не смотрит
+    вовсе — закрывать ему дверь из-за пустого профиля было бы неверно.
+
+    Публичная функция: в неё же возвращается человек, у которого данных не
+    хватило и который их только что назвал.
+    """
+    if not await ensure_birth_data(message, Product.NATAL_REPORT, user.profile, state=state):
+        return
     await state.update_data(**{_SUBJECT_PROFILE_KEY: None})
     if user.profile.birth_time is None:
         await state.set_state(NatalStates.collect_birth_time)
@@ -285,7 +297,7 @@ async def cb_natal_subject_self(
     user = await users_crud.get_user_by_telegram_id(session, callback.from_user.id)
     if user is None or user.profile is None:
         return
-    await _begin_self_flow(callback.message, state, user)
+    await begin_self_natal_flow(callback.message, state, user)
 
 
 @router.callback_query(F.data.startswith(CB_NATAL_SUBJECT_PICK_PREFIX))

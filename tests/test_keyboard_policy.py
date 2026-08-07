@@ -14,7 +14,7 @@ from astra.telegram.keyboard_policy import (
     resolve_keyboard_zone,
 )
 from astra.telegram.keyboards import main_menu_keyboard, tarot_keyboard
-from astra.telegram.states import OnboardingStates, ProfileStates
+from astra.telegram.states import BirthDataStates, OnboardingStates, ProfileStates
 
 
 def test_main_menu_buttons_resolve_to_main_zone() -> None:
@@ -42,11 +42,14 @@ def test_free_text_refreshes_main_menu() -> None:
 
 
 def test_onboarding_fsm_suppresses_keyboard() -> None:
+    assert is_fsm_keyboard_suppressed(OnboardingStates.welcome.state)
     assert is_fsm_keyboard_suppressed(OnboardingStates.gender.state)
-    assert is_fsm_keyboard_suppressed(OnboardingStates.birth_date.state)
+    # Добор данных посреди продукта — то же правило: главное меню под рукой
+    # уводит человека из сценария одним касанием.
+    assert is_fsm_keyboard_suppressed(BirthDataStates.date.state)
     zone = resolve_keyboard_zone(
         incoming_text=BTN_PREDICTION_TODAY_LEGACY,
-        fsm_state=OnboardingStates.birth_date.state,
+        fsm_state=BirthDataStates.date.state,
     )
     assert zone is None
 

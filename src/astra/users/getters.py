@@ -9,6 +9,10 @@ from astra.users.schemas import ProfileRead, UserMeRead, UserRead
 
 
 def calculate_profile_accuracy(profile: Profile) -> tuple[int, str]:
+    if profile.birth_date is None:
+        # Без даты рождения считать нечего вовсе — 33% здесь означали бы,
+        # что карта построена хоть как-то, а её нет.
+        return 0, "Добавь дату рождения — без неё карту не посчитать."
     has_time = profile.birth_time is not None
     has_place = profile.birth_place is not None and profile.birth_place.strip() != ""
 

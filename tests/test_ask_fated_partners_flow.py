@@ -27,7 +27,9 @@ from astra.telegram.button_texts import (
 CALIB_YES = f"{CB_ASK_CALIB_PREFIX}{'love_fated_count'}:yes"
 CALIB_NO = f"{CB_ASK_CALIB_PREFIX}{'love_fated_count'}:no"
 from astra.ask.products import get_product
+from astra.telegram.birth_data_gate import RETURN_PAYLOAD_KEY, RETURN_PRODUCT_KEY
 from astra.telegram.handlers import ask_astrid
+from astra.users.birth_data import Product
 from astra.telegram import ask_text as A
 
 QUESTION = "love_fated_count"
@@ -115,14 +117,22 @@ async def test_with_birth_time_goes_straight_to_status_question() -> None:
 
 
 @pytest.mark.asyncio
-async def test_without_profile_asks_to_fill_it() -> None:
+async def test_without_birth_date_asks_it_right_here() -> None:
+    """Не «заполни профиль», а вопрос на месте — с возвратом к этому же разбору."""
     callback = _callback(f"{CB_ASK_QUESTION_PREFIX}{QUESTION}")
     user_patch, archive_patch = _patch_user(_user(birth_time=None, birth_date=None))
+    state = await _fsm()
 
     with user_patch, archive_patch:
-        await ask_astrid.cb_ask_question(callback, await _fsm(), MagicMock())
+        await ask_astrid.cb_ask_question(callback, state, MagicMock())
 
-    assert callback.message.edit_text.await_args.args[0] == A.ASK_NEED_PROFILE_TEXT
+    asked = callback.message.answer.await_args.args[0]
+    assert "дата рождения" in asked
+    assert "ДД.ММ.ГГГГ" in asked
+
+    data = await state.get_data()
+    assert data[RETURN_PRODUCT_KEY] == Product.ASK_ANSWER.value
+    assert data[RETURN_PAYLOAD_KEY] == QUESTION, "вопрос не запомнен — вернём не туда"
 
 
 @pytest.mark.asyncio

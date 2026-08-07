@@ -15,6 +15,9 @@ from astra.users.gender import Gender, gender_display_label
 
 _SEPARATOR = "──────────────"
 
+_HINT_BIRTH_DATE = (
+    "📅 <i>Дата рождения пока не указана — спрошу её, когда откроешь разбор ✨</i>"
+)
 _HINT_BIRTH_TIME = (
     "🕐 <i>Добавь время рождения в профиле — так я попаду в натал точнее ✨</i>"
 )
@@ -33,7 +36,7 @@ _HINT_GENDER = (
 class _ProfileView(Protocol):
     display_name: str
     gender: Gender | None
-    birth_date: date
+    birth_date: date | None
     birth_time: datetime | None
     birth_place: str | None
     notification_place_id: object | None
@@ -94,6 +97,12 @@ def _format_gender_line(profile: _ProfileView) -> str:
     return label
 
 
+def _format_birth_date_line(profile: _ProfileView) -> str:
+    if profile.birth_date is None:
+        return _HINT_BIRTH_DATE
+    return f"📅 {profile.birth_date.strftime('%d.%m.%Y')}"
+
+
 def _format_birth_time_line(profile: _ProfileView) -> str:
     label = format_birth_time(profile.birth_time)
     return f"🕐 {label}" if label else _HINT_BIRTH_TIME
@@ -124,7 +133,7 @@ def format_profile_card(user: _UserView, profile: _ProfileView) -> str:
         f"👤 <b>{profile.display_name}</b>",
         "",
         _format_gender_line(profile),
-        f"📅 {profile.birth_date.strftime('%d.%m.%Y')}",
+        _format_birth_date_line(profile),
         _format_birth_time_line(profile),
         _format_birth_place_line(profile),
         "",

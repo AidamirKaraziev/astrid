@@ -23,13 +23,17 @@ DEFAULT_TIMEZONE = "Europe/Moscow"
 
 
 class OnboardingRegistrationData(BaseModel):
-    """Данные FSM для завершения регистрации (без города для уведомлений)."""
+    """Данные FSM для завершения регистрации (без города для уведомлений).
+
+    Дата и место рождения необязательны: короткий онбординг их не спрашивает,
+    а тот же путь используется, когда человек дозаполняет данные позже.
+    """
 
     user_id: UUID
     display_name: str = Field(min_length=1, max_length=255)
     gender: Gender | None = None
-    birth_date: date
-    birth_place_id: UUID
+    birth_date: date | None = None
+    birth_place_id: UUID | None = None
     birth_place_display: str = ""
     notification_place_id: UUID | None = None
     notification_place_display: str = ""
@@ -42,20 +46,19 @@ class OnboardingRegistrationData(BaseModel):
         raw_birth_place_id = data.get("birth_place_id")
         raw_display_name = data.get("display_name")
 
-        if not all((raw_user_id, raw_birth_date, raw_birth_place_id, raw_display_name)):
+        # Обязательны только двое: кого регистрируем и как его звать.
+        if not all((raw_user_id, raw_display_name)):
             missing = [
                 key
                 for key, val in (
                     ("user_id", raw_user_id),
-                    ("birth_date", raw_birth_date),
-                    ("birth_place_id", raw_birth_place_id),
                     ("display_name", raw_display_name),
                 )
                 if not val
             ]
             raise ValueError(f"Не хватает данных онбординга: {', '.join(missing)}")
 
-        birth_date = date.fromisoformat(str(raw_birth_date))
+        birth_date = date.fromisoformat(str(raw_birth_date)) if raw_birth_date else None
         display_name = str(raw_display_name).strip()
         if not display_name:
             raise ValueError("display_name пустой")
@@ -75,7 +78,7 @@ class OnboardingRegistrationData(BaseModel):
             display_name=display_name,
             gender=gender,
             birth_date=birth_date,
-            birth_place_id=UUID(str(raw_birth_place_id)),
+            birth_place_id=UUID(str(raw_birth_place_id)) if raw_birth_place_id else None,
             birth_place_display=str(data.get("birth_place_display") or ""),
             notification_place_id=notification_place_id,
             notification_place_display=str(data.get("notification_place_display") or ""),
@@ -123,10 +126,11 @@ async def _resolved_city_and_timezone(
         if notif_place is not None:
             return notif_place.display_name, notif_place.timezone
 
-    birth_place = await get_place_read(session, reg.birth_place_id)
-    if birth_place is not None:
-        city = reg.birth_place_display or birth_place.display_name
-        return city, birth_place.timezone
+    if reg.birth_place_id is not None:
+        birth_place = await get_place_read(session, reg.birth_place_id)
+        if birth_place is not None:
+            city = reg.birth_place_display or birth_place.display_name
+            return city, birth_place.timezone
 
     city = reg.birth_place_display or DEFAULT_CITY_LABEL
     return city, reg.notification_timezone or DEFAULT_TIMEZONE

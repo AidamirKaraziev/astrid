@@ -36,7 +36,7 @@ date: 2026-05-16
 → [[идентификация через telegram_id без fastapi-users в MVP]]
 → [[monolith FastAPI aiogram без RabbitMQ в MVP]]
 → [[scheduler рассылки в том же процессе что API]]
-→ [[MCP servers рекомендации на потом]]
+→ MCP servers (заметка удалена — список не пригодился)
 
 ## Структура репозитория (после сессии)
 

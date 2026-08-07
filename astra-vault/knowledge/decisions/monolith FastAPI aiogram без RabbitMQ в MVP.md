@@ -1,6 +1,7 @@
 ---
 tags: [decision, architecture]
 date: 2026-05-16
+status: частично superseded
 ---
 
 # Monolith FastAPI + aiogram без RabbitMQ в MVP

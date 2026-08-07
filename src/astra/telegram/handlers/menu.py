@@ -291,6 +291,12 @@ async def save_birth_time(message: Message, state: FSMContext, session: AsyncSes
     if parsed is None:
         await message.answer(f"Не разобрал время. Формат: 14:30 — или нажми «{BTN_TIME_UNKNOWN}».")
         return
+    if user.profile.birth_date is None:
+        # Время рождения хранится настенными часами на дату рождения: без
+        # даты его некуда положить.
+        await message.answer("Сначала добавь дату рождения — время привязывается к ней 📅")
+        await state.clear()
+        return
     birth_dt = wall_clock_at(user.profile.birth_date, parsed)
     await users_crud.update_profile(session, user.profile, birth_time=birth_dt)
     await state.clear()

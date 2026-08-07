@@ -15,7 +15,7 @@ from astra.db.session import get_session_factory
 from astra.telegram.activity_middleware import ActivityMiddleware
 from astra.telegram.auto_keyboard_middleware import AutoKeyboardMiddleware
 from astra.telegram.bot_menu import setup_bot_menu
-from astra.telegram.handlers import ask_astrid, catalog, commands, compatibility, day_card, menu, natal, navigation, onboarding, people, places, start, support, support_relay, tarot_daily, tarot_spreads, wheel
+from astra.telegram.handlers import ask_astrid, birth_data, catalog, commands, compatibility, day_card, menu, natal, navigation, onboarding, people, places, start, support, support_relay, tarot_daily, tarot_spreads, wheel
 from astra.telegram.middlewares import DbSessionMiddleware
 
 log = get_logger(__name__)
@@ -80,6 +80,10 @@ async def create_dispatcher(settings: Settings) -> Dispatcher:
     dp.include_router(support.router)  # хаб помощи и FAQ (кнопка «Помощь», callbacks)
     dp.include_router(places.router)
     dp.include_router(onboarding.router)
+    # Добор данных рождения: до продуктовых роутеров, иначе ответ человека
+    # («15.03.1990») попадёт в обработчик того раздела, из которого его
+    # прервали.
+    dp.include_router(birth_data.router)
     # После onboarding (регистрацию не прерываем), но до флоу-роутеров:
     # кнопка колеса и платежи wheel: не должны съедаться чужими FSM-хендлерами.
     dp.include_router(wheel.router)

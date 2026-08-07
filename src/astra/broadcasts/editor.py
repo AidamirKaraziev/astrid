@@ -65,7 +65,7 @@ def check(text: str) -> tuple[str, ...]:
 
     forbidden = [emoji for emoji in FORBIDDEN_EMOJI.split() if emoji in text]
     if forbidden:
-        problems.append(f"служебные значки не в стилистике бота: {' '.join(forbidden)}")
+        problems.append(f"значки тащат чужой контекст: {' '.join(forbidden)}")
 
     if len(text) > MAX_LENGTH * 1.5:
         problems.append(f"длинновато: {len(text)} знаков, читается хуже короткого")

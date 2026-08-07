@@ -23,7 +23,8 @@ class ProfileRead(BaseModel):
 
     display_name: str
     gender: Gender | None = None
-    birth_date: date
+    # Пусто у прошедших короткий онбординг: астроданные добираются позже.
+    birth_date: date | None = None
     birth_time: time | None
     birth_place: str | None
     city: str

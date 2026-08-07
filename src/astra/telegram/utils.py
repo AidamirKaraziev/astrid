@@ -37,3 +37,21 @@ def default_display_name(tg_user: TgUser) -> str:
     if tg_user.username:
         return tg_user.username
     return "друг"
+
+
+# Имя человек вписывает сам, а бот подставляет его в сообщения с HTML-разметкой.
+# Угловые скобки поэтому вырезаются на входе: экранировать пришлось бы в каждом
+# из десятков мест, где имя выводится, и одно забытое сломало бы сообщение.
+_NAME_MAX_LENGTH = 64
+
+
+def clean_display_name(text: str | None) -> str | None:
+    """Имя из сообщения человека. None — прислали не имя.
+
+    Длинное обрезаем, а не отвергаем: человек написал «Меня зовут Анна, но
+    можно Анечка» — лучше сохранить начало, чем требовать переписать.
+    """
+    name = (text or "").replace("<", "").replace(">", "").strip()
+    if not name or name.startswith("/"):
+        return None
+    return name[:_NAME_MAX_LENGTH].strip() or None

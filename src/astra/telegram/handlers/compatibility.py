@@ -81,7 +81,9 @@ from astra.telegram.keyboards_people import person_pick_keyboard
 from astra.telegram.states import CompatibilityStates
 from astra.telegram.utils import parse_birth_date, parse_birth_time
 from astra.usage import ACTION_COMPATIBILITY, UsageKind, record_usage
+from astra.telegram.birth_data_gate import ensure_birth_data
 from astra.users import crud as users_crud
+from astra.users.birth_data import Product
 from astra.users.gender import GENDER_FEMALE, GENDER_MALE
 
 log = get_logger(__name__)
@@ -111,6 +113,8 @@ async def _require_user(message: Message, session: AsyncSession):
 async def start_compatibility(message: Message, state: FSMContext, session: AsyncSession) -> None:
     user = await _require_user(message, session)
     if user is None:
+        return
+    if not await ensure_birth_data(message, Product.COMPATIBILITY, user.profile, state=state):
         return
     await state.clear()
     await state.set_state(CompatibilityStates.choose_context)

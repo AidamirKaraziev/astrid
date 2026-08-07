@@ -19,12 +19,39 @@ from astra.telegram.keyboards import main_menu_keyboard
 from astra.telegram.keyboards import gender_keyboard
 from astra.telegram.profile_gender_prompt import prompt_gender_if_missing
 from astra.telegram.states import OnboardingStates
-from astra.telegram.utils import default_display_name, extract_referral_code
+from astra.telegram.utils import (
+    clean_display_name,
+    default_display_name,
+    extract_referral_code,
+)
 from astra.users import crud as users_crud
 
 router = Router(name="start")
 
 WELCOME_VIDEO_PATH = Path(__file__).resolve().parent.parent / "static" / "welcome.mp4"
+
+# Первый экран: под видео с живым лицом говорить голосом сервиса нельзя, поэтому
+# здоровается сама Астрид и сразу задаёт единственный вопрос. Обещание «без
+# туманных пророчеств» здесь не украшение: люди приходят за поддержкой, но
+# стесняются «гороскопчиков», и это снимает возражение до того, как оно
+# возникнет. Три пункта вынесены в столбик с жирными зачинами: первый экран
+# читают вертикально, по выделенным словам, а не построчно.
+WELCOME_TEXT = (
+    "✨ Привет! Я <b>Астрид</b> — твой астролог.\n\n"
+    "Каждый день смотрю, что происходит в небе, и рассказываю по-человечески:\n\n"
+    "💫 <b>Где попутный ветер</b>\n"
+    "за что сегодня стоит взяться\n\n"
+    "🌀 <b>Где лучше притормозить</b>\n"
+    "что спокойно подождёт до завтра\n\n"
+    "💜 <b>Без туманных пророчеств</b>\n"
+    "живым языком, а не «гороскопчик»\n\n"
+    "<b>Давай знакомиться — как мне к тебе обращаться?</b>"
+)
+
+
+def call_me_button_text(default_name: str) -> str:
+    """Кнопка подставляет имя из Telegram: ответить можно одним касанием."""
+    return f"Зови меня {default_name}"
 _WELCOME_VIDEO_FILE_ID_KEY = "astra:telegram:welcome_video_file_id"
 
 
@@ -94,15 +121,13 @@ async def cmd_start(
         default_name=default_display_name(tg),
         user_id=str(user.id),
     )
+
+    default_name = default_display_name(tg)
     begin_kb = ReplyKeyboardMarkup(
-        keyboard=[[KeyboardButton(text="Привет, Астрид 🫶🏻")]],  # TODO проверить на андроиде цвет
+        keyboard=[[KeyboardButton(text=call_me_button_text(default_name))]],
         resize_keyboard=True,
     )
-    welcome_text = (
-        "✨ <b>Добро пожаловать в Astra</b>\n\n"
-        "Магическая поддержка каждый день — мягко, без навязчивости.\n"
-        "Персональные предсказания, которые помогают лучше чувствовать свой путь."
-    )
+    welcome_text = WELCOME_TEXT
     if is_new_user and WELCOME_VIDEO_PATH.exists():
         cached_file_id = await _get_cached_welcome_video_file_id()
         video = cached_file_id or FSInputFile(WELCOME_VIDEO_PATH)
@@ -122,13 +147,20 @@ async def cmd_start(
         )
 
 
-@router.message(F.text == "Привет, Астрид 🫶🏻")
+@router.message(OnboardingStates.welcome)
 @router.message(Command("continue"))
-async def cmd_continue(
+async def onboarding_name(
     message: Message,
     state: FSMContext,
     session: AsyncSession,
 ) -> None:
+    """Как обращаться: кнопка с именем из Telegram или своё, написанное текстом.
+
+    Приветствие и вопрос об имени живут на одном экране, поэтому здесь ловится
+    любое сообщение: нажатие кнопки — это тоже текст, просто заранее известный.
+    Отдельного шага «тап, чтобы продолжить» больше нет — нажатие сразу что-то
+    значит.
+    """
     current = await state.get_state()
     if current != OnboardingStates.welcome.state:
         return
@@ -137,13 +169,20 @@ async def cmd_continue(
         user = await users_crud.get_user_by_telegram_id(session, message.from_user.id)
         if user is not None:
             await state.update_data(user_id=str(user.id))
-    display_name = data.get("default_name", "друг")
+
+    default_name = str(data.get("default_name") or "друг")
+    text = (message.text or "").strip()
+    if text == call_me_button_text(default_name):
+        display_name = default_name
+    else:
+        display_name = clean_display_name(text) or default_name
+
     await state.update_data(display_name=display_name)
     await state.set_state(OnboardingStates.gender)
     await message.answer(
-        f"Сохранила тебя как <b>{display_name}</b>. "
-        f"Изменить имя можно в разделе «{BTN_PROFILE}».\n\n"
-        "Укажи свой пол — так точнее будут формулировки в разборе.",
+        f"Рада знакомству, <b>{display_name}</b> ✨\n"
+        f"Если что — имя можно поменять в разделе «{BTN_PROFILE}».\n\n"
+        "И последнее: укажи свой пол — от него зависят формулировки в разборах.",
         parse_mode="HTML",
         reply_markup=gender_keyboard(),
     )

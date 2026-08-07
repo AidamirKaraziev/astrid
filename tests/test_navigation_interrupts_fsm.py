@@ -20,7 +20,12 @@ from astra.telegram.handlers.navigation import (
     nav_legacy_button,
     nav_tarot_menu,
 )
-from astra.telegram.states import CompatibilityStates, OnboardingStates, TarotStates
+from astra.telegram.states import (
+    BirthDataStates,
+    CompatibilityStates,
+    OnboardingStates,
+    TarotStates,
+)
 
 
 async def _fsm() -> FSMContext:
@@ -40,9 +45,12 @@ async def test_router_filter_matches_flow_states_but_not_onboarding() -> None:
     obj = MagicMock()
     assert await state_filter(obj, raw_state=CompatibilityStates.collect_name.state)
     assert await state_filter(obj, raw_state=TarotStates.waiting_question.state)
-    # без активного состояния и в онбординге роутер молчит
+    # Добор данных прерывать можно: человек уже зарегистрирован.
+    assert await state_filter(obj, raw_state=BirthDataStates.date.state)
+    # без активного состояния и в онбординге роутер молчит: там регистрация,
+    # и уйти из неё на середине человеку предлагать нельзя
     assert not await state_filter(obj, raw_state=None)
-    assert not await state_filter(obj, raw_state=OnboardingStates.birth_date.state)
+    assert not await state_filter(obj, raw_state=OnboardingStates.gender.state)
 
 
 @pytest.mark.asyncio

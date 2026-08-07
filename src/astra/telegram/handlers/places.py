@@ -16,13 +16,11 @@ from astra.core.observability import Event, get_logger
 from astra.db.session import get_session_factory
 from astra.support import crud as support_crud
 from astra.support.service import build_missing_place_card
-from astra.services.greeting_service import run_greeting_phase
-from astra.services.onboarding_service import parse_registration_fsm, run_registration_phase
 from astra.telegram.keyboards import profile_menu_keyboard
 from astra.telegram.states import (
     CompatibilityStates,
     NatalStates,
-    OnboardingStates,
+    BirthDataStates,
     PeopleStates,
     PlaceStates,
     ProfileStates,
@@ -42,7 +40,7 @@ log = get_logger(__name__)
 router = Router(name="places")
 
 PLACE_STATES = (
-    OnboardingStates.birth_place_query,
+    BirthDataStates.place_query,
     ProfileStates.edit_notification_place_query,
     CompatibilityStates.birth_place_query,
     PeopleStates.edit_birth_place_query,
@@ -128,7 +126,7 @@ async def _ensure_places_ready(session: AsyncSession) -> bool:
 
 
 def _context_key_for_state(state: str | None) -> str:
-    if state == OnboardingStates.birth_place_query.state:
+    if state == BirthDataStates.place_query.state:
         return "birth"
     if state == CompatibilityStates.birth_place_query.state:
         return "compatibility"
@@ -151,8 +149,13 @@ async def send_place_step_prompt(message: Message, *, title: str) -> None:
     )
 
 
-async def start_birth_place_step(message: Message, state: FSMContext) -> None:
-    await state.set_state(OnboardingStates.birth_place_query)
+async def start_own_birth_place_step(message: Message, state: FSMContext) -> None:
+    """Место рождения самого пользователя — спрашивается посреди продукта.
+
+    Раньше этот шаг был частью онбординга; теперь в него попадают из разбора
+    или совместимости, когда в профиле места не оказалось.
+    """
+    await state.set_state(BirthDataStates.place_query)
     await state.update_data(place_context="birth")
     await send_place_step_prompt(message, title="📍 Где ты родилась?")
 
@@ -197,7 +200,7 @@ async def _keep_place_state(state: FSMContext, context_key: str) -> None:
     await state.update_data(place_context=context_key)
     current = await state.get_state()
     if context_key == "birth":
-        await state.set_state(OnboardingStates.birth_place_query)
+        await state.set_state(BirthDataStates.place_query)
     elif context_key == "compatibility":
         await state.set_state(CompatibilityStates.birth_place_query)
     elif context_key == "people":
@@ -585,25 +588,36 @@ async def cb_place_page(
     await callback.answer()
 
 
-async def _complete_onboarding_after_birth_place(
+async def _save_own_birth_place(
     message: Message,
     state: FSMContext,
     session: AsyncSession,
+    place,  # noqa: ANN001 — PlaceRead
+    *,
+    actor_telegram_id: int,
 ) -> None:
-    fsm_data = await state.get_data()
-    reg = parse_registration_fsm(fsm_data)
-    if reg is None:
-        await message.answer("Что-то пошло не так. Нажми /start")
+    """Записать место рождения в профиль и вернуть человека в продукт."""
+    from astra.telegram.birth_data_gate import continue_after_birth_data
+
+    user = await users_crud.get_user_by_telegram_id(session, actor_telegram_id)
+    if user is None or user.profile is None:
+        await message.answer("Сначала: /start")
         return
 
-    user = await users_crud.get_user_by_id(session, reg.user_id)
-    if user is None:
-        await message.answer("Что-то пошло не так. Нажми /start")
-        return
+    updates: dict[str, object] = {
+        "birth_place_id": place.id,
+        "birth_place": place.display_name,
+    }
+    # Город и пояс для ежедневной рассылки берём отсюда же, пока человек не
+    # выбрал город уведомлений сам: иначе предсказание уходило бы в 09:00 по
+    # Москве тому, кто живёт во Владивостоке.
+    if user.profile.notification_place_id is None:
+        updates["city"] = place.display_name
+        updates["timezone"] = place.timezone
 
-    await run_registration_phase(session, user, reg)
+    await users_crud.update_profile(session, user.profile, **updates)
     await session.commit()
-    await run_greeting_phase(message, state, user)
+    await continue_after_birth_data(message, state, session, user)
 
 
 async def _save_profile_notification_place(
@@ -654,12 +668,14 @@ async def _apply_place_selection(
 
     current_state = await state.get_state()
 
-    if current_state == OnboardingStates.birth_place_query.state:
-        await state.update_data(
-            birth_place_id=str(place.id),
-            birth_place_display=place.display_name,
+    if current_state == BirthDataStates.place_query.state:
+        await _save_own_birth_place(
+            message,
+            state,
+            session,
+            place,
+            actor_telegram_id=actor_telegram_id,
         )
-        await _complete_onboarding_after_birth_place(message, state, session)
         return
 
     if current_state == ProfileStates.edit_notification_place_query.state:

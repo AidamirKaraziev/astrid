@@ -17,6 +17,7 @@ from astra.services.prediction_pipeline import (
     resume_prediction_pipeline,
 )
 from astra.predictions.models import Prediction
+from astra.users.birth_data import Product, blocked_by
 from astra.users.models import User
 
 log = get_logger(__name__)
@@ -54,6 +55,11 @@ async def process_scheduled_notifications(
 
     for user in users:
         if user.profile is None:
+            continue
+        # Прошёл короткий онбординг и не дошёл до продукта, где спрашивают
+        # дату: предсказание строится от знака Солнца, считать не от чего.
+        # Карта дня таким людям приходит — она в профиль не смотрит.
+        if blocked_by(Product.DAILY_PREDICTION, user.profile):
             continue
         if not _is_notification_due(
             now_utc,

@@ -22,6 +22,7 @@ from astra.telegram.states import (
     AiChatStates,
     CompatibilityStates,
     NatalStates,
+    BirthDataStates,
     OnboardingStates,
     PeopleStates,
     PlaceStates,
@@ -36,8 +37,10 @@ _KEYBOARD_SUPPRESSED_FSM_STATES: frozenset[str] = frozenset(
         AiChatStates.chatting.state,
         OnboardingStates.welcome.state,
         OnboardingStates.gender.state,
-        OnboardingStates.birth_date.state,
-        OnboardingStates.birth_place_query.state,
+        # Добор данных: человек посреди продукта отвечает на вопрос, и главное
+        # меню под рукой уводит его из сценария одним касанием.
+        BirthDataStates.date.state,
+        BirthDataStates.place_query.state,
         ProfileStates.edit_notification_place_query.state,
         CompatibilityStates.birth_place_query.state,
         CompatibilityStates.collect_name.state,

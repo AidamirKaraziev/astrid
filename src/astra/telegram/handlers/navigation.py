@@ -41,6 +41,7 @@ from astra.telegram.handlers.tarot_spreads import SPREAD_BUTTONS, spread_button
 from astra.telegram.handlers.wheel import open_wheel
 from astra.telegram.states import (
     AiChatStates,
+    BirthDataStates,
     CompatibilityStates,
     NatalStates,
     PeopleStates,
@@ -54,6 +55,10 @@ router = Router(name="navigation")
 # Онбординга здесь нет намеренно: до конца регистрации кнопки меню не работают.
 INTERRUPTIBLE_STATE_GROUPS = (
     AiChatStates,
+    # Добор данных рождения: человек уже зарегистрирован и просто открыл
+    # продукт. Захотел вместо разбора покрутить колесо — это его право, и
+    # ответ «не могу разобрать дату» на нажатие кнопки меню был бы тупиком.
+    BirthDataStates,
     CompatibilityStates,
     NatalStates,
     PeopleStates,
