@@ -43,7 +43,7 @@ from astra.telegram.button_texts import (
     COMING_SOON_TEXT,
 )
 from astra.telegram.handlers.tarot_spreads import start_spread_with_prize
-from astra.telegram.screen import alert, toast
+from astra.telegram.screen import alert, close_screen, show_screen, toast
 from astra.telegram.wheel_animation import play_spin_animation
 from astra.users import crud as users_crud
 from astra.wheel import crud as wheel_crud
@@ -57,6 +57,9 @@ from astra.wheel.service import perform_spin, user_local_today, win_is_available
 log = get_logger(__name__)
 
 router = Router(name="wheel")
+
+# Живой экран раздела: хаб, вращение и карточка приза — одно сообщение.
+WHEEL_SCREEN = "wheel"
 
 _INTRO_TEXT = (
     "🎡 <b>Колесо фортуны</b>\n\n"
@@ -159,8 +162,10 @@ async def _show_wheel(message: Message, session: AsyncSession, user) -> None:
     text = _INTRO_TEXT + (_FREE_USED_LINE if free_used else _FREE_READY_LINE)
     if wins:
         text += f"\nАктивных призов: <b>{len(wins)}</b>"
-    await message.answer(
+    await show_screen(
+        message,
         text,
+        scope=WHEEL_SCREEN,
         parse_mode="HTML",
         reply_markup=_wheel_keyboard(
             free_available=not free_used,
@@ -181,7 +186,7 @@ async def open_wheel(message: Message, state: FSMContext, session: AsyncSession)
 
 @router.callback_query(F.data == CB_WHEEL_HOME)
 async def cb_wheel_home(callback: CallbackQuery, state: FSMContext, session: AsyncSession) -> None:
-    await callback.answer()
+    await toast(callback)
     if not isinstance(callback.message, Message) or callback.from_user is None:
         return
     await state.clear()
@@ -215,9 +220,13 @@ async def _spin_and_reveal(
 
     labels = [prize_label(p.product_code, p.discount_percent) for p in prizes]
     winner_index = next((i for i, p in enumerate(prizes) if p.id == win.prize_id), 0)
-    await play_spin_animation(message, labels, winner_index)
-    await message.answer(
+    # Лента крутится в экране раздела и там же замирает карточкой приза:
+    # весь путь от хаба до выигрыша — одно сообщение.
+    await play_spin_animation(message, labels, winner_index, scope=WHEEL_SCREEN)
+    await show_screen(
+        message,
         _prize_card_text(win),
+        scope=WHEEL_SCREEN,
         parse_mode="HTML",
         reply_markup=_prize_keyboard(win),
     )
@@ -340,6 +349,9 @@ async def wheel_spin_paid(message: Message, session: AsyncSession) -> None:
     if payment is None:
         return  # повтор того же charge_id
 
+    # Старый экран остался выше инвойса и чека об оплате, а человек смотрит вниз.
+    # Гасим его: вращение начнётся новым экраном там, где сейчас взгляд.
+    await close_screen(message, WHEEL_SCREEN)
     win = await _spin_and_reveal(
         message,
         session,
@@ -385,8 +397,10 @@ async def cb_wheel_prizes(callback: CallbackQuery, session: AsyncSession) -> Non
         for win in wins
     ]
     rows.append([InlineKeyboardButton(text="🎡 К колесу", callback_data=CB_WHEEL_HOME)])
-    await callback.message.answer(
+    await show_screen(
+        callback.message,
         "🎁 <b>Мои призы</b>\nНажми на приз, чтобы использовать.",
+        scope=WHEEL_SCREEN,
         parse_mode="HTML",
         reply_markup=InlineKeyboardMarkup(inline_keyboard=rows),
     )
@@ -431,6 +445,8 @@ async def cb_activate_prize(
         await toast(callback, COMING_SOON_TEXT)
         return
     await toast(callback)
+    # Приз уходит в таро: экран колеса гаснет, дальше человека ведёт экран таро.
+    await close_screen(callback.message, WHEEL_SCREEN)
     # user передаём явно: callback.message — сообщение бота, from_user там бот.
     await start_spread_with_prize(callback.message, state, session, spread_type, win.id, user)
 

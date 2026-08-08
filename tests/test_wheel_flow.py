@@ -23,7 +23,12 @@ from astra.telegram.handlers.wheel import (
     cb_spin_paid,
     wheel_spin_paid,
 )
-from astra.telegram.wheel_animation import build_frames, frame_offsets, render_frame
+from astra.telegram.wheel_animation import (
+    build_frames,
+    frame_offsets,
+    play_spin_animation,
+    render_frame,
+)
 from astra.wheel.enums import SpinType
 
 _WHEEL = "astra.telegram.handlers.wheel"
@@ -90,9 +95,18 @@ def _wheel_mocks(**overrides) -> dict:
         "perform_spin": AsyncMock(),
         "play_spin_animation": AsyncMock(),
         "get_wheel_spin_price": AsyncMock(return_value=ProductPriceInfo("XTR", 5)),
+        # Раздел живёт в одном редактируемом экране: хаб, вращение, приз.
+        "show_screen": AsyncMock(return_value=888),
+        "close_screen": AsyncMock(),
     }
     defaults.update(overrides)
     return defaults
+
+
+def _wheel_screen_text(mocks: dict) -> str:
+    call = mocks["show_screen"].call_args
+    assert call is not None, "экран колеса не обновлялся"
+    return str(call.args[1])
 
 
 async def _run_wheel(handler, mocks: dict, *args) -> None:
@@ -133,6 +147,26 @@ class TestAnimation:
             frames = build_frames(labels, winner)
             assert all(a != b for a, b in zip(frames, frames[1:], strict=False))
 
+    async def test_animation_spins_inside_the_screen(self) -> None:
+        """Лента крутится в экране раздела: отдельного сообщения не появляется.
+
+        Раньше анимация слала своё сообщение, и последний кадр «Колесо
+        крутится…» навсегда оставался в чате рядом с карточкой приза.
+        """
+        message = _bot_message()
+        screen = AsyncMock(return_value=888)
+
+        with (
+            patch("astra.telegram.wheel_animation.show_screen", screen),
+            patch("astra.telegram.wheel_animation.asyncio.sleep", AsyncMock()),
+        ):
+            await play_spin_animation(message, ["🌟 A", "🃏 B", "💕 C"], 1, scope="wheel")
+
+        message.answer.assert_not_called()
+        assert screen.await_count == len(build_frames(["🌟 A", "🃏 B", "💕 C"], 1))
+        assert all(c.kwargs["scope"] == "wheel" for c in screen.call_args_list)
+        assert "💕 C" in str(screen.call_args_list[-1].args[1])  # финал на победителе
+
 
 class TestFreeSpin:
     async def test_free_spin_gives_prize_and_animates(self) -> None:
@@ -152,7 +186,9 @@ class TestFreeSpin:
         assert mocks["perform_spin"].await_args.args[2] is SpinType.FREE
         session.commit.assert_awaited_once()
         mocks["play_spin_animation"].assert_awaited_once()
-        card = callback.message.answer.call_args.args[0]
+        # Карточка приза — финальный кадр того же экрана, а не новое сообщение.
+        callback.message.answer.assert_not_called()
+        card = _wheel_screen_text(mocks)
         assert "Загадай желание" in card and "бесплатно" in card
 
     async def test_second_free_spin_same_day_refused(self) -> None:
@@ -327,6 +363,7 @@ class TestPrizeActivation:
         with patch(f"{_TAROT}.show_screen", screen):
             await _run_wheel(cb_activate_prize, wheel_mocks, callback, AsyncMock(), AsyncMock())
 
+        wheel_mocks["close_screen"].assert_awaited_once()  # экран колеса погас
         shown = [str(c.args[1]) for c in screen.call_args_list]
         answers = [str(c.args[0]) for c in callback.message.answer.call_args_list]
         assert not any("регистрацию" in text for text in answers + shown), answers + shown

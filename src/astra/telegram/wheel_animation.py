@@ -1,9 +1,12 @@
-"""Анимация вращения колеса: лента призов прокручивается редактированием сообщения.
+"""Анимация вращения колеса: лента призов прокручивается редактированием экрана.
 
-Настоящего колеса в Bot API нет: бот отправляет сообщение и несколько раз
-редактирует его, сдвигая ленту секторов и замедляясь к финалу. Приз известен
-заранее — анимация лишь доводит ленту до нужного сектора, поэтому сбой
-редактирования (флуд-лимит, сеть) не влияет на выдачу выигрыша.
+Настоящего колеса в Bot API нет: бот несколько раз переписывает одно сообщение,
+сдвигая ленту секторов и замедляясь к финалу. Приз известен заранее — анимация
+лишь доводит ленту до нужного сектора, поэтому сбой редактирования (флуд-лимит,
+сеть) не влияет на выдачу выигрыша.
+
+Крутится живой экран раздела, а не отдельное сообщение: иначе последний кадр
+«Колесо крутится…» навсегда оставался бы в чате рядом с карточкой приза.
 """
 
 from __future__ import annotations
@@ -14,6 +17,7 @@ from collections.abc import Sequence
 from aiogram.types import Message
 
 from astra.core.observability import Event, get_logger
+from astra.telegram.screen import show_screen
 
 log = get_logger(__name__)
 
@@ -72,20 +76,22 @@ async def play_spin_animation(
     message: Message,
     labels: Sequence[str],
     winner_index: int,
+    *,
+    scope: str,
 ) -> None:
-    """Прокрутить ленту в чате. Ошибки редактирования гасим — приз уже выдан."""
+    """Прокрутить ленту в экране раздела. Ошибки гасим — приз уже выдан.
+
+    Кадры идут без клавиатуры: пока лента крутится, нажимать нечего, а по
+    окончании экран станет карточкой приза со своими кнопками.
+    """
     if not labels:
         return
     frames = build_frames(labels, winner_index)
-    try:
-        sent = await message.answer(frames[0], parse_mode="HTML")
-    except Exception as exc:  # сеть/лимиты: анимация необязательна
-        log.warning(Event.WHEEL_ANIMATION_FAILED, error_type=type(exc).__name__)
-        return
-    for frame, delay in zip(frames[1:], _FRAME_DELAYS, strict=False):
-        await asyncio.sleep(delay)
+    for index, frame in enumerate(frames):
+        if index:
+            await asyncio.sleep(_FRAME_DELAYS[min(index - 1, len(_FRAME_DELAYS) - 1)])
         try:
-            await sent.edit_text(frame, parse_mode="HTML")
-        except Exception as exc:
+            await show_screen(message, frame, scope=scope, parse_mode="HTML")
+        except Exception as exc:  # сеть/лимиты: анимация необязательна
             log.warning(Event.WHEEL_ANIMATION_FAILED, error_type=type(exc).__name__)
             return
