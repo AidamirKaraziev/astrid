@@ -166,6 +166,11 @@ class TestAnimation:
         assert screen.await_count == len(build_frames(["🌟 A", "🃏 B", "💕 C"], 1))
         assert all(c.kwargs["scope"] == "wheel" for c in screen.call_args_list)
         assert "💕 C" in str(screen.call_args_list[-1].args[1])  # финал на победителе
+        # Апдейт у всех кадров один; позицию выбирает только первый, иначе
+        # экран прыгал бы вниз чата на каждом кадре ленты.
+        positions = [c.kwargs["keep_position"] for c in screen.call_args_list]
+        assert positions[0] is False
+        assert all(positions[1:])
 
 
 class TestFreeSpin:

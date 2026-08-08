@@ -229,6 +229,8 @@ async def _spin_and_reveal(
         scope=WHEEL_SCREEN,
         parse_mode="HTML",
         reply_markup=_prize_keyboard(win),
+        # Приз заменяет последний кадр ленты: экран уже стоит там, где нужно.
+        keep_position=True,
     )
     return win
 
@@ -349,9 +351,6 @@ async def wheel_spin_paid(message: Message, session: AsyncSession) -> None:
     if payment is None:
         return  # повтор того же charge_id
 
-    # Старый экран остался выше инвойса и чека об оплате, а человек смотрит вниз.
-    # Гасим его: вращение начнётся новым экраном там, где сейчас взгляд.
-    await close_screen(message, WHEEL_SCREEN)
     win = await _spin_and_reveal(
         message,
         session,

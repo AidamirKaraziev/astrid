@@ -44,6 +44,7 @@ from aiogram.types import (
 
 from astra.core.observability import Event, get_logger
 from astra.telegram.screen_store import (
+    Screen,
     ScreenKind,
     clear_screen,
     get_screen,
@@ -74,6 +75,13 @@ def _message_of(event: Event_) -> Message | None:
     return message if isinstance(message, Message) else None
 
 
+def _is_human_message(event: Event_) -> bool:
+    """Апдейт пришёл от человека, а не с кнопки на сообщении бота."""
+    if not isinstance(event, Message):
+        return False
+    return event.from_user is not None and not event.from_user.is_bot
+
+
 def _is_not_modified(exc: TelegramBadRequest) -> bool:
     return "message is not modified" in str(exc).lower()
 
@@ -90,6 +98,34 @@ def _is_unreachable(exc: TelegramBadRequest) -> bool:
             "message_id_invalid",
         )
     )
+
+
+async def _screen_to_edit(
+    event: Event_,
+    chat_id: int,
+    scope: str,
+    *,
+    keep_position: bool,
+) -> Screen | None:
+    """Экран, который можно переписать на месте. None — нужен новый, внизу чата.
+
+    Правка на месте верна ровно тогда, когда человек смотрит на сам экран, то
+    есть пришёл с кнопки на нём. Если он написал текстом или нажал
+    reply-кнопку, его сообщение уже ниже экрана — а между ними мог оказаться
+    инвойс или карты. Экран уехал бы наверх, и человек решил бы, что раздел
+    не работает. Поэтому переносим экран вниз, к последнему сообщению.
+
+    `keep_position` отменяет перенос: несколько подряд идущих кадров одного и
+    того же экрана (анимация колеса) приходят с одним апдейтом человека, и
+    переносить его на каждом кадре было бы мельтешением.
+    """
+    screen = await get_screen(chat_id, scope)
+    if screen is None:
+        return None
+    if keep_position or not _is_human_message(event):
+        return screen
+    await close_screen(event, scope)
+    return None
 
 
 async def send_content(
@@ -118,15 +154,20 @@ async def show_screen(
     *,
     scope: str,
     reply_markup: InlineKeyboardMarkup | None = None,
+    keep_position: bool = False,
     **kwargs: Any,
 ) -> int | None:
-    """Показать или обновить живой экран раздела. Возвращает его message_id."""
+    """Показать или обновить живой экран раздела. Возвращает его message_id.
+
+    `keep_position` — продолжение уже стоящего экрана (кадр анимации): править
+    строго на месте, вниз не переносить.
+    """
     resolved = _bot_and_chat(event)
     if resolved is None:
         return None
     bot, chat_id = resolved
 
-    screen = await get_screen(chat_id, scope)
+    screen = await _screen_to_edit(event, chat_id, scope, keep_position=keep_position)
     if screen is not None and screen.kind is ScreenKind.TEXT:
         try:
             await bot.edit_message_text(
@@ -165,6 +206,7 @@ async def show_media_screen(
     *,
     scope: str,
     reply_markup: InlineKeyboardMarkup | None = None,
+    keep_position: bool = False,
 ) -> int | None:
     """То же, что `show_screen`, но экран — картинка с подписью."""
     resolved = _bot_and_chat(event)
@@ -172,7 +214,7 @@ async def show_media_screen(
         return None
     bot, chat_id = resolved
 
-    screen = await get_screen(chat_id, scope)
+    screen = await _screen_to_edit(event, chat_id, scope, keep_position=keep_position)
     if screen is not None and screen.kind is ScreenKind.MEDIA:
         try:
             await bot.edit_message_media(

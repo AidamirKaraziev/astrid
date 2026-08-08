@@ -91,7 +91,16 @@ async def play_spin_animation(
         if index:
             await asyncio.sleep(_FRAME_DELAYS[min(index - 1, len(_FRAME_DELAYS) - 1)])
         try:
-            await show_screen(message, frame, scope=scope, parse_mode="HTML")
+            # Первый кадр ставит экран на место, дальше правим строго его:
+            # апдейт у всех кадров один, и без этого экран прыгал бы вниз
+            # на каждом кадре.
+            await show_screen(
+                message,
+                frame,
+                scope=scope,
+                parse_mode="HTML",
+                keep_position=bool(index),
+            )
         except Exception as exc:  # сеть/лимиты: анимация необязательна
             log.warning(Event.WHEEL_ANIMATION_FAILED, error_type=type(exc).__name__)
             return

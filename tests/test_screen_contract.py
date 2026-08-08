@@ -39,13 +39,25 @@ def _markup(text: str = "Три карты") -> InlineKeyboardMarkup:
 
 
 def _incoming(bot: Any) -> Message:
-    """Сообщение от человека, привязанное к тестовому боту."""
+    """Сообщение от человека: текст или нажатие reply-кнопки."""
     message = Message(
         message_id=1,
         date=datetime.now(UTC),
         chat=Chat(id=CHAT_ID, type="private"),
         from_user=TgUser(id=CHAT_ID, is_bot=False, first_name="Аида"),
         text="🔮 Карты Таро",
+    )
+    return message.as_(bot)
+
+
+def _tap(bot: Any) -> Message:
+    """Нажатие кнопки на самом экране: апдейт приходит с сообщения бота."""
+    message = Message(
+        message_id=1001,
+        date=datetime.now(UTC),
+        chat=Chat(id=CHAT_ID, type="private"),
+        from_user=TgUser(id=BOT_ID, is_bot=True, first_name="Astrid"),
+        text="Выбери расклад",
     )
     return message.as_(bot)
 
@@ -107,7 +119,7 @@ async def test_second_show_edits_instead_of_sending() -> None:
 
     with _with_store(store):
         message_id = await show_screen(
-            _incoming(bot),
+            _tap(bot),
             "О чём спросишь карты?",
             scope=SCOPE,
             reply_markup=_markup("Пропустить"),
@@ -132,7 +144,7 @@ async def test_not_modified_is_swallowed() -> None:
             new=AsyncMock(side_effect=_bad_request("Bad Request: message is not modified")),
         ),
     ):
-        message_id = await show_screen(_incoming(bot), "Тот же текст", scope=SCOPE)
+        message_id = await show_screen(_tap(bot), "Тот же текст", scope=SCOPE)
 
     assert message_id == 1001
     assert bot.session.api_methods() == []
@@ -155,7 +167,7 @@ async def test_unreachable_screen_is_recreated() -> None:
             new=AsyncMock(side_effect=_bad_request("Bad Request: message to edit not found")),
         ),
     ):
-        message_id = await show_screen(_incoming(bot), "Выбери расклад", scope=SCOPE)
+        message_id = await show_screen(_tap(bot), "Выбери расклад", scope=SCOPE)
 
     assert bot.session.api_methods() == ["sendMessage"]
     assert message_id != 77
@@ -177,7 +189,7 @@ async def test_unexpected_bad_request_is_not_hidden() -> None:
         ),
         pytest.raises(TelegramBadRequest),
     ):
-        await show_screen(_incoming(bot), "<b>сломанный", scope=SCOPE)
+        await show_screen(_tap(bot), "<b>сломанный", scope=SCOPE)
 
 
 @pytest.mark.asyncio
@@ -187,7 +199,7 @@ async def test_media_screen_is_replaced_by_text_screen() -> None:
     store = FakeScreenStore(Screen(1001, ScreenKind.MEDIA))
 
     with _with_store(store):
-        message_id = await show_screen(_incoming(bot), "Расклад готов", scope=SCOPE)
+        message_id = await show_screen(_tap(bot), "Расклад готов", scope=SCOPE)
 
     assert bot.session.api_methods() == ["deleteMessage", "sendMessage"]
     assert store.screen == Screen(message_id, ScreenKind.TEXT)
@@ -283,3 +295,42 @@ async def test_screen_is_sent_by_bot_not_by_message_answer() -> None:
     assert bot.session.calls[0].payload.get("from_user") is None
     assert bot.session.calls[0].method.chat_id == CHAT_ID
     assert BOT_ID  # бот в фейке настоящий, id зафиксирован в fake_telegram
+
+
+@pytest.mark.asyncio
+async def test_human_message_moves_the_screen_down() -> None:
+    """Человек написал или нажал reply-кнопку — экран переезжает вниз чата.
+
+    Регрессия: после неоплаченного инвойса экран раздела оставался выше него.
+    Повторный вход в раздел правил то самое сообщение наверху, и человек решал,
+    что раздел сломан и держит его в неоплаченном раскладе.
+    """
+    bot = build_bot()
+    # id вне счётчика фейка (тот начинает с 1000): «перенесли» не спутается
+    # с «отредактировали на месте».
+    store = FakeScreenStore(Screen(77, ScreenKind.TEXT))
+
+    with _with_store(store):
+        message_id = await show_screen(
+            _incoming(bot),
+            "Выбери расклад",
+            scope=SCOPE,
+            reply_markup=_markup(),
+        )
+
+    assert bot.session.api_methods() == ["deleteMessage", "sendMessage"]
+    assert message_id != 77
+    assert store.screen == Screen(message_id, ScreenKind.TEXT)
+
+
+@pytest.mark.asyncio
+async def test_tap_on_the_screen_keeps_it_in_place() -> None:
+    """Кнопка на самом экране — человек смотрит на него, двигать некуда."""
+    bot = build_bot()
+    store = FakeScreenStore(Screen(1001, ScreenKind.TEXT))
+
+    with _with_store(store):
+        message_id = await show_screen(_tap(bot), "О чём спросишь карты?", scope=SCOPE)
+
+    assert bot.session.api_methods() == ["editMessageText"]
+    assert message_id == 1001
