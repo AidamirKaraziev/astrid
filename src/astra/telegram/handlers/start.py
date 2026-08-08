@@ -11,6 +11,7 @@ from astra.core.config import get_settings
 from astra.referrals import crud as referrals_crud
 from astra.services.onboarding_service import sync_user_from_telegram
 from astra.services.points_service import register_daily_activity
+from astra.services.gift_service import link_gift_on_start
 from astra.services.referral_service import apply_referral_on_start
 from aiogram.types import KeyboardButton, ReplyKeyboardMarkup
 
@@ -22,6 +23,7 @@ from astra.telegram.states import OnboardingStates
 from astra.telegram.utils import (
     clean_display_name,
     default_display_name,
+    extract_gift_code,
     extract_referral_code,
 )
 from astra.users import crud as users_crud
@@ -84,6 +86,9 @@ async def cmd_start(
     tg = message.from_user
     user = await users_crud.get_user_by_telegram_id(session, tg.id)
     is_new_user = user is None
+    # Подарок достаётся только тому, кого в боте ещё нет: у вернувшегося код
+    # даже не читаем, чтобы он не сгорел зря.
+    gift_code: str | None = None
     if user is None:
         user = await users_crud.create_user(
             session,
@@ -94,6 +99,7 @@ async def cmd_start(
         ref_code = extract_referral_code(command.args)
         if ref_code:
             await apply_referral_on_start(session, user, ref_code)
+        gift_code = await link_gift_on_start(session, user, extract_gift_code(command.args))
     else:
         await sync_user_from_telegram(
             session,
@@ -120,6 +126,9 @@ async def cmd_start(
     await state.update_data(
         default_name=default_display_name(tg),
         user_id=str(user.id),
+        # Подарок активируется в конце онбординга, а не здесь: иначе его
+        # съел бы человек, который бросил регистрацию на первом экране.
+        gift_code=gift_code,
     )
 
     default_name = default_display_name(tg)

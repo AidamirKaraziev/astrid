@@ -163,6 +163,13 @@ class Event(StrEnum):
     GEONAMES_IMPORT_DONE = "geonames.import_done"
     GEONAMES_IMPORT_FAILED = "geonames.import_failed"
 
+    # Подарки
+    GIFT_ISSUED = "gift.issued"
+    GIFT_REDEEMED = "gift.redeemed"
+    GIFT_REFUSED = "gift.refused"
+    # У дарителя слишком много неактивированных ссылок.
+    GIFT_LIMIT_REACHED = "gift.limit_reached"
+
     # Внутренний кошелёк в звёздах
     WALLET_CREDITED = "wallet.credited"
     WALLET_HOLD_CREATED = "wallet.hold_created"

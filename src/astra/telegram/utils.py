@@ -31,6 +31,19 @@ def extract_referral_code(start_arg: str | None) -> str | None:
     return None
 
 
+def extract_gift_code(start_arg: str | None) -> str | None:
+    """Код подарка из `?start=gift_<код>`.
+
+    Подарок несёт и реферальную привязку, поэтому отдельной `ref_`-ссылки
+    дарителю слать не нужно: связь ставится по дарителю кода.
+    """
+    if not start_arg:
+        return None
+    if start_arg.startswith("gift_"):
+        return start_arg[5:]
+    return None
+
+
 def default_display_name(tg_user: TgUser) -> str:
     if tg_user.first_name:
         return tg_user.first_name
