@@ -7,12 +7,22 @@ from uuid import uuid4
 from astra.payments.service import ProductPriceInfo
 from astra.tarot.enums import ReadingStatus
 from astra.tarot.spreads import SpreadType
+from aiogram.types import Message
+
 from astra.telegram.button_texts import (
     BTN_BACK_MENU,
     BTN_TAROT_SKIP,
     BTN_TAROT_WISH,
+    CB_TAROT_CLOSE,
+    CB_TAROT_QUESTION_SKIP,
+    CB_TAROT_SECTION,
+    CB_TAROT_SPREAD_PREFIX,
 )
 from astra.telegram.handlers.tarot_spreads import (
+    cb_close_spreads,
+    cb_open_spreads,
+    cb_pick_spread,
+    cb_skip_question,
     pre_checkout,
     spread_button,
     spread_paid,
@@ -66,9 +76,19 @@ def _mocks(**overrides) -> dict:
         "wheel_crud.get_pending_win_for_reading": AsyncMock(return_value=None),
         "reserve_win_for_reading": AsyncMock(),
         "mark_win_activated": AsyncMock(),
+        # Раздел живёт в одном редактируемом экране, а не в сообщениях чата.
+        "show_screen": AsyncMock(return_value=777),
+        "close_screen": AsyncMock(),
     }
     defaults.update(overrides)
     return defaults
+
+
+def _screen_text(mocks: dict) -> str:
+    """Текст, который сейчас показан в живом экране раздела."""
+    call = mocks["show_screen"].call_args
+    assert call is not None, "экран раздела не обновлялся"
+    return str(call.args[1])
 
 
 async def _run(handler, message, state, session, mocks: dict) -> None:
@@ -81,10 +101,12 @@ async def _run(handler, message, state, session, mocks: dict) -> None:
 class TestSpreadButton:
     async def test_sets_state_and_asks_question(self):
         message, state = _message(BTN_TAROT_WISH), _state()
-        await _run(spread_button, message, state, AsyncMock(), _mocks())
+        mocks = _mocks()
+        await _run(spread_button, message, state, AsyncMock(), mocks)
         state.set_state.assert_awaited_once_with(TarotStates.waiting_question)
         state.update_data.assert_awaited_once_with(tarot_spread_type="wish")
-        intro = message.answer.call_args.args[0]
+        message.answer.assert_not_called()  # вопрос живёт в экране, а не в чате
+        intro = _screen_text(mocks)
         assert "желание" in intro.lower()
         assert "⭐" not in intro  # цену показывает только кнопка инвойса
 
@@ -112,7 +134,9 @@ class TestSpreadQuestion:
         mocks = _mocks()
         await _run(spread_question, message, state, AsyncMock(), mocks)
         mocks["create_reading_draft"].assert_not_awaited()
-        assert "символов" in message.answer.call_args.args[0]
+        # Замечание к вводу переписывает экран, а не падает новым сообщением.
+        message.answer.assert_not_called()
+        assert "символов" in _screen_text(mocks)
 
     async def test_skip_rejected_when_question_required(self):
         message, state = _message(BTN_TAROT_SKIP), _state(self._DATA)
@@ -180,7 +204,7 @@ class TestSpreadQuestion:
         # вариант B: «5̶0̶ ⭐ → 5 ⭐ · скидка −90%»
         assert button.text == "5̶0̶ ⭐ → 5 ⭐ · скидка −90%"
         # в сообщении над инвойсом — зачёркнутая старая цена
-        sent_text = message.answer.call_args.args[0]
+        sent_text = _screen_text(mocks)
         assert "<s>50 ⭐</s>" in sent_text and "−90%" in sent_text
         # карты до оплаты не показываются, задача в worker не публикуется
         mocks["send_cards_album"].assert_not_awaited()
@@ -201,7 +225,8 @@ class TestSpreadQuestion:
         mocks = _mocks(try_acquire_reading_lock=AsyncMock(return_value=False))
         await _run(spread_question, message, state, AsyncMock(), mocks)
         mocks["create_reading_draft"].assert_not_awaited()
-        assert "секунду" in message.answer.call_args.args[0]
+        message.answer.assert_not_called()
+        assert "секунду" in _screen_text(mocks)
 
 
 def _reading(status: ReadingStatus = ReadingStatus.PENDING_PAYMENT, **overrides) -> MagicMock:
@@ -329,3 +354,81 @@ class TestSpreadButtonsMapping:
         assert SPREAD_BUTTONS[BTN_TAROT_WISH] is SpreadType.WISH
         # старая кнопка «На решение» у закэшированных клиентов теперь ведёт в «Желание»
         assert SPREAD_BUTTONS[BTN_TAROT_DECISION_LEGACY] is SpreadType.WISH
+
+
+class TestInlineScreen:
+    """Раздел на inline-экране: выбор расклада, «Пропустить», выход."""
+
+    def _callback(self, data: str) -> MagicMock:
+        callback = MagicMock()
+        callback.data = data
+        callback.answer = AsyncMock()
+        callback.from_user = MagicMock(id=100500)
+        callback.message = MagicMock(spec=Message)
+        callback.message.answer = AsyncMock()
+        callback.message.answer_invoice = AsyncMock()
+        return callback
+
+    async def _run_cb(self, handler, mocks: dict, *args) -> None:
+        with ExitStack() as stack:
+            for name, mock in mocks.items():
+                stack.enter_context(patch(f"{_MODULE}.{name}", mock))
+            await handler(*args)
+
+    async def test_hub_lists_three_spreads(self):
+        callback = self._callback(CB_TAROT_SECTION)
+        mocks = _mocks()
+        state = _state()
+
+        await self._run_cb(cb_open_spreads, mocks, callback, state)
+
+        state.clear.assert_awaited_once()
+        callback.message.answer.assert_not_called()
+        markup = mocks["show_screen"].call_args.kwargs["reply_markup"]
+        data = [btn.callback_data for row in markup.inline_keyboard for btn in row]
+        assert data == [
+            f"{CB_TAROT_SPREAD_PREFIX}three_cards",
+            f"{CB_TAROT_SPREAD_PREFIX}relationship",
+            f"{CB_TAROT_SPREAD_PREFIX}wish",
+            CB_TAROT_CLOSE,
+        ]
+
+    async def test_picking_spread_asks_question_in_same_screen(self):
+        callback = self._callback(f"{CB_TAROT_SPREAD_PREFIX}wish")
+        state, mocks = _state(), _mocks()
+
+        await self._run_cb(cb_pick_spread, mocks, callback, state, AsyncMock())
+
+        state.set_state.assert_awaited_once_with(TarotStates.waiting_question)
+        state.update_data.assert_awaited_once_with(tarot_spread_type="wish")
+        callback.message.answer.assert_not_called()
+        assert "желание" in _screen_text(mocks).lower()
+
+    async def test_unknown_user_is_refused_with_alert(self):
+        callback = self._callback(f"{CB_TAROT_SPREAD_PREFIX}wish")
+        mocks = _mocks(**{"users_crud.get_user_by_telegram_id": AsyncMock(return_value=None)})
+
+        await self._run_cb(cb_pick_spread, mocks, callback, _state(), AsyncMock())
+
+        mocks["show_screen"].assert_not_awaited()
+        assert callback.answer.call_args.kwargs["show_alert"] is True
+
+    async def test_skip_button_creates_draft_without_question(self):
+        callback = self._callback(CB_TAROT_QUESTION_SKIP)
+        state = _state({"tarot_spread_type": "three_cards"})
+        mocks = _mocks()
+
+        await self._run_cb(cb_skip_question, mocks, callback, state, AsyncMock())
+
+        assert mocks["create_reading_draft"].await_args.args[3] is None  # question
+        callback.message.answer_invoice.assert_awaited_once()
+
+    async def test_close_hides_screen(self):
+        callback = self._callback(CB_TAROT_CLOSE)
+        state, mocks = _state(), _mocks()
+
+        await self._run_cb(cb_close_spreads, mocks, callback, state)
+
+        state.clear.assert_awaited_once()
+        mocks["close_screen"].assert_awaited_once()
+        callback.message.answer.assert_not_called()

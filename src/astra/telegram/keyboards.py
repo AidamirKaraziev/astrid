@@ -23,6 +23,7 @@ from astra.telegram.button_texts import (
     BTN_TAROT,
     BTN_TAROT_RELATIONS,
     BTN_TAROT_THREE,
+    BTN_TAROT_SKIP,
     BTN_TAROT_WISH,
     BTN_TIME_UNKNOWN,
     BTN_WHEEL,
@@ -52,8 +53,12 @@ from astra.telegram.button_texts import (
     CB_SUPPORT_FAQ_PREFIX,
     CB_SUPPORT_HUB,
     CB_SUPPORT_WRITE,
+    CB_TAROT_CLOSE,
+    CB_TAROT_QUESTION_SKIP,
     CB_TAROT_SECTION,
+    CB_TAROT_SPREAD_PREFIX,
 )
+from astra.tarot.spreads import SpreadType
 
 
 def day_card_keyboard() -> InlineKeyboardMarkup:
@@ -109,16 +114,47 @@ def main_menu_keyboard() -> ReplyKeyboardMarkup:
     )
 
 
-def tarot_keyboard() -> ReplyKeyboardMarkup:
-    return ReplyKeyboardMarkup(
-        keyboard=[
-            [KeyboardButton(text=BTN_TAROT_THREE)],
-            [KeyboardButton(text=BTN_TAROT_RELATIONS)],
-            [KeyboardButton(text=BTN_TAROT_WISH)],
-            [KeyboardButton(text=BTN_BACK_MENU)],
+def tarot_spreads_keyboard() -> InlineKeyboardMarkup:
+    """Экран раздела таро: выбор расклада."""
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text=BTN_TAROT_THREE,
+                    callback_data=f"{CB_TAROT_SPREAD_PREFIX}{SpreadType.THREE_CARDS}",
+                ),
+            ],
+            [
+                InlineKeyboardButton(
+                    text=BTN_TAROT_RELATIONS,
+                    callback_data=f"{CB_TAROT_SPREAD_PREFIX}{SpreadType.RELATIONSHIP}",
+                ),
+            ],
+            [
+                InlineKeyboardButton(
+                    text=BTN_TAROT_WISH,
+                    callback_data=f"{CB_TAROT_SPREAD_PREFIX}{SpreadType.WISH}",
+                ),
+            ],
+            [InlineKeyboardButton(text=BTN_BACK_MENU, callback_data=CB_TAROT_CLOSE)],
         ],
-        resize_keyboard=True,
     )
+
+
+def tarot_question_keyboard(*, question_required: bool) -> InlineKeyboardMarkup:
+    """Экран вопроса к раскладу. «Пропустить» — только там, где вопрос не обязателен."""
+    rows: list[list[InlineKeyboardButton]] = []
+    if not question_required:
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    text=BTN_TAROT_SKIP,
+                    callback_data=CB_TAROT_QUESTION_SKIP,
+                ),
+            ],
+        )
+    rows.append([InlineKeyboardButton(text="🔙 К раскладам", callback_data=CB_TAROT_SECTION)])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
 def skip_keyboard() -> ReplyKeyboardMarkup:

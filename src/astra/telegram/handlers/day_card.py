@@ -16,9 +16,7 @@ from astra.telegram.button_texts import (
     BTN_ASK_ASTRID_LEGACY_LATIN,
     BTN_PREDICTION_TODAY_LEGACY,
     CB_DAY_CARD_FORECAST,
-    CB_TAROT_SECTION,
 )
-from astra.telegram.handlers.catalog import open_tarot_menu
 from astra.telegram.keyboards import day_forecast_followup_keyboard, main_menu_keyboard
 from astra.usage import ACTION_DAY_CARD, UsageKind, record_usage
 from astra.users import crud as users_crud
@@ -78,11 +76,8 @@ async def cb_day_card_forecast(callback: CallbackQuery, session: AsyncSession) -
     )
 
 
-@router.callback_query(F.data == CB_TAROT_SECTION)
-async def cb_open_tarot_section(callback: CallbackQuery) -> None:
-    await callback.answer()
-    if callback.message:
-        await open_tarot_menu(callback.message)
+# CTA «Спросить карты о своём» под прогнозом ведёт в раздел таро: сам хендлер
+# CB_TAROT_SECTION живёт в tarot_spreads — он же обслуживает «К раскладам».
 
 
 @router.message(F.text.in_(LEGACY_BUTTONS))

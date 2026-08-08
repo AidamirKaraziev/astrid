@@ -3,6 +3,14 @@
 Оплата показывается в момент максимальной вовлечённости — после вопроса,
 перед картами. LLM в хендлерах не вызывается: после оплаты бот показывает
 карты и публикует tarot_reading.generate, текст интерпретации доставит worker.
+
+Весь путь до результата живёт в **одном сообщении** (`TAROT_SCREEN`): выбор
+расклада, вопрос и статус оплаты переписывают его, а не копятся в чате. Карты
+и интерпретация — контент: они приходят отдельными сообщениями и остаются
+навсегда, а экран перед этим гаснет.
+
+Reply-кнопки раскладов остались только как наследство: у части людей
+клавиатура закэширована клиентом. Их нажатия ведут в тот же экран.
 """
 
 from __future__ import annotations
@@ -15,11 +23,9 @@ from aiogram.types import (
     CallbackQuery,
     InlineKeyboardButton,
     InlineKeyboardMarkup,
-    KeyboardButton,
     LabeledPrice,
     Message,
     PreCheckoutQuery,
-    ReplyKeyboardMarkup,
 )
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -56,9 +62,18 @@ from astra.telegram.button_texts import (
     BTN_TAROT_SKIP,
     BTN_TAROT_THREE,
     BTN_TAROT_WISH,
+    CB_TAROT_CLOSE,
+    CB_TAROT_QUESTION_SKIP,
+    CB_TAROT_SECTION,
+    CB_TAROT_SPREAD_PREFIX,
     COMING_SOON_TEXT,
 )
-from astra.telegram.keyboards import main_menu_keyboard, tarot_keyboard
+from astra.telegram.keyboards import (
+    main_menu_keyboard,
+    tarot_question_keyboard,
+    tarot_spreads_keyboard,
+)
+from astra.telegram.screen import alert, close_screen, show_screen, toast
 from astra.telegram.states import TarotStates
 from astra.telegram.tarot_media import send_card_photo, send_cards_album
 from astra.usage import UsageKind, record_usage
@@ -80,6 +95,10 @@ SPREAD_BUTTONS: dict[str, SpreadType] = {
     BTN_TAROT_RELATIONS: SpreadType.RELATIONSHIP,
 }
 
+# Живой экран раздела: у таро он свой, у колеса будет свой.
+TAROT_SCREEN = "tarot"
+
+_SPREADS_HUB_TEXT = "🔮 <b>Карты Таро</b>\n\nВыбери расклад ✨"
 _IN_PROGRESS_TEXT = "Карты уже раскладываются — секунду 🕯"
 _QUESTION_LENGTH_TEXT = (
     f"Напиши вопрос текстом — от {_QUESTION_MIN_LEN} до {_QUESTION_MAX_LEN} символов."
@@ -99,14 +118,6 @@ _PAYMENT_STALE_TEXT = "Этот расклад уже оплачен или ус
 _PRIZE_GONE_TEXT = "Приз с колеса уже сгорел или использован — расклад по обычной цене 🕯"
 _PAID_THANKS_TEXT = "Оплата получена ⭐ Тяну карты…"
 _FREE_TODAY_TEXT = "Сегодня этот расклад — подарок от Астрид, бесплатно ✨ Тяну карты…"
-
-
-def _question_keyboard(question_required: bool) -> ReplyKeyboardMarkup:
-    rows = []
-    if not question_required:
-        rows.append([KeyboardButton(text=BTN_TAROT_SKIP)])
-    rows.append([KeyboardButton(text=BTN_BACK_MENU)])
-    return ReplyKeyboardMarkup(keyboard=rows, resize_keyboard=True)
 
 
 async def _require_user(message: Message, session: AsyncSession):
@@ -145,11 +156,83 @@ async def _start_spread(
     await state.update_data(tarot_spread_type=str(spread_type))
     if wheel_win_id is not None:
         await state.update_data(wheel_win_id=str(wheel_win_id))
-    await message.answer(
+    await show_screen(
+        message,
         f"{spec.emoji} <b>{spec.title_ru}</b>\n\n{spec.question_hint}",
+        scope=TAROT_SCREEN,
         parse_mode="HTML",
-        reply_markup=_question_keyboard(spec.question_required),
+        reply_markup=tarot_question_keyboard(question_required=spec.question_required),
     )
+
+
+async def open_spreads_screen(message: Message) -> None:
+    """Хаб раздела: выбор расклада в живом экране."""
+    await show_screen(
+        message,
+        _SPREADS_HUB_TEXT,
+        scope=TAROT_SCREEN,
+        parse_mode="HTML",
+        reply_markup=tarot_spreads_keyboard(),
+    )
+
+
+@router.callback_query(F.data == CB_TAROT_SECTION)
+async def cb_open_spreads(callback: CallbackQuery, state: FSMContext) -> None:
+    """Возврат к списку раскладов — с экрана вопроса и из CTA под картой дня."""
+    await toast(callback)
+    if isinstance(callback.message, Message):
+        await state.clear()
+        await open_spreads_screen(callback.message)
+
+
+@router.callback_query(F.data == CB_TAROT_CLOSE)
+async def cb_close_spreads(callback: CallbackQuery, state: FSMContext) -> None:
+    """«Назад» из раздела: экран гаснет, главное меню и так под рукой."""
+    await toast(callback)
+    if isinstance(callback.message, Message):
+        await state.clear()
+        await close_screen(callback.message, TAROT_SCREEN)
+
+
+@router.callback_query(F.data.startswith(CB_TAROT_SPREAD_PREFIX))
+async def cb_pick_spread(
+    callback: CallbackQuery,
+    state: FSMContext,
+    session: AsyncSession,
+) -> None:
+    if not isinstance(callback.message, Message) or callback.from_user is None:
+        await toast(callback)
+        return
+    raw = (callback.data or "").removeprefix(CB_TAROT_SPREAD_PREFIX)
+    try:
+        spread_type = SpreadType(raw)
+    except ValueError:
+        await toast(callback)
+        return
+    # actor обязателен: callback.message принадлежит боту, from_user там бот.
+    user = await users_crud.get_user_by_telegram_id(session, callback.from_user.id)
+    if user is None or not user.onboarding_completed or user.profile is None:
+        await alert(callback, "Сначала давай познакомимся — жми /start ✨")
+        return
+    await toast(callback)
+    await _start_spread(callback.message, state, session, spread_type, actor=user)
+
+
+@router.callback_query(F.data == CB_TAROT_QUESTION_SKIP)
+async def cb_skip_question(
+    callback: CallbackQuery,
+    state: FSMContext,
+    session: AsyncSession,
+) -> None:
+    if not isinstance(callback.message, Message) or callback.from_user is None:
+        await toast(callback)
+        return
+    user = await users_crud.get_user_by_telegram_id(session, callback.from_user.id)
+    if user is None:
+        await alert(callback, "Сначала давай познакомимся — жми /start ✨")
+        return
+    await toast(callback)
+    await _accept_question(callback.message, state, session, question=None, user=user)
 
 
 async def start_wish(message: Message, state: FSMContext, session: AsyncSession) -> None:
@@ -192,7 +275,8 @@ async def spread_button(message: Message, state: FSMContext, session: AsyncSessi
 
 
 async def _reveal_reading(message: Message, reading) -> None:
-    """Показать карты расклада; интерпретацию доставит worker."""
+    """Погасить экран и показать карты; интерпретацию доставит worker."""
+    await close_screen(message, TAROT_SCREEN)
     spec = SPREADS[SpreadType(reading.spread_type)]
     cards = reading_cards(reading)
     caption = format_reading_caption(spec, cards)
@@ -258,12 +342,24 @@ async def _wheel_win_for_spread(
     return win
 
 
+async def _reask_question(message: Message, spec, hint: str) -> None:
+    """Замечание к вводу живёт в том же экране, а не отдельным сообщением."""
+    await show_screen(
+        message,
+        f"{spec.emoji} <b>{spec.title_ru}</b>\n\n{hint}",
+        scope=TAROT_SCREEN,
+        parse_mode="HTML",
+        reply_markup=tarot_question_keyboard(question_required=spec.question_required),
+    )
+
+
 @router.message(TarotStates.waiting_question, F.text)
 async def spread_question(message: Message, state: FSMContext, session: AsyncSession) -> None:
     text = (message.text or "").strip()
 
     if text in {BTN_BACK_MENU, BTN_BACK_MENU_LEGACY}:
         await state.clear()
+        await close_screen(message, TAROT_SCREEN)
         await message.answer("Главное меню ✨", reply_markup=main_menu_keyboard())
         return
 
@@ -272,37 +368,64 @@ async def spread_question(message: Message, state: FSMContext, session: AsyncSes
         spread_type = SpreadType(data.get("tarot_spread_type", ""))
     except ValueError:
         await state.clear()
-        await message.answer("Начни расклад заново ✨", reply_markup=tarot_keyboard())
+        await open_spreads_screen(message)
         return
     spec = SPREADS[spread_type]
 
     if text == BTN_TAROT_SKIP:
         if spec.question_required:
-            await message.answer(_QUESTION_REQUIRED_TEXT)
+            await _reask_question(message, spec, _QUESTION_REQUIRED_TEXT)
             return
         question: str | None = None
     elif _QUESTION_MIN_LEN <= len(text) <= _QUESTION_MAX_LEN:
         question = text
     else:
-        await message.answer(_QUESTION_LENGTH_TEXT)
+        await _reask_question(message, spec, _QUESTION_LENGTH_TEXT)
         return
 
     user = await _require_user(message, session)
     if user is None:
         return
+    await _accept_question(message, state, session, question=question, user=user)
+
+
+async def _accept_question(
+    message: Message,
+    state: FSMContext,
+    session: AsyncSession,
+    *,
+    question: str | None,
+    user,
+) -> None:
+    """Вопрос собран: черновик, приз колеса и либо карты сразу, либо инвойс.
+
+    Зовётся и из ввода текстом, и с кнопки «Пропустить», поэтому `user`
+    передаётся явно: у сообщения экрана автор — бот.
+    """
+    data = await state.get_data()
+    try:
+        spread_type = SpreadType(data.get("tarot_spread_type", ""))
+    except ValueError:
+        await state.clear()
+        await open_spreads_screen(message)
+        return
+    spec = SPREADS[spread_type]
 
     if not await try_acquire_reading_lock(user.id):
-        await message.answer(_IN_PROGRESS_TEXT)
+        await _reask_question(message, spec, _IN_PROGRESS_TEXT)
         return
     try:
         # Цена — из БД на каждый товар; в текстах её нет, покажет кнопка инвойса.
         price = await get_tarot_price(session, str(spread_type))
         win = await _wheel_win_for_spread(session, user, spread_type, data)
+        notice = ""
         if win is not None:
             # Приз колеса перебивает акцию каталога: считаем от базовой цены.
             price = ProductPriceInfo(price.currency, price.base_amount, win.discount_percent)
         elif data.get("wheel_win_id"):
-            await message.answer(_PRIZE_GONE_TEXT)
+            # Приз сгорел, пока человек писал вопрос: говорим об этом в том же
+            # экране, а не отдельным сообщением поверх.
+            notice = f"{_PRIZE_GONE_TEXT}\n\n"
 
         reading = await create_reading_draft(
             session, user, spread_type, question, local_today(user),
@@ -329,7 +452,12 @@ async def spread_question(message: Message, state: FSMContext, session: AsyncSes
                 reading_id=reading.id,
                 wheel_win_id=win.id if win else None,
             )
-            await message.answer(_FREE_TODAY_TEXT, reply_markup=tarot_keyboard())
+            await show_screen(
+                message,
+                f"{notice}{_FREE_TODAY_TEXT}",
+                scope=TAROT_SCREEN,
+                parse_mode="HTML",
+            )
             await _reveal_reading(message, reading)
             await publish_tarot_reading_generate(reading.id)
             return
@@ -340,14 +468,14 @@ async def spread_question(message: Message, state: FSMContext, session: AsyncSes
         await session.commit()  # черновик должен пережить рестарт до оплаты
         await state.clear()
 
-        sent_text = _INVOICE_SENT_TEXT
+        sent_text = f"{notice}{_INVOICE_SENT_TEXT}"
         if price.has_discount:
             sent_text += _DISCOUNT_LINE.format(
                 percent=price.discount_percent,
                 base=price.base_amount,
                 final=price.final_amount,
             )
-        await message.answer(sent_text, reply_markup=tarot_keyboard())
+        await show_screen(message, sent_text, scope=TAROT_SCREEN, parse_mode="HTML")
         await send_reading_invoice(message, reading.id, spec, price)
         log.info(
             Event.PAYMENT_INVOICE_SENT,
@@ -368,9 +496,9 @@ _LEGACY_UNLOCK_CB = "tarot:reading:unlock"
 
 @router.callback_query(F.data == _LEGACY_UNLOCK_CB)
 async def cb_legacy_unlock(callback: CallbackQuery) -> None:
-    await callback.answer()
+    await toast(callback)
     if isinstance(callback.message, Message):
-        await callback.message.answer("Выбери расклад ✨", reply_markup=tarot_keyboard())
+        await open_spreads_screen(callback.message)
 
 
 @router.pre_checkout_query(F.invoice_payload.startswith(TAROT_PAYLOAD_PREFIX))
@@ -446,6 +574,6 @@ async def spread_paid(message: Message, session: AsyncSession) -> None:
         await session.rollback()  # гонка двух повторных апдейтов — платёж уже записан
         return
 
-    await message.answer(_PAID_THANKS_TEXT)
+    await show_screen(message, _PAID_THANKS_TEXT, scope=TAROT_SCREEN)
     await _reveal_reading(message, reading)
     await publish_tarot_reading_generate(reading.id)

@@ -30,6 +30,13 @@ BTN_TAROT_WISH = "🌟 Загадай желание"
 BTN_TAROT_DECISION_LEGACY = "⚖️ На решение"
 BTN_TAROT_SKIP = "⏭ Пропустить"
 
+# Раздел таро живёт в одном редактируемом экране: выбор расклада и «Пропустить»
+# стали inline-кнопками. Тексты reply-кнопок выше остались — у части людей
+# клавиатура раскладов закэширована клиентом, и их нажатия надо ловить.
+CB_TAROT_SPREAD_PREFIX = "tarot:spread:"
+CB_TAROT_QUESTION_SKIP = "tarot:question:skip"
+CB_TAROT_CLOSE = "tarot:close"
+
 BTN_GENDER_MALE = "Мужчина"
 BTN_GENDER_FEMALE = "Женщина"
 GENDER_REPLY_BUTTONS = frozenset({BTN_GENDER_MALE, BTN_GENDER_FEMALE})

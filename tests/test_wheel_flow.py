@@ -321,12 +321,16 @@ class TestPrizeActivation:
             **{"users_crud.get_user_by_telegram_id": AsyncMock(side_effect=lookup)},
             **{"wheel_crud.get_win": AsyncMock(return_value=win)},
         )
-        # start_spread_with_prize не мокаем — проверяем реальный путь до таро
-        await _run_wheel(cb_activate_prize, wheel_mocks, callback, AsyncMock(), AsyncMock())
+        # start_spread_with_prize не мокаем — проверяем реальный путь до таро.
+        # Экран таро подменяем: настоящий пошёл бы в Bot API мимо мока сообщения.
+        screen = AsyncMock(return_value=777)
+        with patch(f"{_TAROT}.show_screen", screen):
+            await _run_wheel(cb_activate_prize, wheel_mocks, callback, AsyncMock(), AsyncMock())
 
+        shown = [str(c.args[1]) for c in screen.call_args_list]
         answers = [str(c.args[0]) for c in callback.message.answer.call_args_list]
-        assert not any("регистрацию" in text for text in answers), answers
-        assert any("Загадай желание" in text for text in answers), answers
+        assert not any("регистрацию" in text for text in answers + shown), answers + shown
+        assert any("Загадай желание" in text for text in shown), shown
 
     async def test_burned_prize_is_refused(self) -> None:
         user = _user()
@@ -397,6 +401,9 @@ class TestPrizeAppliedToSpread:
             "wheel_crud.get_pending_win_for_reading": AsyncMock(return_value=None),
             "reserve_win_for_reading": AsyncMock(),
             "mark_win_activated": AsyncMock(),
+            # Раздел таро живёт в одном редактируемом экране.
+            "show_screen": AsyncMock(return_value=777),
+            "close_screen": AsyncMock(),
         }
         defaults.update(overrides)
         return defaults
@@ -460,7 +467,8 @@ class TestPrizeAppliedToSpread:
         await self._run(mocks, message, state, AsyncMock())
 
         assert message.answer_invoice.call_args.kwargs["prices"][0].amount == 50
-        warned = " ".join(str(c.args[0]) for c in message.answer.call_args_list)
+        # Предупреждение о сгоревшем призе — в экране над инвойсом, не сообщением.
+        warned = " ".join(str(c.args[1]) for c in mocks["show_screen"].call_args_list)
         assert "сгорел" in warned
 
     async def test_prize_for_other_spread_is_ignored(self) -> None:
