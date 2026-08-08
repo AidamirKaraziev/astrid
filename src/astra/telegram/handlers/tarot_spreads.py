@@ -73,6 +73,7 @@ from astra.telegram.keyboards import (
     tarot_question_keyboard,
     tarot_spreads_keyboard,
 )
+from astra.services.wallet_service import cancel_charge, plan_charge, settle_charge
 from astra.telegram.effects import EFFECT_CELEBRATION
 from astra.telegram.screen import alert, close_screen, react, show_screen, toast
 from astra.telegram.states import TarotStates
@@ -110,6 +111,8 @@ _INVOICE_SENT_TEXT = (
     "Если передумаешь, просто вернись в меню — ничего не спишется."
 )
 _DISCOUNT_LINE = "\n\nСегодня скидка −{percent}%: <s>{base} ⭐</s> → {final} ⭐"
+_WALLET_PART_LINE = "\n\nС твоего счёта спишу <b>{wallet} ⭐</b>, доплатить — <b>{rest} ⭐</b>"
+_WALLET_PAID_TEXT = "Списала {amount} ⭐ с твоего счёта ✨ Тяну карты…"
 
 
 def _strike_digits(value: int) -> str:
@@ -297,14 +300,21 @@ async def send_reading_invoice(
     reading_id,
     spec,
     price: ProductPriceInfo,
+    *,
+    amount: int | None = None,
 ) -> None:
     """Инвойс Stars; при акции платёжная кнопка показывает зачёркнутую старую цену.
 
     Утверждённый вариант B: «5̶0̶ ⭐ → 5 ⭐ · скидка −90%». Текст на pay-кнопке
     разрешён Bot API, ⭐ Telegram заменяет своей иконкой; зачёркивание — U+0336.
+
+    `amount` — сколько реально просим у Telegram. Отличается от цены, когда
+    часть закрыта внутренним счётом; тогда кнопку со «старой ценой» не рисуем:
+    два разных вычитания в одной строке прочитать невозможно.
     """
+    to_pay = price.final_amount if amount is None else amount
     kwargs: dict = {}
-    if price.has_discount:
+    if price.has_discount and to_pay == price.final_amount:
         pay_button = InlineKeyboardButton(
             text=(
                 f"{_strike_digits(price.base_amount)} ⭐ → {price.final_amount} ⭐"
@@ -320,7 +330,7 @@ async def send_reading_invoice(
         ),
         payload=tarot_invoice_payload(reading_id),
         currency=price.currency,
-        prices=[LabeledPrice(label=spec.title_ru, amount=price.final_amount)],
+        prices=[LabeledPrice(label=spec.title_ru, amount=to_pay)],
         **kwargs,
     )
 
@@ -439,10 +449,21 @@ async def _accept_question(
         reading = await create_reading_draft(
             session, user, spread_type, question, local_today(user),
         )
+        payload = tarot_invoice_payload(reading.id)
+        charge = await plan_charge(
+            session,
+            user.id,
+            price,
+            payload=payload,
+            description=spec.title_ru,
+        )
 
-        if price.is_free:
-            # discount_percent = 100 в БД: без инвойса, карты сразу.
-            await mark_reading_paid(session, reading, 0)
+        if charge.covered_by_wallet:
+            # Либо товар бесплатный (скидка 100% в каталоге или приз колеса),
+            # либо внутренний счёт закрыл всю цену. Инвойса нет: сумму 0 Stars
+            # не принимают.
+            spent = await settle_charge(session, user.id, payload, description=spec.title_ru)
+            await mark_reading_paid(session, reading, spent)
             if win is not None:
                 await reserve_win_for_reading(session, win, reading.id)
                 await mark_win_activated(session, win)
@@ -451,7 +472,7 @@ async def _accept_question(
                 user,
                 action=tarot_product_code(str(spread_type)),
                 kind=UsageKind.TAROT,
-                is_paid=False,
+                is_paid=spent > 0,
             )
             await session.commit()
             await state.clear()
@@ -460,10 +481,12 @@ async def _accept_question(
                 user_id=user.id,
                 reading_id=reading.id,
                 wheel_win_id=win.id if win else None,
+                paid_from_wallet=spent,
             )
+            granted = _WALLET_PAID_TEXT.format(amount=spent) if spent else _FREE_TODAY_TEXT
             await show_screen(
                 message,
-                f"{notice}{_FREE_TODAY_TEXT}",
+                f"{notice}{granted}",
                 scope=TAROT_SCREEN,
                 parse_mode="HTML",
             )
@@ -474,7 +497,7 @@ async def _accept_question(
         if win is not None:
             # Приз тратится только вместе с оплатой — пока лишь резервируем.
             await reserve_win_for_reading(session, win, reading.id)
-        await session.commit()  # черновик должен пережить рестарт до оплаты
+        await session.commit()  # черновик и бронь должны пережить рестарт до оплаты
         await state.clear()
 
         sent_text = f"{notice}{_INVOICE_SENT_TEXT}"
@@ -484,15 +507,22 @@ async def _accept_question(
                 base=price.base_amount,
                 final=price.final_amount,
             )
+        if charge.from_wallet:
+            # Без этой строки сумма в инвойсе выглядит взятой с потолка.
+            sent_text += _WALLET_PART_LINE.format(
+                wallet=charge.from_wallet,
+                rest=charge.to_invoice,
+            )
         await show_screen(message, sent_text, scope=TAROT_SCREEN, parse_mode="HTML")
-        await send_reading_invoice(message, reading.id, spec, price)
+        await send_reading_invoice(message, reading.id, spec, price, amount=charge.to_invoice)
         log.info(
             Event.PAYMENT_INVOICE_SENT,
             user_id=user.id,
             reading_id=reading.id,
-            amount=price.final_amount,
+            amount=charge.to_invoice,
             currency=price.currency,
             discount_percent=price.discount_percent,
+            from_wallet=charge.from_wallet,
         )
     finally:
         await release_reading_lock(user.id)
@@ -542,11 +572,16 @@ async def spread_paid(message: Message, session: AsyncSession) -> None:
         return
 
     charge_id = payment_info.telegram_payment_charge_id
+    payload = payment_info.invoice_payload
     user = await users_crud.get_user_by_telegram_id(session, message.from_user.id)
     reading = await get_reading(session, reading_id) if user else None
     if user is None or reading is None or reading.user_id != user.id:
         # Деньги списаны, а начислить не на что — сразу возвращаем звёзды.
         log.error(Event.PAYMENT_ORPHAN, reading_id=reading_id, charge_id=charge_id)
+        if user is not None:
+            # Бронь внутреннего счёта снимаем сразу, не дожидаясь её срока.
+            await cancel_charge(session, user.id, payload)
+            await session.commit()
         if message.bot is not None:
             await message.bot.refund_star_payment(
                 user_id=message.from_user.id,
@@ -565,8 +600,11 @@ async def spread_paid(message: Message, session: AsyncSession) -> None:
         )
         if payment is None:
             return  # дубль successful_payment — уже обработан
+        # Внутренняя часть цены была забронирована при показе инвойса —
+        # теперь списываем её насовсем.
+        spent = await settle_charge(session, user.id, payload)
         if reading.status == ReadingStatus.PENDING_PAYMENT:
-            await mark_reading_paid(session, reading, payment_info.total_amount)
+            await mark_reading_paid(session, reading, payment_info.total_amount + spent)
         await record_usage(
             session,
             user,

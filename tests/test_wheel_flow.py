@@ -16,6 +16,7 @@ from astra.payments.service import (
     parse_wheel_spin_invoice_payload,
     wheel_spin_invoice_payload,
 )
+from astra.services.wallet_service import Charge
 from astra.telegram.handlers.tarot_spreads import spread_question
 from astra.telegram.handlers.wheel import (
     cb_activate_prize,
@@ -70,6 +71,18 @@ def _win(user_id, *, code: str = "tarot_wish", discount: int = 100, **kwargs) ->
     )
 
 
+def _empty_wallet_charge():
+    """Кошелёк по умолчанию пуст: вся цена уходит в инвойс, как было до него."""
+
+    async def plan(session, user_id, price, **kwargs):
+        return Charge(
+            price,
+            from_wallet=0,
+            to_invoice=0 if price.is_free else price.final_amount,
+        )
+
+    return plan
+
 def _bot_message() -> MagicMock:
     """Мок Message со спекой: хендлеры колеса проверяют isinstance(..., Message)."""
     message = MagicMock(spec=Message)
@@ -98,6 +111,10 @@ def _wheel_mocks(**overrides) -> dict:
         # Раздел живёт в одном редактируемом экране: хаб, вращение, приз.
         "show_screen": AsyncMock(return_value=888),
         "close_screen": AsyncMock(),
+        # Кошелёк: пустой баланс, вся цена уходит в инвойс.
+        "plan_charge": AsyncMock(side_effect=_empty_wallet_charge()),
+        "settle_charge": AsyncMock(return_value=0),
+        "refund_to_wallet": AsyncMock(return_value=0),
     }
     defaults.update(overrides)
     return defaults
@@ -447,6 +464,9 @@ class TestPrizeAppliedToSpread:
             "show_screen": AsyncMock(return_value=777),
             "close_screen": AsyncMock(),
             "react": AsyncMock(),
+            "plan_charge": AsyncMock(side_effect=_empty_wallet_charge()),
+            "settle_charge": AsyncMock(return_value=0),
+            "cancel_charge": AsyncMock(return_value=0),
         }
         defaults.update(overrides)
         return defaults

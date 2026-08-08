@@ -163,6 +163,15 @@ class Event(StrEnum):
     GEONAMES_IMPORT_DONE = "geonames.import_done"
     GEONAMES_IMPORT_FAILED = "geonames.import_failed"
 
+    # Внутренний кошелёк в звёздах
+    WALLET_CREDITED = "wallet.credited"
+    WALLET_HOLD_CREATED = "wallet.hold_created"
+    WALLET_HOLD_RELEASED = "wallet.hold_released"
+    # Бронь протухла до оплаты: человек вернулся к старому инвойсу через час.
+    WALLET_HOLD_EXPIRED = "wallet.hold_expired"
+    WALLET_SPENT = "wallet.spent"
+    WALLET_REFUNDED = "wallet.refunded"
+
     # Redis
     REDIS_PROGRESS_CLEARED = "redis.progress_cleared"
     REDIS_PREDICTION_PENDING_CLEARED = "redis.prediction_pending_cleared"

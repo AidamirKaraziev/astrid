@@ -16,4 +16,5 @@ from astra.tarot.models import TarotDraw, TarotReading  # noqa: F401
 from astra.llm.models import LlmCall, LlmPrice  # noqa: F401
 from astra.usage.models import ActivityDay, UsageEvent  # noqa: F401
 from astra.users.models import Profile, User  # noqa: F401
+from astra.wallet.models import StarWalletEntry  # noqa: F401
 from astra.wheel.models import WheelPrize, WheelWin  # noqa: F401

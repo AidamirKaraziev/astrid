@@ -29,6 +29,7 @@ from astra.telegram.keyboards import (
     share_keyboard,
 )
 from astra.telegram.profile_portrait import build_portrait_text
+from astra.wallet.crud import get_balance
 from astra.telegram.profile_gender_prompt import GENDER_SAVED_TEXT
 from astra.telegram.states import ProfileStates
 from astra.telegram.utils import parse_birth_date, parse_birth_time
@@ -95,10 +96,13 @@ async def invite_friend(message: Message, session: AsyncSession) -> None:
         f"https://t.me/share/url?url={stats.referral_link}"
         f"&text={quote('Попробуй Astra — магическая поддержка каждый день ✨')}"
     )
+    # Баллы уехали в звёзды: показывать обе валюты — значит запутать. Баланс
+    # берём из кошелька, его хотя бы можно потратить.
+    balance = await get_balance(session, user.id)
     await message.answer(
         f"🎁 Твоя ссылка:\n<code>{stats.referral_link}</code>\n\n"
         f"Приглашено: <b>{stats.invited_count}</b>\n"
-        f"Заработано баллов: <b>{stats.points_earned}</b>",
+        f"На счету: <b>{balance} ⭐</b>",
         parse_mode="HTML",
         reply_markup=share_keyboard(share_url),
     )

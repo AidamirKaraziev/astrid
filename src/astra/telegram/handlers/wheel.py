@@ -43,6 +43,11 @@ from astra.telegram.button_texts import (
     COMING_SOON_TEXT,
 )
 from astra.telegram.handlers.tarot_spreads import start_spread_with_prize
+from astra.services.wallet_service import (
+    plan_charge,
+    refund_to_wallet,
+    settle_charge,
+)
 from astra.telegram.screen import alert, close_screen, show_screen, toast
 from astra.telegram.wheel_animation import play_spin_animation
 from astra.users import crud as users_crud
@@ -283,26 +288,47 @@ async def cb_spin_paid(callback: CallbackQuery, session: AsyncSession) -> None:
         await alert(callback, _POOL_EMPTY_TEXT)
         return
     await toast(callback)
-    if price.is_free:
-        # discount_percent = 100 в каталоге: вращение раздаётся без инвойса.
+    payload = wheel_spin_invoice_payload(uuid4())
+    charge = await plan_charge(
+        session,
+        user.id,
+        price,
+        payload=payload,
+        description=_SPIN_INVOICE_TITLE,
+    )
+
+    if charge.covered_by_wallet:
+        # Вращение бесплатно по каталогу или закрыто внутренним счётом.
+        spent = await settle_charge(session, user.id, payload, description=_SPIN_INVOICE_TITLE)
+        await session.commit()
         win = await _spin_and_reveal(callback.message, session, user, SpinType.PAID)
         if win is None:
             await callback.message.answer(_POOL_EMPTY_TEXT)
+        elif spent:
+            log.info(Event.WALLET_SPENT, user_id=user.id, payload=payload, amount=spent)
         return
 
+    if charge.from_wallet:
+        # Иначе сумма в инвойсе выглядит взятой с потолка.
+        await callback.message.answer(
+            f"С твоего счёта спишу <b>{charge.from_wallet} ⭐</b>, "
+            f"доплатить — <b>{charge.to_invoice} ⭐</b>",
+            parse_mode="HTML",
+        )
     await callback.message.answer_invoice(
         title=_SPIN_INVOICE_TITLE[:32],
         description=_SPIN_INVOICE_DESCRIPTION,
-        payload=wheel_spin_invoice_payload(uuid4()),
+        payload=payload,
         currency=price.currency,
-        prices=[LabeledPrice(label=_SPIN_INVOICE_TITLE, amount=price.final_amount)],
+        prices=[LabeledPrice(label=_SPIN_INVOICE_TITLE, amount=charge.to_invoice)],
     )
     log.info(
         Event.PAYMENT_INVOICE_SENT,
         user_id=user.id,
         product_code="wheel_spin",
-        amount=price.final_amount,
+        amount=charge.to_invoice,
         currency=price.currency,
+        from_wallet=charge.from_wallet,
     )
 
 
@@ -351,6 +377,9 @@ async def wheel_spin_paid(message: Message, session: AsyncSession) -> None:
     if payment is None:
         return  # повтор того же charge_id
 
+    # Внутренняя часть цены была забронирована при показе инвойса.
+    await settle_charge(session, user.id, payment_info.invoice_payload)
+
     win = await _spin_and_reveal(
         message,
         session,
@@ -363,6 +392,8 @@ async def wheel_spin_paid(message: Message, session: AsyncSession) -> None:
 
     # Пул опустел между pre_checkout и оплатой — деньги не за что брать.
     await session.rollback()
+    await refund_to_wallet(session, user.id, payment_info.invoice_payload)
+    await session.commit()
     if message.bot is not None:
         await message.bot.refund_star_payment(
             user_id=message.from_user.id,

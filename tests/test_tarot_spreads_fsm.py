@@ -5,6 +5,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 
 from astra.payments.service import ProductPriceInfo
+from astra.services.wallet_service import Charge
 from astra.tarot.enums import ReadingStatus
 from astra.tarot.spreads import SpreadType
 from aiogram.types import Message
@@ -61,6 +62,18 @@ def _user() -> MagicMock:
     return user
 
 
+def _empty_wallet_charge():
+    """Кошелёк по умолчанию пуст: вся цена уходит в инвойс, как было до него."""
+
+    async def plan(session, user_id, price, **kwargs):
+        return Charge(
+            price,
+            from_wallet=0,
+            to_invoice=0 if price.is_free else price.final_amount,
+        )
+
+    return plan
+
 def _mocks(**overrides) -> dict:
     defaults = {
         "users_crud.get_user_by_telegram_id": AsyncMock(return_value=_user()),
@@ -80,6 +93,10 @@ def _mocks(**overrides) -> dict:
         "show_screen": AsyncMock(return_value=777),
         "close_screen": AsyncMock(),
         "react": AsyncMock(),
+        # Кошелёк: пустой баланс, списывать нечего.
+        "plan_charge": AsyncMock(side_effect=_empty_wallet_charge()),
+        "settle_charge": AsyncMock(return_value=0),
+        "cancel_charge": AsyncMock(return_value=0),
     }
     defaults.update(overrides)
     return defaults

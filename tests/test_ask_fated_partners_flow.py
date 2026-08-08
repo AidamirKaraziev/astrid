@@ -27,12 +27,32 @@ from astra.telegram.button_texts import (
 CALIB_YES = f"{CB_ASK_CALIB_PREFIX}{'love_fated_count'}:yes"
 CALIB_NO = f"{CB_ASK_CALIB_PREFIX}{'love_fated_count'}:no"
 from astra.ask.products import get_product
+from astra.services.wallet_service import Charge
 from astra.telegram.birth_data_gate import RETURN_PAYLOAD_KEY, RETURN_PRODUCT_KEY
 from astra.telegram.handlers import ask_astrid
 from astra.users.birth_data import Product
 from astra.telegram import ask_text as A
 
 QUESTION = "love_fated_count"
+
+
+@pytest.fixture(autouse=True)
+def _empty_wallet():
+    """Внутренний счёт пуст: вся цена уходит в инвойс, как было до кошелька."""
+
+    async def plan(session, user_id, price, **kwargs):
+        return Charge(
+            price,
+            from_wallet=0,
+            to_invoice=0 if price.is_free else price.final_amount,
+        )
+
+    with (
+        patch.object(ask_astrid, "plan_charge", AsyncMock(side_effect=plan)),
+        patch.object(ask_astrid, "settle_charge", AsyncMock(return_value=0)),
+        patch.object(ask_astrid, "cancel_charge", AsyncMock(return_value=0)),
+    ):
+        yield
 
 
 async def _fsm() -> FSMContext:
