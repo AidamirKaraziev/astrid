@@ -25,6 +25,10 @@ class Event(StrEnum):
     TELEGRAM_BOT_BLOCKED = "telegram.bot_blocked"
     TELEGRAM_BOT_UNBLOCKED = "telegram.bot_unblocked"
     TELEGRAM_PROGRESS_NOTIFY_FAILED = "telegram.progress.notify_failed"
+    # Живой экран раздела: редактирование не прошло и экран пересоздан. Норма
+    # после 48 часов и при ручном удалении, но всплеск означает, что реестр
+    # message_id разъехался с чатом.
+    TELEGRAM_SCREEN_RECREATED = "telegram.screen.recreated"
     # Сообщение не подошло ни одному сценарию: тупик, который человек молча
     # переживает, а мы — нет. По этому событию видно, где люди теряются.
     TELEGRAM_MESSAGE_UNHANDLED = "telegram.message.unhandled"
@@ -159,6 +163,7 @@ class Event(StrEnum):
     # Redis
     REDIS_PROGRESS_CLEARED = "redis.progress_cleared"
     REDIS_PREDICTION_PENDING_CLEARED = "redis.prediction_pending_cleared"
+    REDIS_SCREEN_CLEARED = "redis.screen_cleared"
 
     # Scheduler
     SCHEDULER_TICK = "scheduler.tick"
