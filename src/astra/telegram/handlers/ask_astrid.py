@@ -69,6 +69,7 @@ from astra.telegram.keyboards import (
     ask_back_keyboard,
     ask_questions_keyboard,
 )
+from astra.telegram.screen import toast
 from astra.telegram.states import ProfileStates
 from astra.telegram.birth_data_gate import ensure_birth_data
 from astra.users import crud as users_crud
@@ -318,24 +319,25 @@ async def cb_ask_gate_skip(callback: CallbackQuery, state: FSMContext) -> None:
 @router.callback_query(F.data.startswith(CB_ASK_CALIB_PREFIX))
 async def cb_ask_calibration(callback: CallbackQuery, session: AsyncSession) -> None:
     """Ответ на калибрующий вопрос: создаём черновик и выставляем инвойс."""
-    await callback.answer()
     msg = callback.message
     user = await _current_user(callback, session)
     if not isinstance(msg, Message) or user is None:
+        await toast(callback)
         return
 
     payload = (callback.data or "").removeprefix(CB_ASK_CALIB_PREFIX)
     question_key, _, answer = payload.rpartition(":")
     product = get_product(question_key)
     if product is None:
-        await msg.answer(COMING_SOON_TEXT)
+        await toast(callback, COMING_SOON_TEXT)
         return
     calibration = answer == "yes"
 
     price = await get_ask_price(session, question_key)
     if price is None:
-        await msg.answer(COMING_SOON_TEXT)
+        await toast(callback, COMING_SOON_TEXT)
         return
+    await toast(callback)
 
     reading = await ask_crud.create_draft(
         session,
@@ -511,10 +513,10 @@ async def _send_card(
 @router.callback_query(F.data.startswith(CB_ASK_ARCHIVE_PREFIX))
 async def cb_ask_archive(callback: CallbackQuery, session: AsyncSession) -> None:
     """Бесплатная повторная выдача купленного ответа."""
-    await callback.answer()
     msg = callback.message
     user = await _current_user(callback, session)
     if not isinstance(msg, Message) or user is None:
+        await toast(callback)
         return
     question_key = (callback.data or "").removeprefix(CB_ASK_ARCHIVE_PREFIX)
     reading = await ask_crud.get_ready_reading(
@@ -524,8 +526,9 @@ async def cb_ask_archive(callback: CallbackQuery, session: AsyncSession) -> None
     )
     product = get_product(question_key)
     if reading is None or not reading.answer or product is None:
-        await msg.answer(COMING_SOON_TEXT)
+        await toast(callback, COMING_SOON_TEXT)
         return
+    await toast(callback)
 
     result = result_from_reading(reading)
     if reading.card_file_id and result is not None:

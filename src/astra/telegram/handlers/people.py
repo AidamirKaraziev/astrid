@@ -32,6 +32,7 @@ from astra.telegram.keyboards_people import (
     people_list_keyboard,
 )
 from astra.telegram.profile_text import shorten_place_display
+from astra.telegram.screen import toast
 from astra.telegram.states import PeopleStates
 from astra.telegram.utils import parse_birth_date, parse_birth_time
 from astra.users import crud as users_crud
@@ -377,9 +378,7 @@ async def cb_people_delete_confirm(callback: CallbackQuery, session: AsyncSessio
 
 @router.callback_query(F.data.startswith(CB_PEOPLE_DELETE_CANCEL_PREFIX))
 async def cb_people_delete_cancel(callback: CallbackQuery) -> None:
-    if callback.message:
-        await callback.message.answer("Оставила профиль как есть ✨")
-    await callback.answer()
+    await toast(callback, "Оставила профиль как есть ✨")
 
 
 @router.callback_query(

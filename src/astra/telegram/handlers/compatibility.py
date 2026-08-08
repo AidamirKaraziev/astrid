@@ -78,6 +78,7 @@ from astra.telegram.keyboards import (
     skip_keyboard,
 )
 from astra.telegram.keyboards_people import person_pick_keyboard
+from astra.telegram.screen import toast
 from astra.telegram.states import CompatibilityStates
 from astra.telegram.utils import parse_birth_date, parse_birth_time
 from astra.usage import ACTION_COMPATIBILITY, UsageKind, record_usage
@@ -401,12 +402,8 @@ async def cb_pick_person_profile(
     await state.update_data(**updates)
     log.info(Event.NATAL_PROFILE_PICKED, profile_id=str(profile.id))
 
-    await callback.message.answer(
-        f"Беру данные: <b>{profile.label}</b> ✨",
-        parse_mode="HTML",
-    )
+    await toast(callback, f"Беру данные: {profile.label} ✨")
     await _prompt_next_person_step(callback.message, state, session, callback.from_user.id)
-    await callback.answer()
 
 
 @router.message(CompatibilityStates.collect_name)
@@ -828,9 +825,7 @@ async def cb_delete_report_confirm(callback: CallbackQuery, session: AsyncSessio
 
 @router.callback_query(F.data.startswith(CB_COMPAT_DELETE_CANCEL_PREFIX))
 async def cb_delete_report_cancel(callback: CallbackQuery) -> None:
-    if callback.message:
-        await callback.message.answer("Оставила разбор как есть ✨")
-    await callback.answer()
+    await toast(callback, "Оставила разбор как есть ✨")
 
 
 @router.callback_query(

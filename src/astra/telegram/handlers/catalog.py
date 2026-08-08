@@ -18,6 +18,7 @@ from astra.telegram.keyboards import (
     support_contextual_keyboard,
     tarot_keyboard,
 )
+from astra.telegram.screen import toast
 
 log = get_logger(__name__)
 
@@ -44,9 +45,7 @@ async def product_coming_soon(message: Message) -> None:
 
 @router.callback_query(F.data == CB_PRODUCT_ASK_STARS)
 async def cb_product_ask_stars(callback: CallbackQuery) -> None:
-    await callback.answer()
-    if callback.message:
-        await callback.message.answer(COMING_SOON_TEXT)
+    await toast(callback, COMING_SOON_TEXT)
 
 
 # Страховка: платёж с payload, который не подхватил ни один профильный хендлер

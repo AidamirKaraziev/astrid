@@ -162,7 +162,9 @@ class TestFreeSpin:
         await _run_wheel(cb_spin_free, mocks, callback, AsyncMock())
 
         mocks["perform_spin"].assert_not_awaited()
-        assert "завтра" in callback.message.answer.call_args.args[0]
+        # Отказ живёт в плашке сверху, а не сообщением в чате.
+        callback.message.answer.assert_not_called()
+        assert "завтра" in callback.answer.call_args.args[0]
 
     async def test_double_tap_race_is_caught(self) -> None:
         session = AsyncMock()
@@ -175,12 +177,25 @@ class TestFreeSpin:
         assert "завтра" in callback.message.answer.call_args.args[0]
 
     async def test_empty_pool_reports_pause(self) -> None:
+        """Пул опустел между проверкой и вращением: callback уже отвечен, остаётся сообщение."""
         callback = _callback()
         mocks = _wheel_mocks(perform_spin=AsyncMock(return_value=None))
 
         await _run_wheel(cb_spin_free, mocks, callback, AsyncMock())
 
         assert "паузе" in callback.message.answer.call_args.args[0]
+
+    async def test_known_empty_pool_reports_pause_in_alert(self) -> None:
+        """Призов нет с самого начала — колесо не крутится, чат не засоряется."""
+        callback = _callback()
+        mocks = _wheel_mocks(**{"wheel_crud.list_active_prizes": AsyncMock(return_value=[])})
+
+        await _run_wheel(cb_spin_free, mocks, callback, AsyncMock())
+
+        mocks["perform_spin"].assert_not_awaited()
+        callback.message.answer.assert_not_called()
+        assert "паузе" in callback.answer.call_args.args[0]
+        assert callback.answer.call_args.kwargs["show_alert"] is True
 
 
 class TestPaidSpin:
@@ -327,7 +342,9 @@ class TestPrizeActivation:
         await _run_wheel(cb_activate_prize, mocks, callback, AsyncMock(), AsyncMock())
 
         mocks["start_spread_with_prize"].assert_not_awaited()
-        assert "сгорел" in callback.message.answer.call_args.args[0]
+        callback.message.answer.assert_not_called()
+        assert "сгорел" in callback.answer.call_args.args[0]
+        assert callback.answer.call_args.kwargs["show_alert"] is True
 
     async def test_foreign_prize_is_refused(self) -> None:
         callback = _callback()
