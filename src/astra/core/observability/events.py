@@ -29,6 +29,9 @@ class Event(StrEnum):
     # после 48 часов и при ручном удалении, но всплеск означает, что реестр
     # message_id разъехался с чатом.
     TELEGRAM_SCREEN_RECREATED = "telegram.screen.recreated"
+    # Telegram не принял эффект сообщения: отправили то же самое без него.
+    # Официального списка id у эффектов нет, поэтому событие ждём и не паникуем.
+    TELEGRAM_EFFECT_REJECTED = "telegram.effect.rejected"
     # Сообщение не подошло ни одному сценарию: тупик, который человек молча
     # переживает, а мы — нет. По этому событию видно, где люди теряются.
     TELEGRAM_MESSAGE_UNHANDLED = "telegram.message.unhandled"

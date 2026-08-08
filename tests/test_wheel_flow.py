@@ -441,6 +441,7 @@ class TestPrizeAppliedToSpread:
             # Раздел таро живёт в одном редактируемом экране.
             "show_screen": AsyncMock(return_value=777),
             "close_screen": AsyncMock(),
+            "react": AsyncMock(),
         }
         defaults.update(overrides)
         return defaults

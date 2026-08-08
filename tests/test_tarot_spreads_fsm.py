@@ -79,6 +79,7 @@ def _mocks(**overrides) -> dict:
         # Раздел живёт в одном редактируемом экране, а не в сообщениях чата.
         "show_screen": AsyncMock(return_value=777),
         "close_screen": AsyncMock(),
+        "react": AsyncMock(),
     }
     defaults.update(overrides)
     return defaults

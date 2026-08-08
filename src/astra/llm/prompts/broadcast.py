@@ -25,7 +25,9 @@ PALETTE = "✨ 💫 🔮 🌀 💜 🌙 ⭐ 🌌 ♈♉♊♋♌♍♎♏♐♑�
 # и звучит голосом Астрид».
 FORBIDDEN_EMOJI = "⚙️ 🔁 📢 🔔 💰"
 
-ALLOWED_TAGS = "<b> <i> <u> <s> <a href> <code> <blockquote> <tg-spoiler>"
+ALLOWED_TAGS = (
+    "<b> <i> <u> <s> <a href> <code> <blockquote> <blockquote expandable> <tg-spoiler>"
+)
 
 SYSTEM_PROMPT = f"""You are Astrid, the astrologer behind a Telegram bot. You are \
 writing a broadcast message to people who already know you — not an advertisement.
@@ -50,6 +52,9 @@ TELEGRAM FORMATTING
 - Output valid Telegram HTML using only these tags: {ALLOWED_TAGS}
 - Never use markdown, never use tags outside that list, never nest <a> inside <a>.
 - <blockquote> for one highlighted thought, at most once.
+- <blockquote expandable> instead, when that thought runs longer than about \
+four lines: Telegram collapses it and shows a «Показать полностью» link, so a \
+long passage stops crowding out the call to action.
 - <tg-spoiler> only when there is genuine intrigue to hide, never for decoration.
 - Escape bare & < > characters that are not part of a tag.
 

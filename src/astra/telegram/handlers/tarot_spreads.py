@@ -73,7 +73,8 @@ from astra.telegram.keyboards import (
     tarot_question_keyboard,
     tarot_spreads_keyboard,
 )
-from astra.telegram.screen import alert, close_screen, show_screen, toast
+from astra.telegram.effects import EFFECT_CELEBRATION
+from astra.telegram.screen import alert, close_screen, react, show_screen, toast
 from astra.telegram.states import TarotStates
 from astra.telegram.tarot_media import send_card_photo, send_cards_album
 from astra.usage import UsageKind, record_usage
@@ -275,15 +276,20 @@ async def spread_button(message: Message, state: FSMContext, session: AsyncSessi
 
 
 async def _reveal_reading(message: Message, reading) -> None:
-    """Погасить экран и показать карты; интерпретацию доставит worker."""
+    """Погасить экран и показать карты; интерпретацию доставит worker.
+
+    Конфетти — на выпадение карт: это момент, ради которого человек платил.
+    У бесплатной карты дня эффекта нет: праздник каждый день перестаёт быть
+    праздником.
+    """
     await close_screen(message, TAROT_SCREEN)
     spec = SPREADS[SpreadType(reading.spread_type)]
     cards = reading_cards(reading)
     caption = format_reading_caption(spec, cards)
     if len(cards) == 1:
-        await send_card_photo(message, cards[0], caption)
+        await send_card_photo(message, cards[0], caption, effect=EFFECT_CELEBRATION)
     else:
-        await send_cards_album(message, cards, caption)
+        await send_cards_album(message, cards, caption, effect=EFFECT_CELEBRATION)
 
 
 async def send_reading_invoice(
@@ -386,6 +392,9 @@ async def spread_question(message: Message, state: FSMContext, session: AsyncSes
     user = await _require_user(message, session)
     if user is None:
         return
+    if question is not None:
+        # «Вижу вопрос» без сообщения в чате: реакция на присланный текст.
+        await react(message, "👀")
     await _accept_question(message, state, session, question=question, user=user)
 
 

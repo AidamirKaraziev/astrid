@@ -8,6 +8,8 @@
   сообщение на раздел, которое переписывается на каждом шаге. Исчезает.
 * **тост** (`toast` / `alert`) — подтверждение нажатия. В историю не попадает
   вообще, поэтому в него нельзя класть то, что человек захочет перечитать.
+* **реакция** (`react`) — ответ на сообщение человека вообще без сообщения:
+  бот ставит 👀 на присланный вопрос вместо реплики «приняла».
 
 Экран привязан к паре «чат + `scope`»: у таро свой экран, у колеса свой, и они
 не затирают друг друга. `scope` — короткая строка вроде `"tarot"`.
@@ -31,12 +33,13 @@ from __future__ import annotations
 from typing import Any
 
 from aiogram import Bot
-from aiogram.exceptions import TelegramBadRequest
+from aiogram.exceptions import TelegramAPIError, TelegramBadRequest
 from aiogram.types import (
     CallbackQuery,
     InlineKeyboardMarkup,
     InputMedia,
     Message,
+    ReactionTypeEmoji,
 )
 
 from astra.core.observability import Event, get_logger
@@ -232,9 +235,24 @@ async def alert(callback: CallbackQuery, text: str) -> None:
     await callback.answer(text[:_CALLBACK_TEXT_LIMIT], show_alert=True)
 
 
+async def react(message: Message, emoji: str) -> None:
+    """Поставить реакцию на сообщение человека вместо ответа «приняла».
+
+    Тихая функция: реакция — знак внимания, и её отказ не должен ломать
+    сценарий. Ловим весь `TelegramAPIError`, а не только `BadRequest`: сразу
+    после реакции идёт создание платного черновика, и сетевая икота на
+    украшении не имеет права отменить покупку.
+    """
+    try:
+        await message.react([ReactionTypeEmoji(emoji=emoji)])
+    except TelegramAPIError as exc:
+        log.debug(Event.TELEGRAM_API_FAILED, method="setMessageReaction", reason=str(exc))
+
+
 __all__ = [
     "alert",
     "close_screen",
+    "react",
     "send_content",
     "show_media_screen",
     "show_screen",
