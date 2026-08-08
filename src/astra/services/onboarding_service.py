@@ -11,7 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from astra.places.getters import get_place_read
 from astra.referrals import crud as referrals_crud
-from astra.services.referral_service import complete_referral_rewards
+from astra.services.referral_service import grant_invitee_welcome
 from astra.users import crud as users_crud
 from astra.users.gender import Gender, normalize_gender
 from astra.users.models import Profile, User
@@ -156,7 +156,9 @@ async def finalize_onboarding(session: AsyncSession, user: User) -> None:
     await session.flush()
 
     try:
-        await complete_referral_rewards(session, user)
+        # Пригласившему платим не здесь: его награда ждёт, пока новичок
+        # вернётся во второй день.
+        await grant_invitee_welcome(session, user)
     except Exception:
         log.exception(Event.ONBOARDING_REFERRAL_REWARD_FAILED, user_id=user.id)
 

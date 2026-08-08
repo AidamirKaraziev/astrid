@@ -45,8 +45,14 @@ class Settings(BaseSettings):
     telegram_proxy_url: str = ""
 
     points_daily_visit: int = 7
-    referral_bonus_referrer: int = 50
-    referral_bonus_invitee: int = 10
+    # Награда пригласившему — во внутренних звёздах и только когда новичок
+    # вернулся во второй день: за сам факт регистрации платить нельзя, это
+    # окупает пустой аккаунт одним заходом.
+    referral_reward_stars: int = 10
+    # Приветствие новичку по ссылке. Прежние 10 баллов по курсу переноса
+    # (10 баллов = 1 ⭐) — то есть ровно столько, сколько было; поднимать это
+    # число стоит вместе с решением, во сколько обходится приглашение.
+    referral_welcome_stars: int = 1
 
     notification_hour: int = 9
     notification_minute: int = 0
