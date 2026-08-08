@@ -55,6 +55,44 @@ async def send_html_message(
     return int(message_id) if message_id is not None else None
 
 
+async def edit_html_message(
+    chat_id: int,
+    message_id: int,
+    text: str,
+    *,
+    settings: Settings | None = None,
+) -> bool:
+    """Переписать HTML-сообщение. False — сообщение недоступно, нужно новое."""
+    cfg = settings or get_settings()
+    if not cfg.telegram_bot_token:
+        return False
+
+    payload: dict[str, Any] = {
+        "chat_id": chat_id,
+        "message_id": message_id,
+        "text": text,
+        "parse_mode": "HTML",
+    }
+    try:
+        async with httpx.AsyncClient(**_client_kwargs(cfg)) as client:
+            response = await client.post(_api_url("editMessageText", cfg), json=payload)
+            if response.status_code == 400:
+                description = str(response.json().get("description", "")).lower()
+                # Тот же текст на той же стадии: сообщение и так верное, править нечего.
+                return "message is not modified" in description
+            response.raise_for_status()
+        return True
+    except Exception:
+        log.debug(
+            Event.TELEGRAM_API_FAILED,
+            method="editMessageText",
+            chat_id=chat_id,
+            message_id=message_id,
+            exc_info=True,
+        )
+        return False
+
+
 async def delete_message(
     chat_id: int,
     message_id: int,
