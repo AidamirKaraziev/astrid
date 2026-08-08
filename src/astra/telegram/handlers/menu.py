@@ -1,3 +1,4 @@
+import html
 from datetime import datetime
 
 from aiogram import F, Router
@@ -7,7 +8,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from astra.astro.birth_time import wall_clock_at, with_birth_date
 from astra.referrals.getters import get_referral_stats
-from astra.telegram.handlers.places import start_profile_notification_place_step
+from astra.telegram.handlers.places import (
+    start_profile_birth_place_step,
+    start_profile_notification_place_step,
+)
 from astra.telegram.button_texts import (
     BTN_INVITE,
     BTN_PROFILE,
@@ -30,7 +34,12 @@ from astra.telegram.states import ProfileStates
 from astra.telegram.utils import parse_birth_date, parse_birth_time
 from astra.users import crud as users_crud
 from astra.telegram.profile_text import format_profile_card
-from astra.users.gender import GENDER_FEMALE, GENDER_MALE, gender_display_label
+from astra.users.gender import (
+    GENDER_FEMALE,
+    GENDER_MALE,
+    gender_display_label,
+    normalize_gender,
+)
 from astra.users.getters import profile_to_read
 
 router = Router(name="menu")
@@ -327,27 +336,63 @@ async def cb_edit_notification_city(
 
 
 @router.callback_query(F.data == "profile:place")
-async def cb_edit_place(callback: CallbackQuery, state: FSMContext) -> None:
-    await state.set_state(ProfileStates.edit_birth_place)
-    if callback.message:
-        await callback.message.answer("Введи место рождения (город):")
+async def cb_edit_place(
+    callback: CallbackQuery,
+    state: FSMContext,
+    session: AsyncSession,
+) -> None:
+    """Правка места рождения идёт через справочник, а не свободным текстом.
+
+    Раньше введённое название сохранялось как есть, а координаты подбирались
+    молча по первому совпадению: человек писал «Иваново» и не знал, какое из
+    них легло в его карту.
+    """
+    if callback.message is None or callback.from_user is None:
+        await callback.answer()
+        return
+    user = await _get_user(session, callback.from_user.id)
+    if user is None or user.profile is None:
+        await callback.answer("Сначала давай познакомимся — жми /start ✨", show_alert=True)
+        return
+    await start_profile_birth_place_step(
+        callback.message,
+        state,
+        gender=normalize_gender(user.profile.gender),
+    )
     await callback.answer()
 
 
-@router.message(ProfileStates.edit_birth_place)
-async def save_birth_place(message: Message, state: FSMContext, session: AsyncSession) -> None:
-    user = await _get_user_from_message(session, message)
+async def complete_profile_birth_place(
+    message: Message,
+    state: FSMContext,
+    session: AsyncSession,
+    *,
+    place,  # noqa: ANN001 — PlaceRead
+    actor_telegram_id: int,
+) -> None:
+    """Вызывается из places после выбора населённого пункта."""
+    user = await _get_user(session, actor_telegram_id)
     if user is None or user.profile is None:
+        await message.answer("Сначала давай познакомимся — жми /start ✨")
         return
-    place = (message.text or "").strip()
-    if not place:
-        await message.answer("Место не может быть пустым.")
-        return
-    await users_crud.update_profile(session, user.profile, birth_place=place)
+
+    updates: dict[str, object] = {
+        "birth_place_id": place.id,
+        "birth_place": place.display_name,
+    }
+    # Тот же уговор, что и при доборе данных: пока человек не выбрал город
+    # уведомлений сам, рассылка идёт по месту рождения — иначе предсказание
+    # уходило бы в 09:00 по Москве тому, кто живёт во Владивостоке.
+    if user.profile.notification_place_id is None:
+        updates["city"] = place.display_name
+        updates["timezone"] = place.timezone
+
+    await users_crud.update_profile(session, user.profile, **updates)
     await state.clear()
     p = profile_to_read(user.profile)
     await message.answer(
-        f"Место сохранено ✨\nТочность теперь: <b>{p.accuracy_percent}%</b>\n"
+        f"Место рождения: <b>{html.escape(place.display_name)}</b> ✨\n"
+        f"Точность теперь: <b>{p.accuracy_percent}%</b>\n"
         "Предсказание на сегодня обновится при следующем запросе.",
         parse_mode="HTML",
     )

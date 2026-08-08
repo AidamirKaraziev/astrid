@@ -42,17 +42,19 @@ router = Router(name="places")
 
 PLACE_STATES = (
     BirthDataStates.place_query,
+    ProfileStates.edit_birth_place_query,
     ProfileStates.edit_notification_place_query,
     CompatibilityStates.birth_place_query,
     PeopleStates.edit_birth_place_query,
     NatalStates.new_birth_place_query,
 )
 
+# «Напиши», а не «начни вводить»: поиска по мере набора здесь нет, бот ищет по
+# отправленному сообщению. Примеры разного калибра — село, посёлок и не Россия —
+# говорят «мелкое место тоже ищется» убедительнее любой оговорки.
 SEARCH_HINT = (
-    "Начни вводить название — <b>город, посёлок или деревня</b>.\n"
-    "Например: <code>Каширское</code>, <code>Вырица</code>, <code>Алматы</code>\n\n"
-    "<i>Своего села нет в списке — подойдёт ближайший город в своей области, "
-    "на расчёт это не влияет.</i>"
+    "Напиши название города, посёлка или деревни.\n"
+    "Например: Каширское, Вырица, Алматы"
 )
 
 PLACES_CATALOG_UNAVAILABLE_TEXT = (
@@ -74,6 +76,14 @@ NEARBY_CITY_KM = 70
 
 # Короче этого рассказ бесполезен: «нет города» оператору ничего не даёт.
 _MIN_DESCRIPTION_LENGTH = 12
+
+# Только для места рождения: на шаге города для уведомлений разбор и километры
+# ни при чём — там выбирают, откуда считать девять утра. Формы без рода: текст
+# общий на все шаги, и прошедшее время («не нашёл») тут разъедется.
+NEARBY_PLACE_HINT = (
+    "Маленькие сёла есть не всегда — подойдёт ближайший город в своей области.\n"
+    f"{NEARBY_CITY_KM} км — обычная погрешность, разбор останется точным."
+)
 
 MISSING_PLACE_TEXT = (
     "Маленькие сёла и хутора есть в справочнике не всегда — и на разбор "
@@ -115,6 +125,7 @@ NOTIFICATION_PLACE_TITLE = (
 # «родился(ась)»: скобки и слэш — это бланк, а не речь.
 _STEP_TITLES = {
     "birth": "📍 Где твоё место рождения?",
+    "profile_birth": "📍 Где твоё место рождения?",
     "compatibility": "📍 Где место рождения этого человека?",
     "people": "📍 Где место рождения этого человека?",
     "natal_new": "📍 Где место рождения этого человека?",
@@ -154,6 +165,8 @@ async def _ensure_places_ready(session: AsyncSession) -> bool:
 def _context_key_for_state(state: str | None) -> str:
     if state == BirthDataStates.place_query.state:
         return "birth"
+    if state == ProfileStates.edit_birth_place_query.state:
+        return "profile_birth"
     if state == CompatibilityStates.birth_place_query.state:
         return "compatibility"
     if state == PeopleStates.edit_birth_place_query.state:
@@ -167,9 +180,17 @@ async def _places_catalog_empty(session: AsyncSession) -> bool:
     return not await _ensure_places_ready(session)
 
 
-async def send_place_step_prompt(message: Message, *, title: str) -> None:
+async def send_place_step_prompt(
+    message: Message,
+    *,
+    title: str,
+    nearby_hint: bool = True,
+) -> None:
+    blocks = [title, SEARCH_HINT]
+    if nearby_hint:
+        blocks.append(NEARBY_PLACE_HINT)
     await message.answer(
-        f"{title}\n\n{SEARCH_HINT}",
+        "\n\n".join(blocks),
         parse_mode="HTML",
         reply_markup=ReplyKeyboardRemove(),
     )
@@ -236,10 +257,32 @@ async def start_natal_new_birth_place_step(message: Message, state: FSMContext) 
     await send_place_step_prompt(message, title=title)
 
 
+async def start_profile_birth_place_step(
+    message: Message,
+    state: FSMContext,
+    *,
+    gender: Gender | None = None,
+) -> None:
+    """Правка места рождения из «Обо мне».
+
+    Отдельное состояние, а не `BirthDataStates.place_query`: там человека
+    после выбора возвращают в прерванный продукт, а сюда он пришёл сам —
+    и вернуться должен к своему портрету.
+    """
+    title = birth_place_question(gender)
+    await state.set_state(ProfileStates.edit_birth_place_query)
+    await state.update_data(place_context="profile_birth", **{_PLACE_TITLE_KEY: title})
+    await send_place_step_prompt(message, title=title)
+
+
 async def start_profile_notification_place_step(message: Message, state: FSMContext) -> None:
     await state.set_state(ProfileStates.edit_notification_place_query)
     await state.update_data(place_context="notification")
-    await send_place_step_prompt(message, title=NOTIFICATION_PLACE_TITLE)
+    await send_place_step_prompt(
+        message,
+        title=NOTIFICATION_PLACE_TITLE,
+        nearby_hint=False,
+    )
 
 
 async def _keep_place_state(state: FSMContext, context_key: str) -> None:
@@ -248,6 +291,8 @@ async def _keep_place_state(state: FSMContext, context_key: str) -> None:
     current = await state.get_state()
     if context_key == "birth":
         await state.set_state(BirthDataStates.place_query)
+    elif context_key == "profile_birth":
+        await state.set_state(ProfileStates.edit_birth_place_query)
     elif context_key == "compatibility":
         await state.set_state(CompatibilityStates.birth_place_query)
     elif context_key == "people":
@@ -482,6 +527,7 @@ async def _restart_place_step(message: Message, state: FSMContext) -> None:
     await send_place_step_prompt(
         message,
         title=title or _STEP_TITLES.get(context_key, "📍 Где это место?"),
+        nearby_hint=context_key != "notification",
     )
 
 
@@ -725,6 +771,18 @@ async def _apply_place_selection(
             state,
             session,
             place,
+            actor_telegram_id=actor_telegram_id,
+        )
+        return
+
+    if current_state == ProfileStates.edit_birth_place_query.state:
+        from astra.telegram.handlers.menu import complete_profile_birth_place
+
+        await complete_profile_birth_place(
+            message,
+            state,
+            session,
+            place=place,
             actor_telegram_id=actor_telegram_id,
         )
         return

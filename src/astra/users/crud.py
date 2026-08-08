@@ -108,6 +108,12 @@ async def _resolve_birth_place_id(
     profile: Profile,
     birth_place: str,
 ) -> None:
+    """Подобрать место по названию — только когда его выбрали не из справочника.
+
+    Догадка по первому совпадению: у бота есть выбор города списком, и туда
+    этот путь не заходит. Остаётся REST-правка профиля, где названием всё и
+    ограничивается.
+    """
     places = await places_crud.search_places(session, birth_place, limit=1)
     if not places:
         return
@@ -151,7 +157,13 @@ async def update_profile(
     for key, value in fields.items():
         if value is not None and hasattr(profile, key):
             setattr(profile, key, value)
-    if isinstance(birth_place_text, str) and birth_place_text.strip():
+    # Место пришло вместе со своим id — значит его выбрали из справочника, и
+    # искать по названию нечего: поиск нашёл бы тёзку и подменил координаты.
+    if (
+        fields.get("birth_place_id") is None
+        and isinstance(birth_place_text, str)
+        and birth_place_text.strip()
+    ):
         await _resolve_birth_place_id(session, profile, birth_place_text.strip())
     await _invalidate_today_predictions_if_astro_changed(session, profile, before)
     await session.flush()

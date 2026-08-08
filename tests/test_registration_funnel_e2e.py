@@ -26,6 +26,7 @@ from fake_telegram import BotHarness, assert_said, build_bot, build_test_dispatc
 
 from astra.telegram.button_texts import BTN_GENDER_FEMALE, BTN_NATAL, BTN_PROFILE
 from astra.telegram.handlers.natal import CB_NATAL_SUBJECT_SELF
+from astra.telegram.handlers.places import NEARBY_CITY_KM
 from astra.users.gender import GENDER_FEMALE
 
 pytestmark = pytest.mark.usefixtures("purge_test_users")
@@ -573,7 +574,10 @@ async def test_place_step_explains_the_nearby_city_rule(
 
     prompt = assert_said(calls, "Где ты родилась")
     assert "в своей области" in prompt.text
-    assert "не влияет" in prompt.text
+    assert "погрешность" in prompt.text
+    # Числу здесь верят на слово — оно должно совпадать с тем, по которому
+    # подбирается ближайший город.
+    assert str(NEARBY_CITY_KM) in prompt.text
 
 
 async def test_many_namesakes_ask_for_region_first(

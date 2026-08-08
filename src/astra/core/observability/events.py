@@ -25,6 +25,10 @@ class Event(StrEnum):
     TELEGRAM_BOT_BLOCKED = "telegram.bot_blocked"
     TELEGRAM_BOT_UNBLOCKED = "telegram.bot_unblocked"
     TELEGRAM_PROGRESS_NOTIFY_FAILED = "telegram.progress.notify_failed"
+    # Сообщение не подошло ни одному сценарию: тупик, который человек молча
+    # переживает, а мы — нет. По этому событию видно, где люди теряются.
+    TELEGRAM_MESSAGE_UNHANDLED = "telegram.message.unhandled"
+    TELEGRAM_CALLBACK_UNHANDLED = "telegram.callback.unhandled"
 
     # Worker / RabbitMQ tasks
     TASK_RECEIVED = "task.received"

@@ -35,10 +35,17 @@ class BirthDataStates(StatesGroup):
 
 
 class ProfileStates(StatesGroup):
+    """Правка своих данных в разделе «Обо мне».
+
+    Место рождения — тоже `*_place_query`: правка идёт через поиск по
+    справочнику, как и везде. Свободного текста здесь нет намеренно — от него
+    в профиль попадало название без координат.
+    """
+
     edit_name = State()
     edit_birth_date = State()
     edit_birth_time = State()
-    edit_birth_place = State()
+    edit_birth_place_query = State()
     edit_notification_place_query = State()
 
 

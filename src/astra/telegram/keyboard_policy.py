@@ -41,6 +41,7 @@ _KEYBOARD_SUPPRESSED_FSM_STATES: frozenset[str] = frozenset(
         # меню под рукой уводит его из сценария одним касанием.
         BirthDataStates.date.state,
         BirthDataStates.place_query.state,
+        ProfileStates.edit_birth_place_query.state,
         ProfileStates.edit_notification_place_query.state,
         CompatibilityStates.birth_place_query.state,
         CompatibilityStates.collect_name.state,

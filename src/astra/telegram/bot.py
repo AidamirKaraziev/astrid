@@ -15,7 +15,7 @@ from astra.db.session import get_session_factory
 from astra.telegram.activity_middleware import ActivityMiddleware
 from astra.telegram.auto_keyboard_middleware import AutoKeyboardMiddleware
 from astra.telegram.bot_menu import setup_bot_menu
-from astra.telegram.handlers import ask_astrid, birth_data, catalog, commands, compatibility, day_card, menu, natal, navigation, onboarding, people, places, start, support, support_relay, tarot_daily, tarot_spreads, wheel
+from astra.telegram.handlers import ask_astrid, birth_data, catalog, fallback, commands, compatibility, day_card, menu, natal, navigation, onboarding, people, places, start, support, support_relay, tarot_daily, tarot_spreads, wheel
 from astra.telegram.middlewares import DbSessionMiddleware
 
 log = get_logger(__name__)
@@ -101,6 +101,10 @@ async def create_dispatcher(settings: Settings) -> Dispatcher:
     # операторов из админ-группы. Последним — ловит свободный текст в своём
     # состоянии и reply-сообщения в группе, не мешая продуктовым флоу.
     dp.include_router(support_relay.router)
+
+    # Самым последним: ловит то, что не забрал никто. Раньше такие сообщения
+    # получали молчание — в том числе люди, чьё состояние пережило деплой.
+    dp.include_router(fallback.router)
 
     # AI-чат Astrid отключён вместе с ежедневным прогнозом: единственной точкой
     # входа была кнопка «Написать Астрид», её в меню больше нет. Код модуля
