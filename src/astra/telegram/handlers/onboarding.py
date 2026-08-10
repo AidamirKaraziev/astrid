@@ -61,6 +61,10 @@ async def complete_short_onboarding(
         return
 
     await run_registration_phase(session, user, reg)
-    await redeem_pending_gift(message, session, user, fsm_data.get("gift_code"))
     await session.commit()
     await run_greeting_phase(message, state, user)
+    # Подарок вручаем последним, уже после приветствия с меню: на нём кнопка
+    # «Открыть подарок», и она должна остаться под рукой, а не уехать вверх.
+    # `fsm_data` прочитан выше — приветствие успело очистить состояние.
+    await redeem_pending_gift(message, session, user, fsm_data.get("gift_code"))
+    await session.commit()  # звёзды подарка на счету — это деньги, не украшение

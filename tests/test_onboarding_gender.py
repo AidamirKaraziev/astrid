@@ -106,3 +106,38 @@ async def test_registration_completes_without_birth_data() -> None:
     assert reg.birth_date is None
     assert reg.birth_place_id is None
     greet.assert_awaited_once()
+
+
+@pytest.mark.anyio
+async def test_gift_is_handed_over_after_the_greeting() -> None:
+    """На подарке кнопка «Открыть» — она должна остаться внизу, а не под меню."""
+    state = await _fsm_context()
+    await state.set_data(
+        {
+            "user_id": str(uuid4()),
+            "display_name": "Анна",
+            "gender": GENDER_FEMALE,
+            "gift_code": "abc12345",
+        },
+    )
+    order: list[str] = []
+
+    async def _greet(*_args, **_kwargs) -> None:
+        order.append("greeting")
+
+    async def _gift(*_args, **_kwargs) -> None:
+        order.append("gift")
+
+    with (
+        patch.object(
+            onboarding_handlers.users_crud,
+            "get_user_by_id",
+            new=AsyncMock(return_value=AsyncMock()),
+        ),
+        patch.object(onboarding_handlers, "run_registration_phase", new=AsyncMock()),
+        patch.object(onboarding_handlers, "run_greeting_phase", new=_greet),
+        patch.object(onboarding_handlers, "redeem_pending_gift", new=_gift),
+    ):
+        await complete_short_onboarding(AsyncMock(), state, AsyncMock())
+
+    assert order == ["greeting", "gift"]

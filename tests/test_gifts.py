@@ -295,8 +295,61 @@ class TestRefusalWording:
             assert refusal_text(refusal).strip()
 
 
+def _callbacks_of(markup) -> set[str]:
+    return {b.callback_data for row in markup.inline_keyboard for b in row if b.callback_data}
+
+
+class TestOpenGiftButton:
+    """Без кнопки подарок — тупик: новичок пять минут как в боте и меню не знает."""
+
+    def test_every_giftable_product_can_be_opened(self) -> None:
+        from astra.services.gift_delivery import open_gift_keyboard
+
+        for product in giftable_products():
+            assert open_gift_keyboard(product.code) is not None, product.code
+
+    def test_button_presses_the_same_entry_as_the_menu(self) -> None:
+        """Подарок не заводит своей ветки сценария — он жмёт кнопку за человека."""
+        from astra.services.gift_delivery import open_gift_keyboard
+        from astra.telegram.keyboards import ask_questions_keyboard, tarot_spreads_keyboard
+
+        known = _callbacks_of(tarot_spreads_keyboard())
+        known |= _callbacks_of(ask_questions_keyboard("love", "женщина"))
+
+        for product in giftable_products():
+            markup = open_gift_keyboard(product.code)
+            assert _callbacks_of(markup) <= known, product.code
+
+    def test_product_gone_from_the_catalog_gets_no_button(self) -> None:
+        from astra.services.gift_delivery import open_gift_keyboard
+
+        assert open_gift_keyboard("natal_report") is None
+
+
 @pytest.mark.asyncio
 class TestDeliveryAtTheEndOfOnboarding:
+    async def test_newcomer_gets_the_gift_with_a_way_to_open_it(self, db_session) -> None:
+        from astra.services.gift_delivery import redeem_pending_gift
+        from astra.telegram.button_texts import CB_TAROT_SPREAD_PREFIX
+
+        await _priced_product(db_session)
+        giver = await _user(db_session)
+        gift = await issue_gift(db_session, giver, PRODUCT)
+        message = AsyncMock()
+
+        outcome = await redeem_pending_gift(
+            message,
+            db_session,
+            await _user(db_session),
+            gift.code,
+        )
+
+        assert isinstance(outcome, GiftRedeemed)
+        sent = message.answer.await_args
+        assert "Три карты" in sent.args[0]
+        button = sent.kwargs["reply_markup"].inline_keyboard[0][0]
+        assert button.callback_data == f"{CB_TAROT_SPREAD_PREFIX}three_cards"
+
     async def test_gift_taken_meanwhile_is_explained(self, db_session) -> None:
         """Пока человек регистрировался, код мог забрать кто-то другой."""
         from astra.services.gift_delivery import redeem_pending_gift
