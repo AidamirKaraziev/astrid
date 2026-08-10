@@ -43,10 +43,15 @@ class GiftableProduct:
 
 
 class GiftRefusal(StrEnum):
-    """Почему подарок не сработал. Тексты для человека — в хендлере."""
+    """Почему подарок не сработал.
+
+    Причина нужна не логу, а человеку: он пришёл по ссылке «Забрать подарок» и
+    имеет право услышать, что именно пошло не так. Тексты — в `gift_delivery`.
+    """
 
     UNKNOWN_CODE = "unknown_code"
     ALREADY_REDEEMED = "already_redeemed"
+    REVOKED = "revoked"
     NOT_A_NEWCOMER = "not_a_newcomer"
     ALREADY_GIFTED_BY_GIVER = "already_gifted_by_giver"
     SELF_GIFT = "self_gift"
@@ -171,18 +176,42 @@ async def link_gift_on_start(
     session: AsyncSession,
     invitee: User,
     code: str | None,
-) -> str | None:
-    """Привязать нового человека к дарителю. Возвращает код, если подарок годен.
+    *,
+    is_newcomer: bool,
+) -> str | GiftRefusal | None:
+    """Разобрать подарочную ссылку, с которой человек пришёл в бота.
+
+    Три исхода, и каждый значит своё:
+
+    * `None` — ссылка была не подарочная, говорить не о чем;
+    * `GiftRefusal` — подарок не сработает, и человеку надо сказать почему:
+      он нажал «Забрать подарок» и молча получить главное меню не должен;
+    * `str` — код годен, активируем его в конце онбординга.
 
     Сам подарок здесь не активируется: его съел бы человек, бросивший
-    регистрацию на первом экране. Активация — в конце онбординга.
+    регистрацию на первом экране. Ни один отказ код не сжигает — ссылка
+    остаётся годной для того, кому она и предназначалась.
     """
     if not code:
         return None
+
+    def refused(reason: GiftRefusal) -> GiftRefusal:
+        log.info(Event.GIFT_REFUSED, code=code, user_id=invitee.id, reason=str(reason))
+        return reason
+
     gift = await gifts_crud.get_by_code(session, code)
-    if gift is None or gift.status is not GiftStatus.ISSUED or gift.giver_id == invitee.id:
-        log.info(Event.GIFT_REFUSED, code=code, user_id=invitee.id, reason="not_usable")
-        return None
+    if gift is None:
+        return refused(GiftRefusal.UNKNOWN_CODE)
+    if gift.status is GiftStatus.REVOKED:
+        return refused(GiftRefusal.REVOKED)
+    if gift.status is not GiftStatus.ISSUED:
+        return refused(GiftRefusal.ALREADY_REDEEMED)
+    # Свою же ссылку проверяем до «не новичок»: даритель по определению не
+    # новичок, и общий отказ спрятал бы от него настоящую причину.
+    if gift.giver_id == invitee.id:
+        return refused(GiftRefusal.SELF_GIFT)
+    if not is_newcomer:
+        return refused(GiftRefusal.NOT_A_NEWCOMER)
 
     from astra.referrals import crud as referrals_crud
 

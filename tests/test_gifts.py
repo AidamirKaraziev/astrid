@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+from types import SimpleNamespace
+from unittest.mock import AsyncMock, patch
+
 import pytest
 
 from astra.gifts import crud as gifts_crud
@@ -185,7 +188,7 @@ class TestLinkOnStart:
         gift = await issue_gift(db_session, giver, PRODUCT)
         newcomer = await _user(db_session)
 
-        code = await link_gift_on_start(db_session, newcomer, gift.code)
+        code = await link_gift_on_start(db_session, newcomer, gift.code, is_newcomer=True)
 
         assert code == gift.code
         referral = await referrals_crud.get_pending_referral_for_invitee(db_session, newcomer.id)
@@ -197,11 +200,217 @@ class TestLinkOnStart:
         gift = await issue_gift(db_session, giver, PRODUCT)
         newcomer = await _user(db_session)
 
-        await link_gift_on_start(db_session, newcomer, gift.code)
+        await link_gift_on_start(db_session, newcomer, gift.code, is_newcomer=True)
 
         assert gift.status is GiftStatus.ISSUED
         assert await wallet_crud.get_balance(db_session, newcomer.id) == 0
 
-    async def test_unknown_code_links_nothing(self, db_session) -> None:
+    async def test_plain_link_says_nothing(self, db_session) -> None:
+        """Ссылка была не подарочная — и говорить не о чем."""
         newcomer = await _user(db_session)
-        assert await link_gift_on_start(db_session, newcomer, "nosuchcode") is None
+        assert await link_gift_on_start(db_session, newcomer, None, is_newcomer=True) is None
+
+
+@pytest.mark.asyncio
+class TestRefusalHasAReason:
+    """Человек нажал «Забрать подарок»: молча показать ему меню — поломка.
+
+    Каждый отказ на входе называет причину, и ни один не сжигает код: ссылка
+    остаётся годной для того, кому она предназначалась.
+    """
+
+    async def test_unknown_code(self, db_session) -> None:
+        newcomer = await _user(db_session)
+
+        outcome = await link_gift_on_start(
+            db_session,
+            newcomer,
+            "nosuchcode",
+            is_newcomer=True,
+        )
+
+        assert outcome is GiftRefusal.UNKNOWN_CODE
+
+    async def test_already_redeemed_code(self, db_session) -> None:
+        await _priced_product(db_session)
+        giver = await _user(db_session)
+        gift = await issue_gift(db_session, giver, PRODUCT)
+        await redeem_gift(db_session, gift.code, await _user(db_session), is_newcomer=True)
+
+        outcome = await link_gift_on_start(
+            db_session,
+            await _user(db_session),
+            gift.code,
+            is_newcomer=True,
+        )
+
+        assert outcome is GiftRefusal.ALREADY_REDEEMED
+
+    async def test_revoked_code_is_not_confused_with_a_taken_one(self, db_session) -> None:
+        giver = await _user(db_session)
+        gift = await issue_gift(db_session, giver, PRODUCT)
+        gift.status = GiftStatus.REVOKED
+        await db_session.flush()
+
+        outcome = await link_gift_on_start(
+            db_session,
+            await _user(db_session),
+            gift.code,
+            is_newcomer=True,
+        )
+
+        assert outcome is GiftRefusal.REVOKED
+
+    async def test_registered_person_hears_why(self, db_session) -> None:
+        giver = await _user(db_session)
+        gift = await issue_gift(db_session, giver, PRODUCT)
+        old_timer = await _user(db_session)
+
+        outcome = await link_gift_on_start(
+            db_session,
+            old_timer,
+            gift.code,
+            is_newcomer=False,
+        )
+
+        assert outcome is GiftRefusal.NOT_A_NEWCOMER
+        assert gift.status is GiftStatus.ISSUED  # ссылка ждёт своего человека
+
+    async def test_own_link_is_named_as_such(self, db_session) -> None:
+        """Даритель не новичок, и общий отказ спрятал бы от него настоящую причину."""
+        giver = await _user(db_session)
+        gift = await issue_gift(db_session, giver, PRODUCT)
+
+        outcome = await link_gift_on_start(db_session, giver, gift.code, is_newcomer=False)
+
+        assert outcome is GiftRefusal.SELF_GIFT
+
+
+class TestRefusalWording:
+    def test_every_refusal_has_words_for_a_human(self) -> None:
+        """Новая причина без текста упала бы `KeyError` в лицо человеку."""
+        from astra.services.gift_delivery import refusal_text
+
+        for refusal in GiftRefusal:
+            assert refusal_text(refusal).strip()
+
+
+@pytest.mark.asyncio
+class TestDeliveryAtTheEndOfOnboarding:
+    async def test_gift_taken_meanwhile_is_explained(self, db_session) -> None:
+        """Пока человек регистрировался, код мог забрать кто-то другой."""
+        from astra.services.gift_delivery import redeem_pending_gift
+
+        await _priced_product(db_session)
+        giver = await _user(db_session)
+        gift = await issue_gift(db_session, giver, PRODUCT)
+        await redeem_gift(db_session, gift.code, await _user(db_session), is_newcomer=True)
+        latecomer = await _user(db_session)
+        message = AsyncMock()
+
+        outcome = await redeem_pending_gift(message, db_session, latecomer, gift.code)
+
+        assert outcome is None
+        assert "уже забрали" in message.answer.await_args.args[0]
+
+    async def test_nothing_is_said_when_there_was_no_gift(self, db_session) -> None:
+        from astra.services.gift_delivery import redeem_pending_gift
+
+        message = AsyncMock()
+
+        assert await redeem_pending_gift(message, db_session, await _user(db_session), None) is None
+        message.answer.assert_not_awaited()
+
+
+def _start_message() -> AsyncMock:
+    message = AsyncMock()
+    message.from_user.id = 42
+    message.from_user.username = "aid"
+    message.from_user.language_code = "ru"
+    message.answer = AsyncMock()
+    return message
+
+
+@pytest.mark.anyio
+class TestStartExplainsTheGift:
+    """Вход по подарочной ссылке. Молчаливое главное меню читается как поломка."""
+
+    async def test_registered_person_hears_why_instead_of_a_bare_menu(self) -> None:
+        from astra.telegram.handlers.start import cmd_start
+
+        message = _start_message()
+        user = SimpleNamespace(
+            id=1,
+            onboarding_completed=True,
+            bot_blocked_at=None,
+            profile=SimpleNamespace(gender="женщина"),
+        )
+
+        with (
+            patch(
+                "astra.telegram.handlers.start.users_crud.get_user_by_telegram_id",
+                new_callable=AsyncMock,
+                return_value=user,
+            ),
+            patch("astra.telegram.handlers.start.sync_user_from_telegram", new_callable=AsyncMock),
+            patch("astra.telegram.handlers.start.register_daily_activity", new_callable=AsyncMock),
+            patch(
+                "astra.telegram.handlers.start.link_gift_on_start",
+                new_callable=AsyncMock,
+                return_value=GiftRefusal.NOT_A_NEWCOMER,
+            ),
+        ):
+            await cmd_start(
+                message,
+                SimpleNamespace(args="gift_abc12345"),
+                AsyncMock(),
+                AsyncMock(),
+            )
+
+        said = [call.args[0] for call in message.answer.await_args_list]
+        assert "кого в боте ещё нет" in said[0]  # сначала про подарок
+        assert "Главное меню" in said[1]  # и только потом меню
+
+    async def test_a_good_code_says_nothing_and_waits_for_the_onboarding(self) -> None:
+        """На входе подарок только обещан: активирует его конец регистрации."""
+        from astra.telegram.handlers.start import cmd_start
+
+        message = _start_message()
+        state = AsyncMock()
+
+        with (
+            patch(
+                "astra.telegram.handlers.start.users_crud.get_user_by_telegram_id",
+                new_callable=AsyncMock,
+                return_value=None,
+            ),
+            patch(
+                "astra.telegram.handlers.start.users_crud.create_user",
+                new_callable=AsyncMock,
+                return_value=SimpleNamespace(
+                    id=1,
+                    onboarding_completed=False,
+                    profile=None,
+                ),
+            ),
+            patch("astra.telegram.handlers.start.register_daily_activity", new_callable=AsyncMock),
+            patch(
+                "astra.telegram.handlers.start.link_gift_on_start",
+                new_callable=AsyncMock,
+                return_value="abc12345",
+            ),
+            patch(
+                "astra.telegram.handlers.start._get_cached_welcome_video_file_id",
+                new_callable=AsyncMock,
+                return_value="cached",
+            ),
+        ):
+            await cmd_start(
+                message,
+                SimpleNamespace(args="gift_abc12345"),
+                state,
+                AsyncMock(),
+            )
+
+        message.answer.assert_not_awaited()  # ни одного лишнего слова до приветствия
+        assert state.update_data.await_args.kwargs["gift_code"] == "abc12345"

@@ -15,7 +15,7 @@ from astra.db.session import get_session_factory
 from astra.telegram.activity_middleware import ActivityMiddleware
 from astra.telegram.auto_keyboard_middleware import AutoKeyboardMiddleware
 from astra.telegram.bot_menu import setup_bot_menu
-from astra.telegram.handlers import ask_astrid, birth_data, catalog, fallback, commands, compatibility, day_card, menu, natal, navigation, onboarding, people, places, start, support, support_relay, tarot_daily, tarot_spreads, wheel
+from astra.telegram.handlers import ask_astrid, birth_data, catalog, fallback, commands, compatibility, day_card, invites, menu, natal, navigation, onboarding, people, places, start, support, support_relay, tarot_daily, tarot_spreads, wheel
 from astra.telegram.middlewares import DbSessionMiddleware
 
 log = get_logger(__name__)
@@ -87,6 +87,7 @@ async def create_dispatcher(settings: Settings) -> Dispatcher:
     # После onboarding (регистрацию не прерываем), но до флоу-роутеров:
     # кнопка колеса и платежи wheel: не должны съедаться чужими FSM-хендлерами.
     dp.include_router(wheel.router)
+    dp.include_router(invites.router)  # до menu: раздел приглашений забрал у него кнопку
     dp.include_router(menu.router)
     dp.include_router(ask_astrid.router)  # раздел «Спроси Астрид»: темы вопросов
     dp.include_router(compatibility.router)

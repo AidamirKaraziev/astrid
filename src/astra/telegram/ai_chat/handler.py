@@ -64,7 +64,8 @@ def _flow_dispatch() -> dict[Intent, _FlowEntry]:
     from astra.telegram.handlers.catalog import open_tarot_menu
     from astra.telegram.handlers.compatibility import start_compatibility
     from astra.telegram.handlers.day_card import legacy_button
-    from astra.telegram.handlers.menu import invite_friend, show_profile
+    from astra.telegram.handlers.invites import open_invites
+    from astra.telegram.handlers.menu import show_profile
     from astra.telegram.handlers.natal import start_natal
     from astra.telegram.handlers.tarot_spreads import (
         start_relationship,
@@ -86,8 +87,7 @@ def _flow_dispatch() -> dict[Intent, _FlowEntry]:
         await show_profile(m, db)
 
     async def _invite(m: Message, s: FSMContext, db: AsyncSession) -> None:
-        await s.clear()
-        await invite_friend(m, db)
+        await open_invites(m, s, db)
 
     return {
         Intent.compatibility: start_compatibility,

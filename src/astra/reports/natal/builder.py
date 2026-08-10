@@ -57,8 +57,9 @@ class NatalPdfBuilder(BasePdfBuilder):
         report: NatalReportData,
         *,
         bot_username: str | None = None,
+        referral_code: str | None = None,
     ) -> None:
-        super().__init__(output_path, bot_username=bot_username)
+        super().__init__(output_path, bot_username=bot_username, referral_code=referral_code)
         self._report = report
 
     def _footer_right_text(self) -> str:
@@ -66,7 +67,12 @@ class NatalPdfBuilder(BasePdfBuilder):
 
     def build(self) -> None:
         register_natal_fonts()
-        sim = NatalPdfBuilder(os.devnull, self._report, bot_username=self._bot_username)
+        sim = NatalPdfBuilder(
+            os.devnull,
+            self._report,
+            bot_username=self._bot_username,
+            referral_code=self._referral_code,
+        )
         sim.total_pages = 0
         sim._build_pages()
         self.total_pages = sim.page_num
@@ -672,5 +678,11 @@ def generate_natal_pdf(
     report: NatalReportData,
     *,
     bot_username: str | None = None,
+    referral_code: str | None = None,
 ) -> None:
-    NatalPdfBuilder(output_path, report, bot_username=bot_username).build()
+    NatalPdfBuilder(
+        output_path,
+        report,
+        bot_username=bot_username,
+        referral_code=referral_code,
+    ).build()

@@ -7,13 +7,11 @@ from aiogram.types import CallbackQuery, Message
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from astra.astro.birth_time import wall_clock_at, with_birth_date
-from astra.referrals.getters import get_referral_stats
 from astra.telegram.handlers.places import (
     start_profile_birth_place_step,
     start_profile_notification_place_step,
 )
 from astra.telegram.button_texts import (
-    BTN_INVITE,
     BTN_PROFILE,
     BTN_TIME_UNKNOWN,
     CB_PROFILE_BACK,
@@ -26,10 +24,8 @@ from astra.telegram.keyboards import (
     profile_edit_keyboard,
     profile_gender_inline_keyboard,
     profile_menu_keyboard,
-    share_keyboard,
 )
 from astra.telegram.profile_portrait import build_portrait_text
-from astra.wallet.crud import get_balance
 from astra.telegram.profile_gender_prompt import GENDER_SAVED_TEXT
 from astra.telegram.states import ProfileStates
 from astra.telegram.utils import parse_birth_date, parse_birth_time
@@ -81,31 +77,6 @@ async def cb_menu_home(callback: CallbackQuery, state: FSMContext) -> None:
     if callback.message:
         await callback.message.answer("Главное меню ✨", reply_markup=main_menu_keyboard())
     await callback.answer()
-
-
-@router.message(F.text == BTN_INVITE)
-async def invite_friend(message: Message, session: AsyncSession) -> None:
-    user = await _get_user_from_message(session, message)
-    if user is None:
-        await message.answer("Сначала давай познакомимся — жми /start ✨")
-        return
-    stats = await get_referral_stats(session, user.id)
-    from urllib.parse import quote
-
-    share_url = (
-        f"https://t.me/share/url?url={stats.referral_link}"
-        f"&text={quote('Попробуй Astra — магическая поддержка каждый день ✨')}"
-    )
-    # Баллы уехали в звёзды: показывать обе валюты — значит запутать. Баланс
-    # берём из кошелька, его хотя бы можно потратить.
-    balance = await get_balance(session, user.id)
-    await message.answer(
-        f"🎁 Твоя ссылка:\n<code>{stats.referral_link}</code>\n\n"
-        f"Приглашено: <b>{stats.invited_count}</b>\n"
-        f"На счету: <b>{balance} ⭐</b>",
-        parse_mode="HTML",
-        reply_markup=share_keyboard(share_url),
-    )
 
 
 @router.message(F.text == BTN_PROFILE)

@@ -42,6 +42,10 @@ from astra.telegram.button_texts import (
     CB_ASK_TOPIC_PREFIX,
     CB_COMPAT_DELETE_CANCEL_PREFIX,
     CB_DAY_CARD_FORECAST,
+    CB_INVITE_GIFT,
+    CB_INVITE_GIFT_PICK_PREFIX,
+    CB_INVITE_HUB,
+    CB_INVITE_LINK,
     CB_PRODUCT_ASK_STARS,
     CB_PROFILE_BACK,
     CB_PROFILE_EDIT,
@@ -505,5 +509,39 @@ def support_contextual_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [InlineKeyboardButton(text="💬 Нужна помощь?", callback_data=CB_SUPPORT_HUB)],
+        ],
+    )
+
+
+def invite_hub_keyboard() -> InlineKeyboardMarkup:
+    """Раздел приглашений: подарить, позвать, закрыть."""
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="🎁 Подарить разбор", callback_data=CB_INVITE_GIFT)],
+            [InlineKeyboardButton(text="🔗 Позвать по ссылке", callback_data=CB_INVITE_LINK)],
+            [InlineKeyboardButton(text=BTN_BACK_MENU, callback_data="menu:home")],
+        ],
+    )
+
+
+def gift_products_keyboard(products) -> InlineKeyboardMarkup:
+    """Что подарить. Список приходит из каталога, а не зашит в клавиатуру."""
+    rows = [
+        [
+            InlineKeyboardButton(
+                text=product.label,
+                callback_data=f"{CB_INVITE_GIFT_PICK_PREFIX}{product.code}",
+            ),
+        ]
+        for product in products
+    ]
+    rows.append([InlineKeyboardButton(text=BTN_BACK_MENU, callback_data=CB_INVITE_HUB)])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def invite_back_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text=BTN_BACK_MENU, callback_data=CB_INVITE_HUB)],
         ],
     )

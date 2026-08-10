@@ -106,6 +106,12 @@ CB_COMPAT_NEW_PERSON = "compat:person:new"
 CB_COMPAT_PEOPLE_ALL = "compat:person:all"
 CB_COMPAT_SELF_FIRST = "compat:person:self"
 
+# Раздел «Пригласить друга»: подарки, ссылка и счёт в одном живом экране.
+CB_INVITE_HUB = "invite:hub"
+CB_INVITE_GIFT = "invite:gift"
+CB_INVITE_GIFT_PICK_PREFIX = "invite:gift:"  # + код товара
+CB_INVITE_LINK = "invite:link"
+
 # Служба заботы: хаб помощи, FAQ-темы и вход в релей к живому оператору
 CB_SUPPORT_HUB = "support:hub"
 CB_SUPPORT_FAQ_PREFIX = "support:faq:"  # + ключ темы (payment/reading/profile/notify)

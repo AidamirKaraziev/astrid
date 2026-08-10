@@ -11,7 +11,8 @@ from astra.core.config import get_settings
 from astra.referrals import crud as referrals_crud
 from astra.services.onboarding_service import sync_user_from_telegram
 from astra.services.points_service import register_daily_activity
-from astra.services.gift_service import link_gift_on_start
+from astra.services.gift_delivery import refusal_text
+from astra.services.gift_service import GiftRefusal, link_gift_on_start
 from astra.services.referral_service import apply_referral_on_start
 from aiogram.types import KeyboardButton, ReplyKeyboardMarkup
 
@@ -86,9 +87,6 @@ async def cmd_start(
     tg = message.from_user
     user = await users_crud.get_user_by_telegram_id(session, tg.id)
     is_new_user = user is None
-    # Подарок достаётся только тому, кого в боте ещё нет: у вернувшегося код
-    # даже не читаем, чтобы он не сгорел зря.
-    gift_code: str | None = None
     if user is None:
         user = await users_crud.create_user(
             session,
@@ -99,7 +97,6 @@ async def cmd_start(
         ref_code = extract_referral_code(command.args)
         if ref_code:
             await apply_referral_on_start(session, user, ref_code)
-        gift_code = await link_gift_on_start(session, user, extract_gift_code(command.args))
     else:
         await sync_user_from_telegram(
             session,
@@ -109,6 +106,23 @@ async def cmd_start(
         )
         # Пользователь вернулся после блокировки бота — включаем рассылки обратно.
         await users_crud.clear_bot_blocked(session, user)
+
+    # Подарочную ссылку разбираем для всех, а не только для новых. Забрать
+    # подарок вернувшийся не может, но услышать почему — обязан: он нажал
+    # «Забрать подарок» и молчаливое главное меню читает как поломку.
+    gift_outcome = await link_gift_on_start(
+        session,
+        user,
+        extract_gift_code(command.args),
+        is_newcomer=is_new_user,
+    )
+    # `GiftRefusal` — тоже строка (StrEnum), поэтому проверяем её первой:
+    # `isinstance(outcome, str)` поймал бы и отказ, и он уехал бы в код подарка.
+    gift_code: str | None = None
+    if isinstance(gift_outcome, GiftRefusal):
+        await message.answer(refusal_text(gift_outcome))
+    else:
+        gift_code = gift_outcome
 
     await register_daily_activity(session, user)
     await state.clear()
