@@ -332,6 +332,30 @@ async def refund_star_payment_api(
         response.raise_for_status()
 
 
+async def call_bot_api(method: str, payload: dict[str, Any] | None = None) -> dict[str, Any]:
+    """Прямой вызов Bot API без aiogram: для воркера и админ-панели.
+
+    Панель живёт отдельным процессом, в котором бота нет и не будет, поэтому
+    всё, что ей нужно от Telegram, спрашивается вот так — по HTTP.
+    """
+    cfg = get_settings()
+    if not cfg.telegram_bot_token:
+        raise RuntimeError("TELEGRAM_BOT_TOKEN is not set")
+    client_kwargs: dict[str, Any] = {"timeout": 30.0}
+    if proxy := cfg.telegram_proxy_url_effective:
+        client_kwargs["proxy"] = proxy
+    async with httpx.AsyncClient(**client_kwargs) as client:
+        response = await client.post(
+            f"https://api.telegram.org/bot{cfg.telegram_bot_token}/{method}",
+            json=payload or {},
+        )
+        response.raise_for_status()
+        body = response.json()
+    if not body.get("ok"):
+        raise RuntimeError(f"{method}: {body.get('description', 'Bot API отказал')}")
+    return body.get("result") or {}
+
+
 async def refund_reading_payment(
     session: AsyncSession,
     reading: TarotReading,

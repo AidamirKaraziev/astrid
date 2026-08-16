@@ -25,7 +25,9 @@ from astra.admin import timeline as timeline_queries
 from astra.admin.render_metrics import metrics_page
 from astra.admin.timeline import Grain
 from astra.admin import ledger
+from astra.admin import stars as stars_queries
 from astra.admin.render_ledger import ledger_page
+from astra.admin.render_stars import stars_page
 from astra.admin.render_queue import queue_page
 from astra.admin.render_broadcast import broadcast_page
 from astra.admin.render_settings import settings_page
@@ -300,6 +302,19 @@ async def save_llm_price(
         output_per_million=str(row.output_per_million),
     )
     return _redirect("/admin/settings", ok=f"{row.model}: цена сохранена.")
+
+
+@router.get("/stars")
+async def stars(
+    request: Request,
+    session: AsyncSession = Depends(get_session),
+) -> Response:
+    """Настоящий баланс Telegram против обязательств внутреннего кошелька."""
+    redirect = _guard(request)
+    if redirect is not None:
+        return redirect
+
+    return HTMLResponse(stars_page(await stars_queries.collect(session)))
 
 
 @router.get("/payments")

@@ -80,6 +80,18 @@ async def hold(
     )
 
 
+async def total_outstanding(session: AsyncSession, now: datetime | None = None) -> int:
+    """Сколько звёзд лежит на счетах у всех разом — по той же формуле, что баланс.
+
+    Это обязательство: напечатанное даром, что однажды потратят вместо оплаты.
+    """
+    moment = now or datetime.now(UTC)
+    result = await session.execute(
+        select(func.coalesce(func.sum(StarWalletEntry.delta), 0)).where(_active(moment)),
+    )
+    return int(result.scalar_one())
+
+
 async def sum_by_payload_prefix(session: AsyncSession, user_id: UUID, prefix: str) -> int:
     """Сколько всего начислено записями с таким началом payload.
 
