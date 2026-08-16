@@ -10,6 +10,7 @@ from astra.referrals.models import ReferralStatus
 from astra.services.referral_service import (
     apply_referral_on_start,
     grant_invitee_welcome,
+    referral_earnings,
     reward_referrer_on_return,
 )
 from astra.wallet import crud as wallet_crud
@@ -112,6 +113,17 @@ class TestReferrerReward:
 
         assert await wallet_crud.get_balance(db_session, invitee.id) == cfg.referral_welcome_stars
         assert await wallet_crud.get_balance(db_session, inviter.id) == cfg.referral_reward_stars
+
+    async def test_earnings_count_only_what_was_earned_on_friends(self, db_session) -> None:
+        """Приветствие новичку носит ту же причину в леджере — но это не заработок."""
+        inviter, invitee = await _linked_pair(db_session)
+        cfg = get_settings()
+
+        await grant_invitee_welcome(db_session, invitee)
+        await reward_referrer_on_return(db_session, invitee)
+
+        assert await referral_earnings(db_session, inviter.id) == cfg.referral_reward_stars
+        assert await referral_earnings(db_session, invitee.id) == 0
 
     async def test_referral_status_is_pending_until_return(self, db_session) -> None:
         _, invitee = await _linked_pair(db_session)

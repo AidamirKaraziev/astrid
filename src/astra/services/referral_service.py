@@ -13,6 +13,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -31,8 +32,19 @@ def _welcome_payload(referral: Referral) -> str:
     return f"ref_welcome:{referral.id}"
 
 
+# Начало payload у наград пригласившему. По нему считается «заработано на
+# друзьях»: приветствие новичку и подарок носят ту же причину в леджере, и
+# сумма по причине смешала бы заработанное с полученным.
+REWARD_PAYLOAD_PREFIX = "ref_reward:"
+
+
 def _reward_payload(referral: Referral) -> str:
-    return f"ref_reward:{referral.id}"
+    return f"{REWARD_PAYLOAD_PREFIX}{referral.id}"
+
+
+async def referral_earnings(session: AsyncSession, user_id: UUID) -> int:
+    """Сколько звёзд человек заработал именно приглашениями."""
+    return await wallet_crud.sum_by_payload_prefix(session, user_id, REWARD_PAYLOAD_PREFIX)
 
 
 async def apply_referral_on_start(

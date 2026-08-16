@@ -80,6 +80,22 @@ async def hold(
     )
 
 
+async def sum_by_payload_prefix(session: AsyncSession, user_id: UUID, prefix: str) -> int:
+    """Сколько всего начислено записями с таким началом payload.
+
+    Назначение `REFERRAL_REWARD` носят три разных начисления — награда
+    пригласившему, приветствие новичку и подарок, — и различает их только
+    payload. Поэтому считаем по нему, а не по причине.
+    """
+    result = await session.execute(
+        select(func.coalesce(func.sum(StarWalletEntry.delta), 0)).where(
+            StarWalletEntry.user_id == user_id,
+            StarWalletEntry.payload.startswith(prefix),
+        ),
+    )
+    return int(result.scalar_one())
+
+
 async def find_by_payload(
     session: AsyncSession,
     user_id: UUID,

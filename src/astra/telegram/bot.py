@@ -87,7 +87,7 @@ async def create_dispatcher(settings: Settings) -> Dispatcher:
     # После onboarding (регистрацию не прерываем), но до флоу-роутеров:
     # кнопка колеса и платежи wheel: не должны съедаться чужими FSM-хендлерами.
     dp.include_router(wheel.router)
-    dp.include_router(invites.router)  # до menu: раздел приглашений забрал у него кнопку
+    dp.include_router(invites.router)  # раздел приглашений: подарки и ссылка
     dp.include_router(menu.router)
     dp.include_router(ask_astrid.router)  # раздел «Спроси Астрид»: темы вопросов
     dp.include_router(compatibility.router)

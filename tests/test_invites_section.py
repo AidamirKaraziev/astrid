@@ -71,6 +71,7 @@ def _mocks(**overrides) -> dict:
         "get_balance": AsyncMock(return_value=30),
         "gifts_crud.count_redeemed": AsyncMock(return_value=1),
         "gifts_crud.count_unredeemed": AsyncMock(return_value=3),
+        "referral_earnings": AsyncMock(return_value=20),
         "gifts_crud.list_by_giver": AsyncMock(return_value=[]),
         "gifts_crud.get_by_code": AsyncMock(return_value=None),
         "giftable_offers": AsyncMock(return_value=_OFFERS),
@@ -142,11 +143,19 @@ class TestHub:
         await _run(cb_invite_hub, mocks, _callback(CB_INVITE_HUB), AsyncMock())
 
         text = _screen(mocks)
-        assert "30 ⭐" in text  # баланс кошелька
-        assert "<b>2</b>" in text  # приглашено
-        assert "<b>1</b>" in text  # подарков забрали
+        assert "30 ⭐" in text  # весь кошелёк
+        assert "20 ⭐" in text  # из него — заработанное на друзьях
+        assert "<b>2</b>" in text  # друзей пришло
         assert "<b>3</b>" in text  # ссылок в пути
         assert "потолка нет" in text
+
+    async def test_gifts_are_not_counted_as_a_second_arrival(self) -> None:
+        """Подарок ставит и реферальную привязку — забранные подарки сидят в «пришло»."""
+        mocks = _mocks()
+
+        await _run(cb_invite_hub, mocks, _callback(CB_INVITE_HUB), AsyncMock())
+
+        assert "забрали" not in _screen(mocks).lower()
 
     async def test_gift_picker_lists_what_can_be_gifted_now(self) -> None:
         mocks = _mocks()

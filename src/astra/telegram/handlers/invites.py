@@ -25,6 +25,7 @@ from astra.core.config import get_settings
 from astra.gifts import crud as gifts_crud
 from astra.gifts.models import GiftStatus
 from astra.referrals.getters import get_referral_stats
+from astra.services.referral_service import referral_earnings
 from astra.services.gift_service import (
     giftable_offers,
     issue_gift,
@@ -32,7 +33,6 @@ from astra.services.gift_service import (
     revoke_gift,
 )
 from astra.telegram.button_texts import (
-    BTN_INVITE,
     CB_INVITE_GIFT,
     CB_INVITE_GIFT_PICK_PREFIX,
     CB_INVITE_GIFT_REVOKE_ASK_PREFIX,
@@ -69,9 +69,11 @@ _HUB_TEXT = (
     "Друг придёт и вернётся на второй день — тебе прилетит <b>{reward} ⭐</b>, "
     "и потратить их можно на любой разбор.\n\n"
     "Дарить можно сколько угодно и кому угодно — потолка нет.\n\n"
-    "На счету: <b>{balance} ⭐</b>\n"
-    "Пришло по твоим ссылкам: <b>{invited}</b>\n"
-    "Подарков забрали: <b>{redeemed}</b>\n"
+    # «Подарков забрали» отсюда убрано намеренно: подарок ставит и реферальную
+    # привязку, поэтому один и тот же человек попадал и туда, и в «пришло по
+    # ссылкам». Две строки про одно и то же читались как двое пришедших.
+    "На счету: <b>{balance} ⭐</b>, из них заработано на друзьях: <b>{earned} ⭐</b>\n"
+    "Друзей пришло: <b>{invited}</b>\n"
     "Ссылок в пути: <b>{waiting}</b>"
 )
 _PICK_TEXT = (
@@ -159,8 +161,8 @@ async def _show_hub(message: Message, session: AsyncSession, user) -> None:  # n
     text = _HUB_TEXT.format(
         reward=get_settings().referral_reward_stars,
         balance=await get_balance(session, user.id),
+        earned=await referral_earnings(session, user.id),
         invited=stats.invited_count,
-        redeemed=redeemed,
         waiting=waiting,
     )
     await show_screen(
@@ -229,7 +231,9 @@ async def _show_gift(message: Message, session: AsyncSession, user, code: str) -
     )
 
 
-@router.message(F.text == BTN_INVITE)
+# Не хендлер: кнопку меню ловит `navigation`, он подключён раньше и зовёт
+# сюда сам. Своя регистрация на `BTN_INVITE` здесь была и не срабатывала ни
+# разу — выглядела рабочей и врала.
 async def open_invites(message: Message, state: FSMContext, session: AsyncSession) -> None:
     if message.from_user is None:
         return
