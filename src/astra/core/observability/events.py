@@ -167,10 +167,8 @@ class Event(StrEnum):
     GIFT_ISSUED = "gift.issued"
     GIFT_REDEEMED = "gift.redeemed"
     GIFT_REFUSED = "gift.refused"
-    # Даритель забрал невостребованную ссылку обратно и освободил место.
+    # Даритель забрал невостребованную ссылку обратно.
     GIFT_REVOKED = "gift.revoked"
-    # У дарителя слишком много неактивированных ссылок.
-    GIFT_LIMIT_REACHED = "gift.limit_reached"
 
     # Внутренний кошелёк в звёздах
     WALLET_CREDITED = "wallet.credited"

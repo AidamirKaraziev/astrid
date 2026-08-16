@@ -14,7 +14,6 @@ from astra.payments.models import Product, ProductPrice
 from astra.services.gift_service import (
     GiftRedeemed,
     GiftRefusal,
-    gift_slots_left,
     giftable_offers,
     giftable_products,
     issue_gift,
@@ -126,22 +125,19 @@ class TestIssuing:
         # Ни нуля с буквой O, ни единицы с l: код читают с чужого экрана.
         assert not set(first.code) & set("01lIO")
 
-    async def test_unredeemed_gifts_are_capped(self, db_session) -> None:
-        """Дарить можно скольким угодно, но невостребованные ссылки не копятся."""
-        from astra.core.config import get_settings
-
+    async def test_there_is_no_ceiling_on_how_many_you_give(self, db_session) -> None:
+        """Подарки — канал привлечения: тот, кто приводит людей, в стену не упирается."""
         giver = await _user(db_session)
-        limit = get_settings().gift_max_unredeemed
-        for _ in range(limit):
-            assert await issue_gift(db_session, giver, PRODUCT) is not None
 
-        assert await issue_gift(db_session, giver, PRODUCT) is None
+        codes = {(await issue_gift(db_session, giver, PRODUCT)).code for _ in range(25)}
 
-    async def test_redeemed_gifts_do_not_count_against_the_cap(self, db_session) -> None:
+        assert len(codes) == 25
+        assert await gifts_crud.count_unredeemed(db_session, giver.id) == 25
+
+    async def test_redeeming_takes_the_link_out_of_flight(self, db_session) -> None:
         await _priced_product(db_session)
         giver = await _user(db_session)
         gift = await issue_gift(db_session, giver, PRODUCT)
-        assert gift is not None
         await redeem_gift(db_session, gift.code, await _user(db_session), is_newcomer=True)
 
         assert await gifts_crud.count_unredeemed(db_session, giver.id) == 0
@@ -149,20 +145,15 @@ class TestIssuing:
 
 @pytest.mark.asyncio
 class TestRevoking:
-    """Без отзыва потолок выбирается брошенными новичками — и навсегда."""
+    """Отзыв — способ забрать назад ссылку, которая ушла не туда."""
 
-    async def test_revoke_frees_a_slot(self, db_session) -> None:
-        from astra.core.config import get_settings
-
+    async def test_revoke_takes_the_link_out_of_flight(self, db_session) -> None:
         giver = await _user(db_session)
-        limit = get_settings().gift_max_unredeemed
-        gifts = [await issue_gift(db_session, giver, PRODUCT) for _ in range(limit)]
-        assert await gift_slots_left(db_session, giver) == 0
+        gifts = [await issue_gift(db_session, giver, PRODUCT) for _ in range(3)]
 
         assert await revoke_gift(db_session, giver, gifts[0].code) is not None
 
-        assert await gift_slots_left(db_session, giver) == 1
-        assert await issue_gift(db_session, giver, PRODUCT) is not None
+        assert await gifts_crud.count_unredeemed(db_session, giver.id) == 2
 
     async def test_revoked_link_stops_working(self, db_session) -> None:
         giver = await _user(db_session)

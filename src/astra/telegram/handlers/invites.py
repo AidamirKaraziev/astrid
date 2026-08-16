@@ -26,7 +26,6 @@ from astra.gifts import crud as gifts_crud
 from astra.gifts.models import GiftStatus
 from astra.referrals.getters import get_referral_stats
 from astra.services.gift_service import (
-    gift_slots_left,
     giftable_offers,
     issue_gift,
     product_label,
@@ -45,7 +44,6 @@ from astra.telegram.button_texts import (
 )
 from astra.telegram.keyboards import (
     gift_actions_keyboard,
-    gift_limit_keyboard,
     gift_products_keyboard,
     gift_ready_keyboard,
     gift_revoke_confirm_keyboard,
@@ -70,10 +68,11 @@ _HUB_TEXT = (
     "Выбираешь какой, я делаю ссылку, ты отправляешь её другу в один тап.\n\n"
     "Друг придёт и вернётся на второй день — тебе прилетит <b>{reward} ⭐</b>, "
     "и потратить их можно на любой разбор.\n\n"
+    "Дарить можно сколько угодно и кому угодно — потолка нет.\n\n"
     "На счету: <b>{balance} ⭐</b>\n"
     "Пришло по твоим ссылкам: <b>{invited}</b>\n"
     "Подарков забрали: <b>{redeemed}</b>\n"
-    "Свободных подарков: <b>{slots} из {limit}</b>"
+    "Ссылок в пути: <b>{waiting}</b>"
 )
 _PICK_TEXT = (
     "🎁 <b>Что подарить?</b>\n\n"
@@ -98,15 +97,6 @@ _GIFT_READY_TEXT = (
     "Жми «Отправить другу» и выбери, кому. Ссылка не потеряется — она лежит "
     "в «Моих подарках»."
 )
-# Потолок выбран — и раньше это был тупик: совет «дождись» невыполним, если
-# ссылки повисли на людях, которые за ними уже не придут. Отсюда единственный
-# выход — список выданного, где место можно забрать обратно.
-_LIMIT_TEXT = (
-    "🕯 <b>Все подарки в пути</b>\n\n"
-    "Сразу больше {limit} невостребованных ссылок не держу.\n"
-    "Загляни в выданные: те, за которыми уже не придут, можно отозвать — "
-    "и место освободится."
-)
 _MY_GIFTS_TEXT = (
     "📋 <b>Мои подарки</b>\n\n"
     "Ждут своего человека: <b>{waiting}</b>\n"
@@ -128,9 +118,9 @@ _GIFT_SHOW_TEXT = (
 _GIFT_REVOKE_ASK_TEXT = (
     "Отозвать <b>{label}</b>?\n\n"
     "Ссылка перестанет работать — если ты её уже отправил, у друга она "
-    "откроется отказом. Место в выданных освободится."
+    "откроется отказом."
 )
-_GIFT_REVOKED_TEXT = "Отозвала ✨ Место освободилось — можно дарить дальше."
+_GIFT_REVOKED_TEXT = "Отозвала ✨ Эта ссылка больше не сработает."
 _GIFT_GONE_TEXT = "Этого подарка больше нет — видимо, его уже забрали или отозвали."
 _LINK_TEXT = (
     "🔗 <b>Твоя ссылка</b>\n\n"
@@ -164,26 +154,21 @@ def _share_url(link: str, pitch: str) -> str:
 
 async def _show_hub(message: Message, session: AsyncSession, user) -> None:  # noqa: ANN001
     stats = await get_referral_stats(session, user.id)
-    cfg = get_settings()
-    limit = cfg.gift_max_unredeemed
-    slots = await gift_slots_left(session, user)
+    waiting = await gifts_crud.count_unredeemed(session, user.id)
     redeemed = await gifts_crud.count_redeemed(session, user.id)
     text = _HUB_TEXT.format(
-        reward=cfg.referral_reward_stars,
+        reward=get_settings().referral_reward_stars,
         balance=await get_balance(session, user.id),
         invited=stats.invited_count,
         redeemed=redeemed,
-        slots=slots,
-        limit=limit,
+        waiting=waiting,
     )
     await show_screen(
         message,
         text,
         scope=INVITE_SCREEN,
         parse_mode="HTML",
-        # Занятые места считаем из свободных, а не отдельным запросом: формула
-        # потолка должна жить в одном месте.
-        reply_markup=invite_hub_keyboard(has_gifts=slots < limit or redeemed > 0),
+        reply_markup=invite_hub_keyboard(has_gifts=waiting > 0 or redeemed > 0),
     )
 
 
@@ -279,11 +264,6 @@ async def cb_pick_gift(callback: CallbackQuery, session: AsyncSession) -> None:
         await alert(callback, _NO_USER_TEXT)
         return
     await toast(callback)
-    # Потолок проверяем до витрины, а не после выбора: упереться в него,
-    # уже выбрав разбор, — два экрана впустую.
-    if await gift_slots_left(session, user) <= 0:
-        await _show_limit(callback.message)
-        return
     offers = await giftable_offers(session)
     if not offers:
         await show_screen(
@@ -300,16 +280,6 @@ async def cb_pick_gift(callback: CallbackQuery, session: AsyncSession) -> None:
         scope=INVITE_SCREEN,
         parse_mode="HTML",
         reply_markup=gift_products_keyboard(offers),
-    )
-
-
-async def _show_limit(message: Message) -> None:
-    await show_screen(
-        message,
-        _LIMIT_TEXT.format(limit=get_settings().gift_max_unredeemed),
-        scope=INVITE_SCREEN,
-        parse_mode="HTML",
-        reply_markup=gift_limit_keyboard(),
     )
 
 
@@ -436,10 +406,6 @@ async def cb_issue_gift(callback: CallbackQuery, session: AsyncSession) -> None:
         return
 
     gift = await issue_gift(session, user, product_code)
-    if gift is None:
-        await toast(callback)
-        await _show_limit(callback.message)
-        return
     await session.commit()
     await toast(callback)
 

@@ -73,7 +73,6 @@ def _mocks(**overrides) -> dict:
         "gifts_crud.count_unredeemed": AsyncMock(return_value=3),
         "gifts_crud.list_by_giver": AsyncMock(return_value=[]),
         "gifts_crud.get_by_code": AsyncMock(return_value=None),
-        "gift_slots_left": AsyncMock(return_value=7),
         "giftable_offers": AsyncMock(return_value=_OFFERS),
         "issue_gift": AsyncMock(return_value=SimpleNamespace(code="giftcode")),
         "revoke_gift": AsyncMock(return_value=None),
@@ -146,7 +145,8 @@ class TestHub:
         assert "30 ⭐" in text  # баланс кошелька
         assert "<b>2</b>" in text  # приглашено
         assert "<b>1</b>" in text  # подарков забрали
-        assert "<b>7 из 10</b>" in text  # свободных подарков
+        assert "<b>3</b>" in text  # ссылок в пути
+        assert "потолка нет" in text
 
     async def test_gift_picker_lists_what_can_be_gifted_now(self) -> None:
         mocks = _mocks()
@@ -249,28 +249,15 @@ class TestIssuingFromTheBot:
         assert callback.answer.await_args.args[0].strip()
         assert callback.answer.await_args.kwargs["show_alert"] is True
 
-    async def test_limit_is_explained_in_the_screen(self) -> None:
-        mocks = _mocks(issue_gift=AsyncMock(return_value=None))
 
-        await _run(
-            cb_issue_gift,
-            mocks,
-            _callback(f"{CB_INVITE_GIFT_PICK_PREFIX}{PRODUCT}"),
-            AsyncMock(),
-        )
-
-        mocks["issue_gift"].assert_awaited_once()
-        assert "подарк" in _screen(mocks).lower()
-
-    async def test_full_shelf_is_named_before_the_catalog(self) -> None:
-        """Упереться в потолок, уже выбрав разбор, — два экрана впустую."""
-        mocks = _mocks(gift_slots_left=AsyncMock(return_value=0))
+    async def test_giving_never_hits_a_ceiling(self) -> None:
+        """Подарки — канал привлечения: тот, кто приводит людей, в стену не упирается."""
+        mocks = _mocks(**{"gifts_crud.count_unredeemed": AsyncMock(return_value=500)})
 
         await _run(cb_pick_gift, mocks, _callback(CB_INVITE_GIFT), AsyncMock())
 
-        assert "Все подарки в пути" in _screen(mocks)
-        assert CB_INVITE_GIFTS in _screen_callbacks(mocks)  # выход есть
-        assert not [c for c in _screen_callbacks(mocks) if c.startswith(CB_INVITE_GIFT_PICK_PREFIX)]
+        data = _screen_callbacks(mocks)
+        assert [c for c in data if c.startswith(CB_INVITE_GIFT_PICK_PREFIX)]
 
 
 @pytest.mark.asyncio

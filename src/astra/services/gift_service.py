@@ -21,7 +21,6 @@ from enum import StrEnum
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from astra.ask.products import SPECS, get_product
-from astra.core.config import Settings, get_settings
 from astra.core.observability import Event, get_logger
 from astra.gifts import crud as gifts_crud
 from astra.gifts.models import Gift, GiftStatus
@@ -128,22 +127,15 @@ async def _product_price_stars(session: AsyncSession, product_code: str) -> int:
     return int(row.amount)
 
 
-async def issue_gift(
-    session: AsyncSession,
-    giver: User,
-    product_code: str,
-    settings: Settings | None = None,
-) -> Gift | None:
-    """Выдать подарочный код. None — у человека слишком много неактивированных.
+async def issue_gift(session: AsyncSession, giver: User, product_code: str) -> Gift:
+    """Выдать подарочный код. Ограничений на количество нет — намеренно.
 
-    Дарить можно скольким угодно людям; ограничен только запас невостребованных
-    ссылок, иначе безлимит превращается в генератор кодов.
+    Потолок невостребованных ссылок здесь был и снят: он защищал не то, что
+    стоит денег. Сама ссылка бесплатна, пока её не забрали; расходы начинаются
+    на активации, и держат их другие правила — подарок достаётся только тому,
+    кого в боте ещё нет, и только один раз от этого дарителя. Подарки — канал
+    привлечения, и упираться в стену человек, который приводит людей, не должен.
     """
-    cfg = settings or get_settings()
-    waiting = await gifts_crud.count_unredeemed(session, giver.id)
-    if waiting >= cfg.gift_max_unredeemed:
-        log.info(Event.GIFT_LIMIT_REACHED, user_id=giver.id, waiting=waiting)
-        return None
     gift = await gifts_crud.create_gift(session, giver_id=giver.id, product_code=product_code)
     log.info(
         Event.GIFT_ISSUED,
@@ -168,17 +160,6 @@ async def revoke_gift(session: AsyncSession, giver: User, code: str) -> Gift | N
     await session.flush()
     log.info(Event.GIFT_REVOKED, user_id=giver.id, gift_id=gift.id, code=code)
     return gift
-
-
-async def gift_slots_left(
-    session: AsyncSession,
-    giver: User,
-    settings: Settings | None = None,
-) -> int:
-    """Сколько ссылок человек ещё может выдать, не отзывая старые."""
-    cfg = settings or get_settings()
-    waiting = await gifts_crud.count_unredeemed(session, giver.id)
-    return max(0, cfg.gift_max_unredeemed - waiting)
 
 
 async def redeem_gift(

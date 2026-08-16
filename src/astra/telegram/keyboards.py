@@ -621,16 +621,6 @@ def gift_revoke_confirm_keyboard(code: str) -> InlineKeyboardMarkup:
     )
 
 
-def gift_limit_keyboard() -> InlineKeyboardMarkup:
-    """Упёрся в потолок — выход отсюда только через список выданного."""
-    return InlineKeyboardMarkup(
-        inline_keyboard=[
-            [InlineKeyboardButton(text=_BTN_MY_GIFTS, callback_data=CB_INVITE_GIFTS)],
-            [InlineKeyboardButton(text=BTN_BACK_TO_INVITES, callback_data=CB_INVITE_HUB)],
-        ],
-    )
-
-
 def invite_back_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
