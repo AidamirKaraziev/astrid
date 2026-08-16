@@ -107,10 +107,16 @@ CB_COMPAT_PEOPLE_ALL = "compat:person:all"
 CB_COMPAT_SELF_FIRST = "compat:person:self"
 
 # Раздел «Пригласить друга»: подарки, ссылка и счёт в одном живом экране.
+# Каждая ветка со своим сегментом: `invite:gift:` был бы префиксом и для
+# выбора товара, и для «показать подарок», и одна ветка съедала бы другую.
 CB_INVITE_HUB = "invite:hub"
 CB_INVITE_GIFT = "invite:gift"
-CB_INVITE_GIFT_PICK_PREFIX = "invite:gift:"  # + код товара
+CB_INVITE_GIFT_PICK_PREFIX = "invite:pick:"  # + код товара
 CB_INVITE_LINK = "invite:link"
+CB_INVITE_GIFTS = "invite:mine"  # список выданных подарков
+CB_INVITE_GIFT_SHOW_PREFIX = "invite:show:"  # + код подарка
+CB_INVITE_GIFT_REVOKE_ASK_PREFIX = "invite:revoke:ask:"  # + код подарка
+CB_INVITE_GIFT_REVOKE_DO_PREFIX = "invite:revoke:do:"  # + код подарка
 
 # Служба заботы: хаб помощи, FAQ-темы и вход в релей к живому оператору
 CB_SUPPORT_HUB = "support:hub"

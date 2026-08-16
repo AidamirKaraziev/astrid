@@ -61,13 +61,17 @@ async def already_gifted(session: AsyncSession, giver_id: UUID, invitee_id: UUID
     return int(result.scalar_one()) > 0
 
 
-async def list_by_giver(session: AsyncSession, giver_id: UUID, limit: int = 20) -> list[Gift]:
-    result = await session.execute(
-        select(Gift)
-        .where(Gift.giver_id == giver_id)
-        .order_by(Gift.created_at.desc())
-        .limit(limit),
-    )
+async def list_by_giver(
+    session: AsyncSession,
+    giver_id: UUID,
+    limit: int = 20,
+    status: GiftStatus | None = None,
+) -> list[Gift]:
+    """Подарки человека, свежие сверху. `status` — только нужное состояние."""
+    query = select(Gift).where(Gift.giver_id == giver_id)
+    if status is not None:
+        query = query.where(Gift.status == status)
+    result = await session.execute(query.order_by(Gift.created_at.desc()).limit(limit))
     return list(result.scalars())
 
 

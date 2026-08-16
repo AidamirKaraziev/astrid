@@ -14,10 +14,13 @@ from astra.payments.models import Product, ProductPrice
 from astra.services.gift_service import (
     GiftRedeemed,
     GiftRefusal,
+    gift_slots_left,
+    giftable_offers,
     giftable_products,
     issue_gift,
     link_gift_on_start,
     redeem_gift,
+    revoke_gift,
 )
 from astra.telegram.utils import extract_gift_code, extract_referral_code
 from astra.wallet import crud as wallet_crud
@@ -76,6 +79,39 @@ class TestCatalog:
     def test_every_product_has_a_human_label(self) -> None:
         assert all(p.label.strip() for p in giftable_products())
 
+    def test_questions_are_marked_apart_from_spreads(self) -> None:
+        """Заголовков у inline-клавиатуры не бывает — ветки различает значок."""
+        labels = {p.code: p.label for p in giftable_products()}
+        assert labels["ask_love_kids"].startswith("💬")
+        assert not labels[PRODUCT].startswith("💬")
+
+
+@pytest.mark.asyncio
+class TestShelf:
+    """Витрина — то, что можно подарить сейчас, а не весь каталог."""
+
+    async def test_price_comes_with_the_offer(self, db_session) -> None:
+        await _priced_product(db_session, amount=50)
+
+        offers = {p.code: p for p in await giftable_offers(db_session)}
+
+        assert offers[PRODUCT].price_stars == 50
+
+    async def test_free_today_is_not_offered_as_a_gift(self, db_session) -> None:
+        """Дарить то, что друг и так возьмёт даром, — пустой жест и кран звёзд."""
+        await _priced_product(db_session)
+        await db_session.execute(
+            ProductPrice.__table__.update()
+            .where(ProductPrice.product_code == PRODUCT)
+            .values(discount_percent=100),
+        )
+        await db_session.flush()
+
+        assert PRODUCT not in {p.code for p in await giftable_offers(db_session)}
+
+    async def test_product_without_a_price_is_not_offered(self, db_session) -> None:
+        assert "natal_report" not in {p.code for p in await giftable_offers(db_session)}
+
 
 @pytest.mark.asyncio
 class TestIssuing:
@@ -109,6 +145,62 @@ class TestIssuing:
         await redeem_gift(db_session, gift.code, await _user(db_session), is_newcomer=True)
 
         assert await gifts_crud.count_unredeemed(db_session, giver.id) == 0
+
+
+@pytest.mark.asyncio
+class TestRevoking:
+    """Без отзыва потолок выбирается брошенными новичками — и навсегда."""
+
+    async def test_revoke_frees_a_slot(self, db_session) -> None:
+        from astra.core.config import get_settings
+
+        giver = await _user(db_session)
+        limit = get_settings().gift_max_unredeemed
+        gifts = [await issue_gift(db_session, giver, PRODUCT) for _ in range(limit)]
+        assert await gift_slots_left(db_session, giver) == 0
+
+        assert await revoke_gift(db_session, giver, gifts[0].code) is not None
+
+        assert await gift_slots_left(db_session, giver) == 1
+        assert await issue_gift(db_session, giver, PRODUCT) is not None
+
+    async def test_revoked_link_stops_working(self, db_session) -> None:
+        giver = await _user(db_session)
+        gift = await issue_gift(db_session, giver, PRODUCT)
+
+        await revoke_gift(db_session, giver, gift.code)
+
+        assert gift.status is GiftStatus.REVOKED
+        assert await redeem_gift(db_session, gift.code, await _user(db_session), is_newcomer=True) is (
+            GiftRefusal.REVOKED
+        )
+
+    async def test_someone_elses_gift_cannot_be_revoked(self, db_session) -> None:
+        giver = await _user(db_session)
+        gift = await issue_gift(db_session, giver, PRODUCT)
+
+        assert await revoke_gift(db_session, await _user(db_session), gift.code) is None
+        assert gift.status is GiftStatus.ISSUED
+
+    async def test_taken_gift_cannot_be_revoked(self, db_session) -> None:
+        """Там уже потрачены звёзды — отзывать нечего."""
+        await _priced_product(db_session)
+        giver = await _user(db_session)
+        gift = await issue_gift(db_session, giver, PRODUCT)
+        await redeem_gift(db_session, gift.code, await _user(db_session), is_newcomer=True)
+
+        assert await revoke_gift(db_session, giver, gift.code) is None
+        assert gift.status is GiftStatus.REDEEMED
+
+    async def test_revoked_gifts_stay_out_of_the_list(self, db_session) -> None:
+        giver = await _user(db_session)
+        kept = await issue_gift(db_session, giver, PRODUCT)
+        dropped = await issue_gift(db_session, giver, PRODUCT)
+        await revoke_gift(db_session, giver, dropped.code)
+
+        waiting = await gifts_crud.list_by_giver(db_session, giver.id, status=GiftStatus.ISSUED)
+
+        assert [g.code for g in waiting] == [kept.code]
 
 
 @pytest.mark.asyncio
@@ -249,8 +341,7 @@ class TestRefusalHasAReason:
     async def test_revoked_code_is_not_confused_with_a_taken_one(self, db_session) -> None:
         giver = await _user(db_session)
         gift = await issue_gift(db_session, giver, PRODUCT)
-        gift.status = GiftStatus.REVOKED
-        await db_session.flush()
+        await revoke_gift(db_session, giver, gift.code)
 
         outcome = await link_gift_on_start(
             db_session,

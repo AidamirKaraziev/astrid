@@ -40,6 +40,8 @@ log = get_logger(__name__)
 class GiftableProduct:
     code: str
     label: str
+    price_stars: int = 0
+    """Сколько ляжет другу на счёт. 0 — цена ещё не спрошена у каталога."""
 
 
 class GiftRefusal(StrEnum):
@@ -65,7 +67,10 @@ class GiftRedeemed:
 
 
 def giftable_products() -> list[GiftableProduct]:
-    """Что реально продаётся и потому может быть подарено.
+    """Что вообще бывает подарком — без цен и без оглядки на акции.
+
+    Нужен там, где важно только имя товара: подпись подарка в списке, в
+    карточке новичка, в отказе. Что можно подарить **сейчас** — `giftable_offers`.
 
     Натал и совместимость сюда не попадают: их нет в каталоге товаров. Появятся
     там — появятся и здесь, отдельной правки не нужно.
@@ -80,8 +85,31 @@ def giftable_products() -> list[GiftableProduct]:
     for key in SPECS:
         product = get_product(key)
         if product is not None:
-            products.append(GiftableProduct(ask_product_code(key), product.invoice_title))
+            # Свой значок у ветки вопросов: в общем списке они иначе сливаются
+            # с раскладами, а заголовков у inline-клавиатуры не бывает.
+            products.append(
+                GiftableProduct(ask_product_code(key), f"💬 {product.invoice_title}"),
+            )
     return products
+
+
+async def giftable_offers(session: AsyncSession) -> list[GiftableProduct]:
+    """Что можно подарить прямо сейчас, с ценой на каждом.
+
+    Бесплатное сегодня в витрину не пускаем по двум причинам. Дарить то, что
+    друг и так возьмёт даром, — не подарок, а пустой жест. И звёзды мы кладём
+    по полной цене товара: подарить бесплатный расклад значило бы намыть другу
+    50 ⭐ на платные разборы из воздуха.
+    """
+    offers = []
+    for product in giftable_products():
+        row = await payments_crud.get_product_price(session, product.code, CURRENCY_XTR)
+        if row is None or row.discount_percent >= 100 or row.amount <= 0:
+            continue
+        offers.append(
+            GiftableProduct(product.code, product.label, price_stars=int(row.amount)),
+        )
+    return offers
 
 
 def product_label(product_code: str) -> str:
@@ -126,6 +154,33 @@ async def issue_gift(
     return gift
 
 
+async def revoke_gift(session: AsyncSession, giver: User, code: str) -> Gift | None:
+    """Забрать невостребованную ссылку обратно. None — отзывать нечего.
+
+    Единственный способ освободить место, когда потолок неактивированных
+    ссылок выбран брошенными новичками. Забранный подарок не отзывается: там
+    уже потрачены звёзды.
+    """
+    gift = await gifts_crud.get_by_code(session, code)
+    if gift is None or gift.giver_id != giver.id or gift.status is not GiftStatus.ISSUED:
+        return None
+    gift.status = GiftStatus.REVOKED
+    await session.flush()
+    log.info(Event.GIFT_REVOKED, user_id=giver.id, gift_id=gift.id, code=code)
+    return gift
+
+
+async def gift_slots_left(
+    session: AsyncSession,
+    giver: User,
+    settings: Settings | None = None,
+) -> int:
+    """Сколько ссылок человек ещё может выдать, не отзывая старые."""
+    cfg = settings or get_settings()
+    waiting = await gifts_crud.count_unredeemed(session, giver.id)
+    return max(0, cfg.gift_max_unredeemed - waiting)
+
+
 async def redeem_gift(
     session: AsyncSession,
     code: str,
@@ -137,6 +192,10 @@ async def redeem_gift(
     gift = await gifts_crud.get_by_code(session, code)
     if gift is None:
         return GiftRefusal.UNKNOWN_CODE
+    # Отозванный отделяем от забранного: даритель мог забрать место обратно,
+    # пока новичок регистрировался, и «уже забрали» было бы неправдой.
+    if gift.status is GiftStatus.REVOKED:
+        return GiftRefusal.REVOKED
     if gift.status is not GiftStatus.ISSUED:
         return GiftRefusal.ALREADY_REDEEMED
     if gift.giver_id == invitee.id:

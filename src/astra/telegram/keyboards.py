@@ -1,4 +1,5 @@
 import re
+from collections.abc import Sequence
 
 from aiogram.enums import ButtonStyle
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, KeyboardButton, ReplyKeyboardMarkup
@@ -44,6 +45,10 @@ from astra.telegram.button_texts import (
     CB_DAY_CARD_FORECAST,
     CB_INVITE_GIFT,
     CB_INVITE_GIFT_PICK_PREFIX,
+    CB_INVITE_GIFT_REVOKE_ASK_PREFIX,
+    CB_INVITE_GIFT_REVOKE_DO_PREFIX,
+    CB_INVITE_GIFT_SHOW_PREFIX,
+    CB_INVITE_GIFTS,
     CB_INVITE_HUB,
     CB_INVITE_LINK,
     CB_PRODUCT_ASK_STARS,
@@ -513,35 +518,122 @@ def support_contextual_keyboard() -> InlineKeyboardMarkup:
     )
 
 
-def invite_hub_keyboard() -> InlineKeyboardMarkup:
-    """Раздел приглашений: подарить, позвать, закрыть."""
-    return InlineKeyboardMarkup(
-        inline_keyboard=[
-            [InlineKeyboardButton(text="🎁 Подарить разбор", callback_data=CB_INVITE_GIFT)],
-            [InlineKeyboardButton(text="🔗 Позвать по ссылке", callback_data=CB_INVITE_LINK)],
-            [InlineKeyboardButton(text=BTN_BACK_MENU, callback_data="menu:home")],
-        ],
-    )
+# «Назад» из хаба ведёт в главное меню, «Назад» из подэкрана — в хаб. Одна
+# подпись на два разных выхода читалась бы как один и тот же.
+BTN_BACK_TO_INVITES = "🔙 К приглашениям"
+_BTN_MY_GIFTS = "📋 Мои подарки"
+
+
+def invite_hub_keyboard(*, has_gifts: bool) -> InlineKeyboardMarkup:
+    """Раздел приглашений: подарить, позвать, посмотреть выданное, закрыть."""
+    rows = [
+        [InlineKeyboardButton(text="🎁 Подарить разбор", callback_data=CB_INVITE_GIFT)],
+        [InlineKeyboardButton(text="🔗 Позвать по ссылке", callback_data=CB_INVITE_LINK)],
+    ]
+    if has_gifts:
+        rows.append([InlineKeyboardButton(text=_BTN_MY_GIFTS, callback_data=CB_INVITE_GIFTS)])
+    rows.append([InlineKeyboardButton(text=BTN_BACK_MENU, callback_data="menu:home")])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
 def gift_products_keyboard(products) -> InlineKeyboardMarkup:
-    """Что подарить. Список приходит из каталога, а не зашит в клавиатуру."""
+    """Что подарить. Список приходит из каталога, а не зашит в клавиатуру.
+
+    Цена стоит на кнопке: даритель отдаёт не свои звёзды, но масштаб подарка
+    видеть должен — «Три карты» и вопрос за одну звезду весят по-разному.
+    """
     rows = [
         [
             InlineKeyboardButton(
-                text=product.label,
+                text=f"{product.label} · {product.price_stars} ⭐",
                 callback_data=f"{CB_INVITE_GIFT_PICK_PREFIX}{product.code}",
             ),
         ]
         for product in products
     ]
-    rows.append([InlineKeyboardButton(text=BTN_BACK_MENU, callback_data=CB_INVITE_HUB)])
+    rows.append([InlineKeyboardButton(text=BTN_BACK_TO_INVITES, callback_data=CB_INVITE_HUB)])
     return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def my_gifts_keyboard(gifts: Sequence[tuple[str, str]]) -> InlineKeyboardMarkup:
+    """Выданные ссылки: строка на подарок. `gifts` — пары (код, подпись)."""
+    rows = [
+        [
+            InlineKeyboardButton(
+                text=label,
+                callback_data=f"{CB_INVITE_GIFT_SHOW_PREFIX}{code}",
+            ),
+        ]
+        for code, label in gifts
+    ]
+    rows.append([InlineKeyboardButton(text=BTN_BACK_TO_INVITES, callback_data=CB_INVITE_HUB)])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def gift_ready_keyboard(share_url: str) -> InlineKeyboardMarkup:
+    """Подарок только что выдан: главное действие — отправить, и оно первое.
+
+    «Отозвать» здесь не нужно: человек секунду назад сам выбрал разбор. Оно
+    ждёт в «Моих подарках», куда ведёт вторая кнопка.
+    """
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="📤 Отправить другу", url=share_url)],
+            [InlineKeyboardButton(text=_BTN_MY_GIFTS, callback_data=CB_INVITE_GIFTS)],
+            [InlineKeyboardButton(text=BTN_BACK_TO_INVITES, callback_data=CB_INVITE_HUB)],
+        ],
+    )
+
+
+def gift_actions_keyboard(code: str, share_url: str) -> InlineKeyboardMarkup:
+    """Один выданный подарок: отправить заново или забрать место обратно."""
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="📤 Отправить другу", url=share_url)],
+            [
+                InlineKeyboardButton(
+                    text="✖️ Отозвать",
+                    callback_data=f"{CB_INVITE_GIFT_REVOKE_ASK_PREFIX}{code}",
+                ),
+            ],
+            [InlineKeyboardButton(text=_BTN_MY_GIFTS, callback_data=CB_INVITE_GIFTS)],
+        ],
+    )
+
+
+def gift_revoke_confirm_keyboard(code: str) -> InlineKeyboardMarkup:
+    """Отзыв ломает ссылку, которая может быть уже отправлена, — спрашиваем."""
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="✖️ Да, отозвать",
+                    callback_data=f"{CB_INVITE_GIFT_REVOKE_DO_PREFIX}{code}",
+                ),
+            ],
+            [
+                InlineKeyboardButton(
+                    text="Оставить",
+                    callback_data=f"{CB_INVITE_GIFT_SHOW_PREFIX}{code}",
+                ),
+            ],
+        ],
+    )
+
+
+def gift_limit_keyboard() -> InlineKeyboardMarkup:
+    """Упёрся в потолок — выход отсюда только через список выданного."""
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text=_BTN_MY_GIFTS, callback_data=CB_INVITE_GIFTS)],
+            [InlineKeyboardButton(text=BTN_BACK_TO_INVITES, callback_data=CB_INVITE_HUB)],
+        ],
+    )
 
 
 def invite_back_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text=BTN_BACK_MENU, callback_data=CB_INVITE_HUB)],
+            [InlineKeyboardButton(text=BTN_BACK_TO_INVITES, callback_data=CB_INVITE_HUB)],
         ],
     )
