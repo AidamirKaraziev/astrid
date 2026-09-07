@@ -33,6 +33,7 @@ from astra.services.gift_service import (
     revoke_gift,
 )
 from astra.telegram.button_texts import (
+    BTN_INVITE,
     CB_INVITE_GIFT,
     CB_INVITE_GIFT_PICK_PREFIX,
     CB_INVITE_GIFT_REVOKE_ASK_PREFIX,
@@ -231,9 +232,11 @@ async def _show_gift(message: Message, session: AsyncSession, user, code: str) -
     )
 
 
-# Не хендлер: кнопку меню ловит `navigation`, он подключён раньше и зовёт
-# сюда сам. Своя регистрация на `BTN_INVITE` здесь была и не срабатывала ни
-# разу — выглядела рабочей и врала.
+# Регистрация здесь обязательна: `navigation` подключён раньше, но весь его
+# роутер стоит под `StateFilter` активных сценариев — он ловит кнопку только
+# у того, кто застрял в флоу. Из главного меню, где состояния нет, кнопка без
+# этой строки не доходила ни до кого и получала ответ фолбэка.
+@router.message(F.text == BTN_INVITE)
 async def open_invites(message: Message, state: FSMContext, session: AsyncSession) -> None:
     if message.from_user is None:
         return

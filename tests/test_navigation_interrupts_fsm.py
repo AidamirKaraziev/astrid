@@ -106,6 +106,51 @@ async def test_paid_stub_answers_without_breaking_flow() -> None:
 
 
 @pytest.mark.asyncio
+async def test_every_menu_button_is_answered_by_someone_without_state() -> None:
+    """Из главного меню состояния нет — и `navigation` кнопку не ловит.
+
+    Так и потерялась «🎁 Пригласить друга»: свою регистрацию в разделе сняли,
+    решив, что кнопку забирает `navigation`, а он весь стоит под `StateFilter`
+    и работает только у застрявшего в сценарии. Из меню кнопка доходила до
+    фолбэка и получала «Кажется, мы прервались».
+    """
+    from datetime import UTC, datetime
+
+    from aiogram.types import Chat, Message
+    from aiogram.types import User as TgUser
+    from fake_telegram import build_bot, get_shared_dispatcher
+
+    from astra.telegram.keyboard_policy import MAIN_MENU_BUTTONS
+
+    dp = await get_shared_dispatcher()
+    bot = build_bot()
+
+    async def owner(text: str) -> str | None:
+        """Имя роутера, который заберёт эту кнопку у человека без состояния."""
+        message = Message(
+            message_id=1,
+            date=datetime.now(UTC),
+            chat=Chat(id=1, type="private"),
+            from_user=TgUser(id=1, is_bot=False, first_name="Аида"),
+            text=text,
+        )
+        for router in dp.sub_routers:
+            observer = router.observers["message"]
+            passed, _ = await observer.check_root_filters(message, raw_state=None, bot=bot)
+            if not passed:
+                continue
+            for handler in observer.handlers:
+                matched, _ = await handler.check(message, raw_state=None, bot=bot)
+                if matched:
+                    return router.name
+        return None
+
+    for text in sorted(MAIN_MENU_BUTTONS):
+        name = await owner(text)
+        assert name not in (None, "fallback"), f"кнопку «{text}» без состояния никто не ловит"
+
+
+@pytest.mark.asyncio
 async def test_navigation_router_registered_before_flow_routers() -> None:
     # Диспетчер один на процесс: роутеры — модульные синглтоны и ко второму
     # `Dispatcher` не приклеиваются (см. tests/fake_telegram.py).
