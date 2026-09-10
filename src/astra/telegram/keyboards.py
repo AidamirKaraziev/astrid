@@ -536,6 +536,11 @@ def invite_hub_keyboard(*, has_gifts: bool) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
+def _gift_price_label(stars: int) -> str:
+    """«50 ⭐» или «бесплатно»: ноль звёзд на кнопке читался бы как поломка."""
+    return f"{stars} ⭐" if stars > 0 else "бесплатно"
+
+
 def gift_products_keyboard(products) -> InlineKeyboardMarkup:
     """Что подарить. Список приходит из каталога, а не зашит в клавиатуру.
 
@@ -545,7 +550,7 @@ def gift_products_keyboard(products) -> InlineKeyboardMarkup:
     rows = [
         [
             InlineKeyboardButton(
-                text=f"{product.label} · {product.price_stars} ⭐",
+                text=f"{product.label} · {_gift_price_label(product.price_stars)}",
                 callback_data=f"{CB_INVITE_GIFT_PICK_PREFIX}{product.code}",
             ),
         ]

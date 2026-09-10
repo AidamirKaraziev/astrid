@@ -96,8 +96,13 @@ class TestShelf:
 
         assert offers[PRODUCT].price_stars == 50
 
-    async def test_free_today_is_not_offered_as_a_gift(self, db_session) -> None:
-        """Дарить то, что друг и так возьмёт даром, — пустой жест и кран звёзд."""
+    async def test_free_today_is_offered_for_nothing(self, db_session) -> None:
+        """Бесплатный сегодня разбор дарится тоже — но звёзд с него ноль.
+
+        Решение заказчика от 10 сентября: подарок — повод зайти, даже если
+        разбор и так открыт. Кран звёзд закрыт ценой: кладём по скидке, а не
+        по полной.
+        """
         await _priced_product(db_session)
         await db_session.execute(
             ProductPrice.__table__.update()
@@ -106,7 +111,22 @@ class TestShelf:
         )
         await db_session.flush()
 
-        assert PRODUCT not in {p.code for p in await giftable_offers(db_session)}
+        offers = {p.code: p for p in await giftable_offers(db_session)}
+
+        assert offers[PRODUCT].price_stars == 0
+
+    async def test_discounted_price_is_the_gift_price(self, db_session) -> None:
+        await _priced_product(db_session, amount=50)
+        await db_session.execute(
+            ProductPrice.__table__.update()
+            .where(ProductPrice.product_code == PRODUCT)
+            .values(discount_percent=20),
+        )
+        await db_session.flush()
+
+        offers = {p.code: p for p in await giftable_offers(db_session)}
+
+        assert offers[PRODUCT].price_stars == 40
 
     async def test_product_without_a_price_is_not_offered(self, db_session) -> None:
         assert "natal_report" not in {p.code for p in await giftable_offers(db_session)}
@@ -210,6 +230,26 @@ class TestRedeeming:
         assert await wallet_crud.get_balance(db_session, newcomer.id) == 50
         assert gift.status is GiftStatus.REDEEMED
         assert gift.redeemed_by == newcomer.id
+
+    async def test_free_gift_puts_nothing_on_the_wallet(self, db_session) -> None:
+        """Бесплатный сегодня разбор: подарок забран, звёзд с него нет."""
+        await _priced_product(db_session, amount=50)
+        await db_session.execute(
+            ProductPrice.__table__.update()
+            .where(ProductPrice.product_code == PRODUCT)
+            .values(discount_percent=100),
+        )
+        await db_session.flush()
+        giver = await _user(db_session)
+        gift = await issue_gift(db_session, giver, PRODUCT)
+        newcomer = await _user(db_session)
+
+        outcome = await redeem_gift(db_session, gift.code, newcomer, is_newcomer=True)
+
+        assert isinstance(outcome, GiftRedeemed)
+        assert outcome.stars == 0
+        assert await wallet_crud.get_balance(db_session, newcomer.id) == 0
+        assert gift.status is GiftStatus.REDEEMED
 
     async def test_registered_person_is_refused(self, db_session) -> None:
         """Подарок — канал роста, а не скидка тем, кто уже в боте."""
@@ -431,6 +471,29 @@ class TestDeliveryAtTheEndOfOnboarding:
         assert "Три карты" in sent.args[0]
         button = sent.kwargs["reply_markup"].inline_keyboard[0][0]
         assert button.callback_data == f"{CB_TAROT_SPREAD_PREFIX}three_cards"
+
+    async def test_free_gift_does_not_promise_stars(self, db_session) -> None:
+        """Карточка бесплатного подарка не обещает звёзд, которых на счету нет."""
+        from astra.services.gift_delivery import redeem_pending_gift
+
+        await _priced_product(db_session)
+        await db_session.execute(
+            ProductPrice.__table__.update()
+            .where(ProductPrice.product_code == PRODUCT)
+            .values(discount_percent=100),
+        )
+        await db_session.flush()
+        giver = await _user(db_session)
+        gift = await issue_gift(db_session, giver, PRODUCT)
+        message = AsyncMock()
+
+        outcome = await redeem_pending_gift(message, db_session, await _user(db_session), gift.code)
+
+        assert isinstance(outcome, GiftRedeemed)
+        sent = message.answer.await_args
+        assert "Три карты" in sent.args[0]
+        assert "звёзды" not in sent.args[0].lower()
+        assert sent.kwargs["reply_markup"] is not None
 
     async def test_gift_taken_meanwhile_is_explained(self, db_session) -> None:
         """Пока человек регистрировался, код мог забрать кто-то другой."""

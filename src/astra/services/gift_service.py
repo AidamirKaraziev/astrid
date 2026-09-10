@@ -1,9 +1,11 @@
 """Подарки: что можно дарить, кому это засчитывается и что получает новичок.
 
 **Как подарок превращается в разбор.** При активации мы кладём на счёт новичка
-ровно цену подаренного продукта и говорим, что именно ему подарили. Дальше
-работает обычная покупка: внутренний баланс закрывает всю цену, инвойса нет,
-разбор выдаётся сразу.
+ровно цену подаренного продукта — ту, что в каталоге сегодня, со скидкой, — и
+говорим, что именно ему подарили. Дальше работает обычная покупка: внутренний
+баланс закрывает всю цену, инвойса нет, разбор выдаётся сразу. Бесплатный
+сегодня продукт дарится тоже: звёзд с него ноль, подарок работает как
+приглашение с именем разбора.
 
 Отдельной сущности «право на продукт» здесь нет намеренно. Она означала бы
 третий способ оплаты рядом с инвойсом и кошельком — и свою ветку в каждом из
@@ -26,7 +28,7 @@ from astra.gifts import crud as gifts_crud
 from astra.gifts.models import Gift, GiftStatus
 from astra.payments import models as payments_crud
 from astra.payments.enums import CURRENCY_XTR
-from astra.payments.service import ask_product_code, tarot_product_code
+from astra.payments.service import ProductPriceInfo, ask_product_code, tarot_product_code
 from astra.tarot.spreads import SPREADS, SpreadType
 from astra.users.models import User
 from astra.wallet import crud as wallet_crud
@@ -95,18 +97,17 @@ def giftable_products() -> list[GiftableProduct]:
 async def giftable_offers(session: AsyncSession) -> list[GiftableProduct]:
     """Что можно подарить прямо сейчас, с ценой на каждом.
 
-    Бесплатное сегодня в витрину не пускаем по двум причинам. Дарить то, что
-    друг и так возьмёт даром, — не подарок, а пустой жест. И звёзды мы кладём
-    по полной цене товара: подарить бесплатный расклад значило бы намыть другу
-    50 ⭐ на платные разборы из воздуха.
+    Цена — та, что в каталоге сегодня, со скидкой: столько и ляжет другу на
+    счёт. Бесплатный сегодня продукт в витрине остаётся с нулём — решение
+    заказчика от 10 сентября: дарить хочется и его, а звёзд с него не льётся.
     """
     offers = []
     for product in giftable_products():
-        row = await payments_crud.get_product_price(session, product.code, CURRENCY_XTR)
-        if row is None or row.discount_percent >= 100 or row.amount <= 0:
+        price = await _product_price(session, product.code)
+        if price is None:
             continue
         offers.append(
-            GiftableProduct(product.code, product.label, price_stars=int(row.amount)),
+            GiftableProduct(product.code, product.label, price_stars=price.final_amount),
         )
     return offers
 
@@ -118,13 +119,21 @@ def product_label(product_code: str) -> str:
     return "разбор от Астрид"
 
 
-async def _product_price_stars(session: AsyncSession, product_code: str) -> int:
+async def _product_price(session: AsyncSession, product_code: str) -> ProductPriceInfo | None:
+    """Цена продукта в звёздах сегодня. None — в каталоге его нет или он выключен."""
     row = await payments_crud.get_product_price(session, product_code, CURRENCY_XTR)
-    if row is None:
-        return 0
-    # Дарим по полной цене товара: акция каталога — дело покупателя, а не
-    # дарителя, и завтра её может не быть.
-    return int(row.amount)
+    if row is None or row.amount <= 0:
+        return None
+    return ProductPriceInfo(row.currency, int(row.amount), row.discount_percent)
+
+
+async def _product_price_stars(session: AsyncSession, product_code: str) -> int:
+    # Дарим по цене со скидкой: подарить бесплатный сегодня расклад по полной
+    # цене значило бы намыть другу 50 ⭐ на платные разборы из воздуха. Обратная
+    # сторона честно принята: кончится акция раньше, чем друг откроет подарок, —
+    # звёзд на разбор не хватит.
+    price = await _product_price(session, product_code)
+    return price.final_amount if price is not None else 0
 
 
 async def issue_gift(session: AsyncSession, giver: User, product_code: str) -> Gift:

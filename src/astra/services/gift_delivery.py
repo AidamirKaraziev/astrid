@@ -39,6 +39,13 @@ _GIFT_TEXT_NO_ENTRY = (
     "Друг подарил тебе разбор — он уже оплачен.\n"
     "Звёзды подарка ждут на твоём счету, трать их на любой разбор ✨"
 )
+# Подарок бесплатного сегодня разбора: звёзд на счету от него нет, и обещать
+# их нельзя — человек откроет кошелёк и увидит ноль.
+_GIFT_TEXT_FREE = (
+    "🎁 <b>Тебе подарок</b>\n\n"
+    "Друг подарил тебе <b>{label}</b>.\n"
+    "Открывай прямо сейчас — он уже ждёт ✨"
+)
 _OPEN_BUTTON = "🎁 Открыть подарок"
 
 # Человек нажал «Забрать подарок» и подарка не получит. Каждый отказ говорит
@@ -131,9 +138,15 @@ async def redeem_pending_gift(
         return None
 
     keyboard = open_gift_keyboard(outcome.gift.product_code)
+    if keyboard is None:
+        text = _GIFT_TEXT_NO_ENTRY
+    elif outcome.stars > 0:
+        text = _GIFT_TEXT.format(label=outcome.label)
+    else:
+        text = _GIFT_TEXT_FREE.format(label=outcome.label)
     await send_with_effect(
         message.answer,
-        _GIFT_TEXT.format(label=outcome.label) if keyboard else _GIFT_TEXT_NO_ENTRY,
+        text,
         effect=EFFECT_CELEBRATION,
         parse_mode="HTML",
         reply_markup=keyboard,

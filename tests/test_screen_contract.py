@@ -50,10 +50,10 @@ def _incoming(bot: Any) -> Message:
     return message.as_(bot)
 
 
-def _tap(bot: Any) -> Message:
-    """Нажатие кнопки на самом экране: апдейт приходит с сообщения бота."""
+def _tap(bot: Any, message_id: int = 1001) -> Message:
+    """Нажатие кнопки на сообщении бота: на экране, если `message_id` совпал с ним."""
     message = Message(
-        message_id=1001,
+        message_id=message_id,
         date=datetime.now(UTC),
         chat=Chat(id=CHAT_ID, type="private"),
         from_user=TgUser(id=BOT_ID, is_bot=True, first_name="Astrid"),
@@ -167,7 +167,7 @@ async def test_unreachable_screen_is_recreated() -> None:
             new=AsyncMock(side_effect=_bad_request("Bad Request: message to edit not found")),
         ),
     ):
-        message_id = await show_screen(_tap(bot), "Выбери расклад", scope=SCOPE)
+        message_id = await show_screen(_tap(bot, 77), "Выбери расклад", scope=SCOPE)
 
     assert bot.session.api_methods() == ["sendMessage"]
     assert message_id != 77
@@ -334,3 +334,23 @@ async def test_tap_on_the_screen_keeps_it_in_place() -> None:
 
     assert bot.session.api_methods() == ["editMessageText"]
     assert message_id == 1001
+
+
+@pytest.mark.asyncio
+async def test_tap_on_another_bot_message_moves_the_screen_down() -> None:
+    """Кнопка на чужом сообщении бота — экран переезжает вниз, а не правится наверху.
+
+    Регрессия: «Открыть подарок» стоит на карточке подарка, а не на экране
+    таро. Экран таро, оставшийся выше в чате, правился на месте — под карточкой
+    ничего не появлялось, и человек решал, что кнопка не работает.
+    """
+    bot = build_bot()
+    # Экран таро — сообщение 77, кнопка нажата на карточке 1001.
+    store = FakeScreenStore(Screen(77, ScreenKind.TEXT))
+
+    with _with_store(store):
+        message_id = await show_screen(_tap(bot), "О чём спросишь карты?", scope=SCOPE)
+
+    assert bot.session.api_methods() == ["deleteMessage", "sendMessage"]
+    assert message_id != 77
+    assert store.screen == Screen(message_id, ScreenKind.TEXT)

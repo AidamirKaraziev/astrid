@@ -75,11 +75,18 @@ def _message_of(event: Event_) -> Message | None:
     return message if isinstance(message, Message) else None
 
 
-def _is_human_message(event: Event_) -> bool:
-    """Апдейт пришёл от человека, а не с кнопки на сообщении бота."""
-    if not isinstance(event, Message):
+def _is_tap_on(event: Event_, screen: Screen) -> bool:
+    """Апдейт — нажатие кнопки на самом экране, а не на другом сообщении бота.
+
+    Кнопка может стоять и на чужом сообщении — на карточке подарка, на
+    результате расклада, на экране соседнего раздела. Тогда человек смотрит
+    туда, а не на экран, и править экран на месте нельзя: он мог остаться далеко
+    выше, и правка пройдёт незамеченной.
+    """
+    message = _message_of(event)
+    if message is None or message.from_user is None or not message.from_user.is_bot:
         return False
-    return event.from_user is not None and not event.from_user.is_bot
+    return message.message_id == screen.message_id
 
 
 def _is_not_modified(exc: TelegramBadRequest) -> bool:
@@ -110,10 +117,11 @@ async def _screen_to_edit(
     """Экран, который можно переписать на месте. None — нужен новый, внизу чата.
 
     Правка на месте верна ровно тогда, когда человек смотрит на сам экран, то
-    есть пришёл с кнопки на нём. Если он написал текстом или нажал
-    reply-кнопку, его сообщение уже ниже экрана — а между ними мог оказаться
-    инвойс или карты. Экран уехал бы наверх, и человек решил бы, что раздел
-    не работает. Поэтому переносим экран вниз, к последнему сообщению.
+    есть пришёл с кнопки на нём. Если он написал текстом, нажал reply-кнопку
+    или кнопку на другом сообщении бота, экран уже не перед глазами — а между
+    ним и последним сообщением мог оказаться инвойс или карты. Экран уехал бы
+    наверх, и человек решил бы, что раздел не работает. Поэтому переносим
+    экран вниз, к последнему сообщению.
 
     `keep_position` отменяет перенос: несколько подряд идущих кадров одного и
     того же экрана (анимация колеса) приходят с одним апдейтом человека, и
@@ -122,7 +130,7 @@ async def _screen_to_edit(
     screen = await get_screen(chat_id, scope)
     if screen is None:
         return None
-    if keep_position or not _is_human_message(event):
+    if keep_position or _is_tap_on(event, screen):
         return screen
     await close_screen(event, scope)
     return None
