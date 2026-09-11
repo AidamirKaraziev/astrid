@@ -341,6 +341,7 @@ SECTIONS: tuple[tuple[str, str, str], ...] = (
     ("settings", "Настройки", "Настройки"),
     ("broadcasts", "Рассылки", "Рассылки"),
     ("metrics", "Метрики", "Метрики"),
+    ("stars", "Звёзды", "Звёзды"),
 )
 
 _TITLES = {slug: title for slug, _, title in SECTIONS}

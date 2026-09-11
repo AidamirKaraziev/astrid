@@ -36,6 +36,7 @@ from astra.telegram.button_texts import (
 )
 from astra.telegram.keyboards import gender_keyboard, main_menu_keyboard, skip_keyboard
 from astra.telegram.keyboards_people import person_pick_keyboard
+from astra.telegram.screen import alert, toast
 from astra.telegram.progress import (
     NatalStage,
     current_progress_message_id,
@@ -252,13 +253,14 @@ async def cb_natal_from_profile(
     Пользователя берём по `callback.from_user`: у сообщения с кнопкой автор —
     бот, и `_require_user` искал бы в базе его.
     """
-    await callback.answer()
     if callback.message is None or callback.from_user is None:
+        await toast(callback)
         return
     user = await users_crud.get_user_by_telegram_id(session, callback.from_user.id)
     if user is None or not user.onboarding_completed or user.profile is None:
-        await callback.message.answer("Сначала давай познакомимся — жми /start ✨")
+        await alert(callback, "Сначала давай познакомимся — жми /start ✨")
         return
+    await toast(callback)
     await state.clear()
     profiles = await compatibility_crud.list_natal_profiles(session, user.id)
     await callback.message.answer(
@@ -306,19 +308,21 @@ async def cb_natal_subject_pick(
     state: FSMContext,
     session: AsyncSession,
 ) -> None:
-    await callback.answer()
     if callback.message is None or callback.from_user is None or callback.data is None:
+        await toast(callback)
         return
     user = await users_crud.get_user_by_telegram_id(session, callback.from_user.id)
     if user is None:
+        await toast(callback)
         return
     profile = await compatibility_crud.get_natal_profile_by_id(
         session,
         UUID(callback.data.removeprefix(CB_NATAL_SUBJECT_PICK_PREFIX)),
     )
     if profile is None or profile.owner_user_id != user.id:
-        await callback.message.answer("Профиль не найден.")
+        await alert(callback, "Профиль не найден")
         return
+    await toast(callback)
 
     await state.update_data(**{_SUBJECT_PROFILE_KEY: str(profile.id)})
     log.info(Event.NATAL_PROFILE_PICKED, profile_id=str(profile.id))

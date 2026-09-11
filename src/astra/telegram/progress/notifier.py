@@ -1,4 +1,12 @@
-"""Уведомления прогресса: delete → typing → send → save message_id."""
+"""Уведомления прогресса: одно сообщение на задачу, стадии переписывают его.
+
+Раньше каждая стадия удаляла предыдущее сообщение и слала новое. Человек видел
+мигание и получал рывок чата наверх на каждом шаге — а стадий у совместимости
+и натала полдесятка. Теперь висит одно сообщение, и текст в нём меняется.
+
+Новое сообщение заводится только когда старое недоступно: человек его удалил,
+прошли 48 часов или редактирование не прошло по другой причине.
+"""
 
 from __future__ import annotations
 
@@ -9,6 +17,7 @@ from astra.core.config import Settings
 from astra.core.observability import Event, get_logger
 from astra.telegram.progress.api import (
     delete_message,
+    edit_html_message,
     send_chat_action_typing,
     send_html_message,
 )
@@ -43,10 +52,13 @@ async def advance_progress(
     with_typing: bool = True,
     settings: Settings | None = None,
 ) -> int | None:
-    """Удалить предыдущее progress-сообщение и отправить новое."""
+    """Показать стадию: переписать висящее сообщение, а если его нет — отправить новое."""
     previous_id = await get_progress_message_id(user_id, job_key)
     if previous_id is not None:
-        await delete_message(chat_id, previous_id, settings=settings)
+        if await edit_html_message(chat_id, previous_id, text, settings=settings):
+            return previous_id
+        # Сообщение недоступно — забываем его и заводим новое.
+        await clear_progress_message_id(user_id, job_key)
 
     if with_typing:
         await send_chat_action_typing(chat_id, settings=settings)

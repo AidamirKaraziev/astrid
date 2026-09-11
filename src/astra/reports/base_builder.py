@@ -49,13 +49,20 @@ from astra.reports.types import AspectData
 class BasePdfBuilder:
     outline_root_title = "Astra"
 
-    def __init__(self, output_path: str, *, bot_username: str | None = None) -> None:
+    def __init__(
+        self,
+        output_path: str,
+        *,
+        bot_username: str | None = None,
+        referral_code: str | None = None,
+    ) -> None:
         self.c = canvas.Canvas(output_path, pagesize=(W, H))
         self.page_num = 0
         self.total_pages = 0
         self._outline_root = False
         self._y = 0.0
         self._bot_username = bot_username
+        self._referral_code = referral_code
 
     def _footer_right_text(self) -> str:
         return ""
@@ -397,7 +404,7 @@ class BasePdfBuilder:
         self.c.setFont(FONT_BOLD, TYPE["body"])
         self.c.drawCentredString(cx, bottom + 17, text)
 
-        url = resolve_telegram_bot_url(self._bot_username)
+        url = resolve_telegram_bot_url(self._bot_username, self._referral_code)
         self.c.linkURL(
             url,
             (btn_x, bottom, btn_x + btn_w, bottom + btn_h),

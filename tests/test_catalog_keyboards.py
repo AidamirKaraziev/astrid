@@ -15,7 +15,7 @@ from astra.telegram.button_texts import (
     PAID_PRODUCT_BUTTONS,
     TAROT_PRODUCT_BUTTONS,
 )
-from astra.telegram.keyboards import main_menu_keyboard, tarot_keyboard
+from astra.telegram.keyboards import main_menu_keyboard, tarot_spreads_keyboard
 
 
 def _reply_texts(keyboard) -> list[str]:
@@ -47,8 +47,9 @@ def test_main_menu_includes_reply_paid_products() -> None:
     assert BTN_ASK_STARS not in texts
 
 
-def test_tarot_submenu_full_width_rows() -> None:
-    rows = [[btn.text for btn in row] for row in tarot_keyboard().keyboard]
+def test_tarot_spreads_screen_full_width_rows() -> None:
+    """Расклады живут на inline-экране раздела, а не на reply-клавиатуре."""
+    rows = [[btn.text for btn in row] for row in tarot_spreads_keyboard().inline_keyboard]
     assert rows == [
         [TAROT_PRODUCT_BUTTONS[0]],
         [TAROT_PRODUCT_BUTTONS[1]],

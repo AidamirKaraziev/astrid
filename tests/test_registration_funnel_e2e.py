@@ -14,7 +14,7 @@
 from __future__ import annotations
 
 import re
-from datetime import date
+from datetime import date, timedelta
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -24,10 +24,12 @@ from sqlalchemy.orm import selectinload
 from conftest import new_test_telegram_id
 from fake_telegram import BotHarness, assert_said, build_bot, build_test_dispatcher
 
+from astra.core.config import get_settings
 from astra.telegram.button_texts import BTN_GENDER_FEMALE, BTN_NATAL, BTN_PROFILE
 from astra.telegram.handlers.natal import CB_NATAL_SUBJECT_SELF
 from astra.telegram.handlers.places import NEARBY_CITY_KM
 from astra.users.gender import GENDER_FEMALE
+from astra.wallet import crud as wallet_crud
 
 pytestmark = pytest.mark.usefixtures("purge_test_users")
 
@@ -364,14 +366,50 @@ async def test_start_with_referral_code_registers_and_links(
     assert referral.referrer_id == inviter_uuid
     assert referral.status == ReferralStatus.PENDING
 
-    # Приглашённый доходит до конца — только теперь бонусы.
+    # Приглашённый доходит до конца онбординга: ему — приветственные звёзды,
+    # пригласившему пока ничего. Награда за голову окупала бы пустой аккаунт
+    # одним заходом, поэтому она ждёт возвращения.
     await bot_harness.send(BEGIN_BUTTON, telegram_id=invitee_id)
     await bot_harness.send(BTN_GENDER_FEMALE, telegram_id=invitee_id)
 
     referral = await referral_row()
     assert referral is not None
-    assert referral.status == ReferralStatus.REWARDED, "бонус за друга не начислен"
+    assert referral.status == ReferralStatus.PENDING, "награда не должна капать за регистрацию"
+    assert await wallet_crud.get_balance(db_session, inviter_uuid) == 0
+    assert await wallet_crud.get_balance(db_session, invitee_uuid) == (
+        get_settings().referral_welcome_stars
+    )
+
+    # Новичок возвращается на следующий день — вот теперь приглашение состоялось.
+    db_session.expire_all()
+    invitee = await load_user(db_session, invitee_id)
+    invitee.last_active_date = date.today() - timedelta(days=1)
+    await db_session.commit()
+    await _forget_activity_cache(invitee)
+
+    await bot_harness.send("/start", telegram_id=invitee_id)
+
+    referral = await referral_row()
+    assert referral is not None
+    assert referral.status == ReferralStatus.REWARDED, "награда за возвращение не начислена"
+    assert await wallet_crud.get_balance(db_session, inviter_uuid) == (
+        get_settings().referral_reward_stars
+    )
     assert await referrals_crud.count_referrals(db_session, inviter_uuid) == 1
+
+
+async def _forget_activity_cache(user) -> None:
+    """Снять redis-отметку «сегодня уже активен»: иначе возврат не заметят."""
+    from redis.asyncio import Redis
+
+    from astra.usage.activity import _cache_key, dashboard_today
+    from astra.users.local_time import local_today
+
+    client = Redis.from_url(get_settings().redis_url, decode_responses=True)
+    try:
+        await client.delete(_cache_key(user.id, dashboard_today(), local_today(user)))
+    finally:
+        await client.aclose()
 
 
 async def test_repeated_start_before_onboarding_does_not_duplicate_user(

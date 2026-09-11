@@ -258,7 +258,13 @@ async def generate_natal_report_pdf(
         out_path = pdf_path_for_natal_report(settings, report)
         out_path.parent.mkdir(parents=True, exist_ok=True)
         register_natal_fonts()
-        generate_natal_pdf(str(out_path), report_data)
+        # Реферальный код владельца в CTA: PDF пересылают, и переход по
+        # чужому разбору должен засчитываться тому, кто им поделился.
+        generate_natal_pdf(
+            str(out_path),
+            report_data,
+            referral_code=await _owner_referral_code(session, report.user_id),
+        )
         await natal_crud.mark_natal_ready(session, report, pdf_path=str(out_path))
         return report
     except Exception as exc:
@@ -351,3 +357,16 @@ async def request_natal_report(
 
 async def enqueue_natal_report(report_id: uuid.UUID) -> None:
     await enqueue_natal_pipeline(report_id)
+
+
+async def _owner_referral_code(session: AsyncSession, user_id) -> str | None:
+    """Код владельца разбора для CTA внутри PDF; None — код ещё не выдан."""
+    from astra.referrals import crud as referrals_crud
+
+    try:
+        code = await referrals_crud.get_or_create_referral_code(session, user_id)
+        return str(code.code)
+    except Exception:
+        # PDF важнее ссылки в нём: без кода кнопка просто ведёт в бота.
+        log.warning("natal.referral_code_missing", user_id=str(user_id))
+        return None

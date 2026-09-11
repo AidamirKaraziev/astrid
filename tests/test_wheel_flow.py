@@ -16,6 +16,7 @@ from astra.payments.service import (
     parse_wheel_spin_invoice_payload,
     wheel_spin_invoice_payload,
 )
+from astra.services.wallet_service import Charge
 from astra.telegram.handlers.tarot_spreads import spread_question
 from astra.telegram.handlers.wheel import (
     cb_activate_prize,
@@ -23,7 +24,12 @@ from astra.telegram.handlers.wheel import (
     cb_spin_paid,
     wheel_spin_paid,
 )
-from astra.telegram.wheel_animation import build_frames, frame_offsets, render_frame
+from astra.telegram.wheel_animation import (
+    build_frames,
+    frame_offsets,
+    play_spin_animation,
+    render_frame,
+)
 from astra.wheel.enums import SpinType
 
 _WHEEL = "astra.telegram.handlers.wheel"
@@ -65,6 +71,18 @@ def _win(user_id, *, code: str = "tarot_wish", discount: int = 100, **kwargs) ->
     )
 
 
+def _empty_wallet_charge():
+    """Кошелёк по умолчанию пуст: вся цена уходит в инвойс, как было до него."""
+
+    async def plan(session, user_id, price, **kwargs):
+        return Charge(
+            price,
+            from_wallet=0,
+            to_invoice=0 if price.is_free else price.final_amount,
+        )
+
+    return plan
+
 def _bot_message() -> MagicMock:
     """Мок Message со спекой: хендлеры колеса проверяют isinstance(..., Message)."""
     message = MagicMock(spec=Message)
@@ -90,9 +108,22 @@ def _wheel_mocks(**overrides) -> dict:
         "perform_spin": AsyncMock(),
         "play_spin_animation": AsyncMock(),
         "get_wheel_spin_price": AsyncMock(return_value=ProductPriceInfo("XTR", 5)),
+        # Раздел живёт в одном редактируемом экране: хаб, вращение, приз.
+        "show_screen": AsyncMock(return_value=888),
+        "close_screen": AsyncMock(),
+        # Кошелёк: пустой баланс, вся цена уходит в инвойс.
+        "plan_charge": AsyncMock(side_effect=_empty_wallet_charge()),
+        "settle_charge": AsyncMock(return_value=0),
+        "refund_to_wallet": AsyncMock(return_value=0),
     }
     defaults.update(overrides)
     return defaults
+
+
+def _wheel_screen_text(mocks: dict) -> str:
+    call = mocks["show_screen"].call_args
+    assert call is not None, "экран колеса не обновлялся"
+    return str(call.args[1])
 
 
 async def _run_wheel(handler, mocks: dict, *args) -> None:
@@ -133,6 +164,31 @@ class TestAnimation:
             frames = build_frames(labels, winner)
             assert all(a != b for a, b in zip(frames, frames[1:], strict=False))
 
+    async def test_animation_spins_inside_the_screen(self) -> None:
+        """Лента крутится в экране раздела: отдельного сообщения не появляется.
+
+        Раньше анимация слала своё сообщение, и последний кадр «Колесо
+        крутится…» навсегда оставался в чате рядом с карточкой приза.
+        """
+        message = _bot_message()
+        screen = AsyncMock(return_value=888)
+
+        with (
+            patch("astra.telegram.wheel_animation.show_screen", screen),
+            patch("astra.telegram.wheel_animation.asyncio.sleep", AsyncMock()),
+        ):
+            await play_spin_animation(message, ["🌟 A", "🃏 B", "💕 C"], 1, scope="wheel")
+
+        message.answer.assert_not_called()
+        assert screen.await_count == len(build_frames(["🌟 A", "🃏 B", "💕 C"], 1))
+        assert all(c.kwargs["scope"] == "wheel" for c in screen.call_args_list)
+        assert "💕 C" in str(screen.call_args_list[-1].args[1])  # финал на победителе
+        # Апдейт у всех кадров один; позицию выбирает только первый, иначе
+        # экран прыгал бы вниз чата на каждом кадре ленты.
+        positions = [c.kwargs["keep_position"] for c in screen.call_args_list]
+        assert positions[0] is False
+        assert all(positions[1:])
+
 
 class TestFreeSpin:
     async def test_free_spin_gives_prize_and_animates(self) -> None:
@@ -152,7 +208,9 @@ class TestFreeSpin:
         assert mocks["perform_spin"].await_args.args[2] is SpinType.FREE
         session.commit.assert_awaited_once()
         mocks["play_spin_animation"].assert_awaited_once()
-        card = callback.message.answer.call_args.args[0]
+        # Карточка приза — финальный кадр того же экрана, а не новое сообщение.
+        callback.message.answer.assert_not_called()
+        card = _wheel_screen_text(mocks)
         assert "Загадай желание" in card and "бесплатно" in card
 
     async def test_second_free_spin_same_day_refused(self) -> None:
@@ -162,7 +220,9 @@ class TestFreeSpin:
         await _run_wheel(cb_spin_free, mocks, callback, AsyncMock())
 
         mocks["perform_spin"].assert_not_awaited()
-        assert "завтра" in callback.message.answer.call_args.args[0]
+        # Отказ живёт в плашке сверху, а не сообщением в чате.
+        callback.message.answer.assert_not_called()
+        assert "завтра" in callback.answer.call_args.args[0]
 
     async def test_double_tap_race_is_caught(self) -> None:
         session = AsyncMock()
@@ -175,12 +235,25 @@ class TestFreeSpin:
         assert "завтра" in callback.message.answer.call_args.args[0]
 
     async def test_empty_pool_reports_pause(self) -> None:
+        """Пул опустел между проверкой и вращением: callback уже отвечен, остаётся сообщение."""
         callback = _callback()
         mocks = _wheel_mocks(perform_spin=AsyncMock(return_value=None))
 
         await _run_wheel(cb_spin_free, mocks, callback, AsyncMock())
 
         assert "паузе" in callback.message.answer.call_args.args[0]
+
+    async def test_known_empty_pool_reports_pause_in_alert(self) -> None:
+        """Призов нет с самого начала — колесо не крутится, чат не засоряется."""
+        callback = _callback()
+        mocks = _wheel_mocks(**{"wheel_crud.list_active_prizes": AsyncMock(return_value=[])})
+
+        await _run_wheel(cb_spin_free, mocks, callback, AsyncMock())
+
+        mocks["perform_spin"].assert_not_awaited()
+        callback.message.answer.assert_not_called()
+        assert "паузе" in callback.answer.call_args.args[0]
+        assert callback.answer.call_args.kwargs["show_alert"] is True
 
 
 class TestPaidSpin:
@@ -306,12 +379,17 @@ class TestPrizeActivation:
             **{"users_crud.get_user_by_telegram_id": AsyncMock(side_effect=lookup)},
             **{"wheel_crud.get_win": AsyncMock(return_value=win)},
         )
-        # start_spread_with_prize не мокаем — проверяем реальный путь до таро
-        await _run_wheel(cb_activate_prize, wheel_mocks, callback, AsyncMock(), AsyncMock())
+        # start_spread_with_prize не мокаем — проверяем реальный путь до таро.
+        # Экран таро подменяем: настоящий пошёл бы в Bot API мимо мока сообщения.
+        screen = AsyncMock(return_value=777)
+        with patch(f"{_TAROT}.show_screen", screen):
+            await _run_wheel(cb_activate_prize, wheel_mocks, callback, AsyncMock(), AsyncMock())
 
+        wheel_mocks["close_screen"].assert_awaited_once()  # экран колеса погас
+        shown = [str(c.args[1]) for c in screen.call_args_list]
         answers = [str(c.args[0]) for c in callback.message.answer.call_args_list]
-        assert not any("регистрацию" in text for text in answers), answers
-        assert any("Загадай желание" in text for text in answers), answers
+        assert not any("регистрацию" in text for text in answers + shown), answers + shown
+        assert any("Загадай желание" in text for text in shown), shown
 
     async def test_burned_prize_is_refused(self) -> None:
         user = _user()
@@ -327,7 +405,9 @@ class TestPrizeActivation:
         await _run_wheel(cb_activate_prize, mocks, callback, AsyncMock(), AsyncMock())
 
         mocks["start_spread_with_prize"].assert_not_awaited()
-        assert "сгорел" in callback.message.answer.call_args.args[0]
+        callback.message.answer.assert_not_called()
+        assert "сгорел" in callback.answer.call_args.args[0]
+        assert callback.answer.call_args.kwargs["show_alert"] is True
 
     async def test_foreign_prize_is_refused(self) -> None:
         callback = _callback()
@@ -380,6 +460,13 @@ class TestPrizeAppliedToSpread:
             "wheel_crud.get_pending_win_for_reading": AsyncMock(return_value=None),
             "reserve_win_for_reading": AsyncMock(),
             "mark_win_activated": AsyncMock(),
+            # Раздел таро живёт в одном редактируемом экране.
+            "show_screen": AsyncMock(return_value=777),
+            "close_screen": AsyncMock(),
+            "react": AsyncMock(),
+            "plan_charge": AsyncMock(side_effect=_empty_wallet_charge()),
+            "settle_charge": AsyncMock(return_value=0),
+            "cancel_charge": AsyncMock(return_value=0),
         }
         defaults.update(overrides)
         return defaults
@@ -443,7 +530,8 @@ class TestPrizeAppliedToSpread:
         await self._run(mocks, message, state, AsyncMock())
 
         assert message.answer_invoice.call_args.kwargs["prices"][0].amount == 50
-        warned = " ".join(str(c.args[0]) for c in message.answer.call_args_list)
+        # Предупреждение о сгоревшем призе — в экране над инвойсом, не сообщением.
+        warned = " ".join(str(c.args[1]) for c in mocks["show_screen"].call_args_list)
         assert "сгорел" in warned
 
     async def test_prize_for_other_spread_is_ignored(self) -> None:

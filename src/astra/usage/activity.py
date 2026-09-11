@@ -79,12 +79,26 @@ async def mark_active(
     if not fresh:
         return False
 
+    # Запоминаем до начисления: register_daily_activity перепишет поле, а нам
+    # нужно знать, был ли человек в боте раньше сегодняшнего дня.
+    came_before = user.last_active_date is not None and user.last_active_date != day_local
+
     await session.execute(
         insert(ActivityDay)
         .values(user_id=user.id, day_msk=day_msk, day_local=day_local)
         .on_conflict_do_nothing(constraint="uq_activity_days_user_day"),
     )
     await register_daily_activity(session, user, activity_date=day_local)
+
+    if came_before:
+        # Новичок вернулся — приглашение состоялось, пригласившему капают звёзды.
+        # Ошибка здесь не должна ронять апдейт: награда не важнее ответа боту.
+        from astra.services.referral_service import reward_referrer_on_return
+
+        try:
+            await reward_referrer_on_return(session, user, settings=cfg)
+        except Exception:
+            log.warning("referral.reward_on_return_failed", user_id=str(user.id), exc_info=True)
     return True
 
 

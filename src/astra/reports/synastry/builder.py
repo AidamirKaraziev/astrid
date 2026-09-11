@@ -62,8 +62,9 @@ class SynastryPdfBuilder(BasePdfBuilder):
         report: SynastryReportData,
         *,
         bot_username: str | None = None,
+        referral_code: str | None = None,
     ) -> None:
-        super().__init__(output_path, bot_username=bot_username)
+        super().__init__(output_path, bot_username=bot_username, referral_code=referral_code)
         self._report = report
 
     def _footer_right_text(self) -> str:

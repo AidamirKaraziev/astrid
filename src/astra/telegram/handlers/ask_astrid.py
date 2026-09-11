@@ -69,6 +69,8 @@ from astra.telegram.keyboards import (
     ask_back_keyboard,
     ask_questions_keyboard,
 )
+from astra.services.wallet_service import cancel_charge, plan_charge, settle_charge
+from astra.telegram.screen import toast
 from astra.telegram.states import ProfileStates
 from astra.telegram.birth_data_gate import ensure_birth_data
 from astra.users import crud as users_crud
@@ -318,24 +320,25 @@ async def cb_ask_gate_skip(callback: CallbackQuery, state: FSMContext) -> None:
 @router.callback_query(F.data.startswith(CB_ASK_CALIB_PREFIX))
 async def cb_ask_calibration(callback: CallbackQuery, session: AsyncSession) -> None:
     """Ответ на калибрующий вопрос: создаём черновик и выставляем инвойс."""
-    await callback.answer()
     msg = callback.message
     user = await _current_user(callback, session)
     if not isinstance(msg, Message) or user is None:
+        await toast(callback)
         return
 
     payload = (callback.data or "").removeprefix(CB_ASK_CALIB_PREFIX)
     question_key, _, answer = payload.rpartition(":")
     product = get_product(question_key)
     if product is None:
-        await msg.answer(COMING_SOON_TEXT)
+        await toast(callback, COMING_SOON_TEXT)
         return
     calibration = answer == "yes"
 
     price = await get_ask_price(session, question_key)
     if price is None:
-        await msg.answer(COMING_SOON_TEXT)
+        await toast(callback, COMING_SOON_TEXT)
         return
+    await toast(callback)
 
     reading = await ask_crud.create_draft(
         session,
@@ -347,19 +350,42 @@ async def cb_ask_calibration(callback: CallbackQuery, session: AsyncSession) -> 
     await session.commit()
     log.info(Event.ASK_ANSWER_CREATED, reading_id=reading.id, user_id=user.id)
 
-    if price.is_free:
-        # discount_percent = 100 в БД: инвойс на 0 звёзд Telegram не примет,
-        # поэтому выдаём ответ сразу, без оплаты.
-        log.info(Event.ASK_ANSWER_FREE_GRANTED, reading_id=reading.id, user_id=user.id)
-        await _fulfill_reading(msg, session, reading, user, amount=0, charge_id=None)
+    payload = ask_invoice_payload(reading.id)
+    charge = await plan_charge(
+        session,
+        user.id,
+        price,
+        payload=payload,
+        description=product.invoice_title,
+    )
+
+    if charge.covered_by_wallet:
+        # Товар бесплатный или внутренний счёт закрыл всю цену: инвойс на
+        # 0 звёзд Telegram не примет, поэтому выдаём ответ сразу.
+        spent = await settle_charge(session, user.id, payload, description=product.invoice_title)
+        await session.commit()
+        log.info(
+            Event.ASK_ANSWER_FREE_GRANTED,
+            reading_id=reading.id,
+            user_id=user.id,
+            paid_from_wallet=spent,
+        )
+        await _fulfill_reading(msg, session, reading, user, amount=spent, charge_id=None)
         return
 
+    if charge.from_wallet:
+        # Иначе сумма в инвойсе выглядит взятой с потолка.
+        await msg.answer(
+            f"С твоего счёта спишу <b>{charge.from_wallet} ⭐</b>, "
+            f"доплатить — <b>{charge.to_invoice} ⭐</b>",
+            parse_mode="HTML",
+        )
     await msg.answer_invoice(
         title=product.invoice_title[:32],
         description=product.invoice_description,
-        payload=ask_invoice_payload(reading.id),
+        payload=payload,
         currency=price.currency,
-        prices=[LabeledPrice(label=product.invoice_title, amount=price.final_amount)],
+        prices=[LabeledPrice(label=product.invoice_title, amount=charge.to_invoice)],
     )
 
 
@@ -385,11 +411,15 @@ async def ask_paid(message: Message, session: AsyncSession) -> None:
         return
 
     charge_id = payment_info.telegram_payment_charge_id
+    payload = payment_info.invoice_payload
     user = await users_crud.get_user_by_telegram_id(session, message.from_user.id)
     reading = await ask_crud.get_reading(session, reading_id) if user else None
     if user is None or reading is None or reading.user_id != user.id:
         # Списали, а начислить не на что — сразу возвращаем звёзды.
         log.error(Event.PAYMENT_ORPHAN, reading_id=reading_id, charge_id=charge_id)
+        if user is not None:
+            await cancel_charge(session, user.id, payload)
+            await session.commit()
         if message.bot is not None:
             await message.bot.refund_star_payment(
                 user_id=message.from_user.id,
@@ -408,12 +438,15 @@ async def ask_paid(message: Message, session: AsyncSession) -> None:
     if payment is None:
         return  # дубль successful_payment
 
+    # Внутренняя часть цены была забронирована при показе инвойса.
+    spent = await settle_charge(session, user.id, payload)
+
     await _fulfill_reading(
         message,
         session,
         reading,
         user,
-        amount=payment_info.total_amount,
+        amount=payment_info.total_amount + spent,
         charge_id=charge_id,
     )
 
@@ -511,10 +544,10 @@ async def _send_card(
 @router.callback_query(F.data.startswith(CB_ASK_ARCHIVE_PREFIX))
 async def cb_ask_archive(callback: CallbackQuery, session: AsyncSession) -> None:
     """Бесплатная повторная выдача купленного ответа."""
-    await callback.answer()
     msg = callback.message
     user = await _current_user(callback, session)
     if not isinstance(msg, Message) or user is None:
+        await toast(callback)
         return
     question_key = (callback.data or "").removeprefix(CB_ASK_ARCHIVE_PREFIX)
     reading = await ask_crud.get_ready_reading(
@@ -524,8 +557,9 @@ async def cb_ask_archive(callback: CallbackQuery, session: AsyncSession) -> None
     )
     product = get_product(question_key)
     if reading is None or not reading.answer or product is None:
-        await msg.answer(COMING_SOON_TEXT)
+        await toast(callback, COMING_SOON_TEXT)
         return
+    await toast(callback)
 
     result = result_from_reading(reading)
     if reading.card_file_id and result is not None:

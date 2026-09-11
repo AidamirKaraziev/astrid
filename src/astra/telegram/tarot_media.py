@@ -14,6 +14,7 @@ from astra.core.observability import get_logger
 from astra.tarot.deck import TarotCard
 from astra.tarot.file_id_cache import cache_file_id, get_cached_file_id
 from astra.tarot.images import image_path
+from astra.telegram.effects import send_with_effect
 
 log = get_logger(__name__)
 
@@ -33,7 +34,13 @@ def _fallback_line(card: TarotCard) -> str:
     return f"{card.emoji} <b>{card.name_ru}</b>"
 
 
-async def send_card_photo(message: Message, card: TarotCard, caption: str) -> None:
+async def send_card_photo(
+    message: Message,
+    card: TarotCard,
+    caption: str,
+    *,
+    effect: str | None = None,
+) -> None:
     """Одна карта фото; без ассета — текстом, ритуал важнее картинки."""
     path = image_path(card.id)
     if path is None:
@@ -43,8 +50,10 @@ async def send_card_photo(message: Message, card: TarotCard, caption: str) -> No
     photo = cached_file_id or FSInputFile(path)
     # caption у фото ограничен 1024 символами — длинный текст отдельным сообщением
     fits = len(caption) <= ALBUM_CAPTION_LIMIT
-    sent = await message.answer_photo(
+    sent = await send_with_effect(
+        message.answer_photo,
         photo,
+        effect=effect,
         caption=caption if fits else None,
         parse_mode="HTML" if fits else None,
     )
@@ -54,7 +63,13 @@ async def send_card_photo(message: Message, card: TarotCard, caption: str) -> No
         await _cache_file_id(card.id, sent.photo[-1].file_id)
 
 
-async def send_cards_album(message: Message, cards: list[TarotCard], caption: str) -> None:
+async def send_cards_album(
+    message: Message,
+    cards: list[TarotCard],
+    caption: str,
+    *,
+    effect: str | None = None,
+) -> None:
     """Расклад альбомом (2–10 карт), caption на первом элементе.
 
     Если хотя бы одного ассета нет — весь расклад текстом (частичный альбом
@@ -78,7 +93,11 @@ async def send_cards_album(message: Message, cards: list[TarotCard], caption: st
                 parse_mode="HTML" if not media else None,
             ),
         )
-    sent_messages = await message.answer_media_group(media)
+    sent_messages = await send_with_effect(
+        message.answer_media_group,
+        media,
+        effect=effect,
+    )
     for card, cached_file_id, sent in zip(cards, cached_ids, sent_messages, strict=False):
         if not cached_file_id and sent.photo:
             await _cache_file_id(card.id, sent.photo[-1].file_id)

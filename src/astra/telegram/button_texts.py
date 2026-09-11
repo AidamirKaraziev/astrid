@@ -30,6 +30,13 @@ BTN_TAROT_WISH = "🌟 Загадай желание"
 BTN_TAROT_DECISION_LEGACY = "⚖️ На решение"
 BTN_TAROT_SKIP = "⏭ Пропустить"
 
+# Раздел таро живёт в одном редактируемом экране: выбор расклада и «Пропустить»
+# стали inline-кнопками. Тексты reply-кнопок выше остались — у части людей
+# клавиатура раскладов закэширована клиентом, и их нажатия надо ловить.
+CB_TAROT_SPREAD_PREFIX = "tarot:spread:"
+CB_TAROT_QUESTION_SKIP = "tarot:question:skip"
+CB_TAROT_CLOSE = "tarot:close"
+
 BTN_GENDER_MALE = "Мужчина"
 BTN_GENDER_FEMALE = "Женщина"
 GENDER_REPLY_BUTTONS = frozenset({BTN_GENDER_MALE, BTN_GENDER_FEMALE})
@@ -98,6 +105,18 @@ CB_WHEEL_ACTIVATE_PREFIX = "wheel:use:"
 CB_COMPAT_NEW_PERSON = "compat:person:new"
 CB_COMPAT_PEOPLE_ALL = "compat:person:all"
 CB_COMPAT_SELF_FIRST = "compat:person:self"
+
+# Раздел «Пригласить друга»: подарки, ссылка и счёт в одном живом экране.
+# Каждая ветка со своим сегментом: `invite:gift:` был бы префиксом и для
+# выбора товара, и для «показать подарок», и одна ветка съедала бы другую.
+CB_INVITE_HUB = "invite:hub"
+CB_INVITE_GIFT = "invite:gift"
+CB_INVITE_GIFT_PICK_PREFIX = "invite:pick:"  # + код товара
+CB_INVITE_LINK = "invite:link"
+CB_INVITE_GIFTS = "invite:mine"  # список выданных подарков
+CB_INVITE_GIFT_SHOW_PREFIX = "invite:show:"  # + код подарка
+CB_INVITE_GIFT_REVOKE_ASK_PREFIX = "invite:revoke:ask:"  # + код подарка
+CB_INVITE_GIFT_REVOKE_DO_PREFIX = "invite:revoke:do:"  # + код подарка
 
 # Служба заботы: хаб помощи, FAQ-темы и вход в релей к живому оператору
 CB_SUPPORT_HUB = "support:hub"

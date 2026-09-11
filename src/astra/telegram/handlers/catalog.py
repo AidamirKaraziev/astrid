@@ -13,11 +13,8 @@ from astra.telegram.button_texts import (
     COMING_SOON_TEXT,
     PAID_PRODUCT_BUTTONS,
 )
-from astra.telegram.keyboards import (
-    main_menu_keyboard,
-    support_contextual_keyboard,
-    tarot_keyboard,
-)
+from astra.telegram.keyboards import main_menu_keyboard, support_contextual_keyboard
+from astra.telegram.screen import toast
 
 log = get_logger(__name__)
 
@@ -34,7 +31,10 @@ async def back_to_main_menu(message: Message, state: FSMContext) -> None:
 
 @router.message(F.text == BTN_TAROT)
 async def open_tarot_menu(message: Message) -> None:
-    await message.answer("Выбери расклад ✨", reply_markup=tarot_keyboard())
+    # Раздел живёт в одном редактируемом экране: расклады — inline-кнопки на нём.
+    from astra.telegram.handlers.tarot_spreads import open_spreads_screen
+
+    await open_spreads_screen(message)
 
 
 @router.message(F.text.in_(_PAID_STUB_BUTTONS))
@@ -44,9 +44,7 @@ async def product_coming_soon(message: Message) -> None:
 
 @router.callback_query(F.data == CB_PRODUCT_ASK_STARS)
 async def cb_product_ask_stars(callback: CallbackQuery) -> None:
-    await callback.answer()
-    if callback.message:
-        await callback.message.answer(COMING_SOON_TEXT)
+    await toast(callback, COMING_SOON_TEXT)
 
 
 # Страховка: платёж с payload, который не подхватил ни один профильный хендлер

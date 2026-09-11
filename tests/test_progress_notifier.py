@@ -1,9 +1,12 @@
 from datetime import date
+from typing import Any
 from unittest.mock import AsyncMock, patch
 from uuid import uuid4
 
+import httpx
 import pytest
 
+from astra.telegram.progress.api import edit_html_message
 from astra.telegram.progress.messages import (
     compatibility_stage_text,
     prediction_stage_text,
@@ -76,7 +79,8 @@ async def test_progress_store_roundtrip() -> None:
 
 
 @pytest.mark.asyncio
-async def test_advance_progress_deletes_previous_and_saves_new() -> None:
+async def test_advance_progress_edits_existing_message() -> None:
+    """Стадия переписывает висящее сообщение: без мигания и рывка чата наверх."""
     user_id = uuid4()
     chat_id = 1001
     job_key = "prediction:2026-07-02"
@@ -87,9 +91,57 @@ async def test_advance_progress_deletes_previous_and_saves_new() -> None:
             new=AsyncMock(return_value=10),
         ),
         patch(
-            "astra.telegram.progress.notifier.delete_message",
+            "astra.telegram.progress.notifier.edit_html_message",
             new=AsyncMock(return_value=True),
-        ) as delete_mock,
+        ) as edit_mock,
+        patch(
+            "astra.telegram.progress.notifier.send_chat_action_typing",
+            new=AsyncMock(),
+        ) as typing_mock,
+        patch(
+            "astra.telegram.progress.notifier.send_html_message",
+            new=AsyncMock(return_value=11),
+        ) as send_mock,
+        patch(
+            "astra.telegram.progress.notifier.set_progress_message_id",
+            new=AsyncMock(),
+        ) as save_mock,
+    ):
+        message_id = await advance_progress(
+            chat_id,
+            user_id,
+            job_key,
+            "Тестовый прогресс ✨",
+            with_typing=True,
+        )
+
+    assert message_id == 10
+    edit_mock.assert_awaited_once_with(chat_id, 10, "Тестовый прогресс ✨", settings=None)
+    send_mock.assert_not_awaited()
+    typing_mock.assert_not_awaited()
+    save_mock.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_advance_progress_sends_new_when_edit_impossible() -> None:
+    """Человек удалил сообщение прогресса — стадия заводит новое, а не молчит."""
+    user_id = uuid4()
+    chat_id = 1001
+    job_key = "prediction:2026-07-02"
+
+    with (
+        patch(
+            "astra.telegram.progress.notifier.get_progress_message_id",
+            new=AsyncMock(return_value=10),
+        ),
+        patch(
+            "astra.telegram.progress.notifier.edit_html_message",
+            new=AsyncMock(return_value=False),
+        ),
+        patch(
+            "astra.telegram.progress.notifier.clear_progress_message_id",
+            new=AsyncMock(return_value=10),
+        ) as forget_mock,
         patch(
             "astra.telegram.progress.notifier.send_chat_action_typing",
             new=AsyncMock(),
@@ -112,14 +164,15 @@ async def test_advance_progress_deletes_previous_and_saves_new() -> None:
         )
 
     assert message_id == 11
-    delete_mock.assert_awaited_once_with(chat_id, 10, settings=None)
+    forget_mock.assert_awaited_once_with(user_id, job_key)
     typing_mock.assert_awaited_once()
     send_mock.assert_awaited_once()
     save_mock.assert_awaited_once_with(user_id, job_key, 11)
 
 
 @pytest.mark.asyncio
-async def test_advance_progress_skips_delete_when_no_previous() -> None:
+async def test_first_stage_sends_message_without_editing() -> None:
+    """Первая стадия: править нечего, шлём сообщение и запоминаем его."""
     user_id = uuid4()
     chat_id = 1001
     job_key = "prediction:2026-07-02"
@@ -130,9 +183,9 @@ async def test_advance_progress_skips_delete_when_no_previous() -> None:
             new=AsyncMock(return_value=None),
         ),
         patch(
-            "astra.telegram.progress.notifier.delete_message",
+            "astra.telegram.progress.notifier.edit_html_message",
             new=AsyncMock(),
-        ) as delete_mock,
+        ) as edit_mock,
         patch(
             "astra.telegram.progress.notifier.send_chat_action_typing",
             new=AsyncMock(),
@@ -140,15 +193,18 @@ async def test_advance_progress_skips_delete_when_no_previous() -> None:
         patch(
             "astra.telegram.progress.notifier.send_html_message",
             new=AsyncMock(return_value=5),
-        ),
+        ) as send_mock,
         patch(
             "astra.telegram.progress.notifier.set_progress_message_id",
             new=AsyncMock(),
-        ),
+        ) as save_mock,
     ):
-        await advance_progress(chat_id, user_id, job_key, "Старт ✨", with_typing=False)
+        message_id = await advance_progress(chat_id, user_id, job_key, "Старт ✨", with_typing=False)
 
-    delete_mock.assert_not_awaited()
+    assert message_id == 5
+    edit_mock.assert_not_awaited()
+    send_mock.assert_awaited_once()
+    save_mock.assert_awaited_once_with(user_id, job_key, 5)
 
 
 @pytest.mark.asyncio
@@ -216,3 +272,65 @@ async def test_clear_progress_deletes_message_and_key() -> None:
         await clear_progress(chat_id, user_id, job_key)
 
     delete_mock.assert_awaited_once_with(chat_id, 15, settings=None)
+
+
+class _FakeHttpClient:
+    """httpx.AsyncClient, который отвечает заранее заданным ответом."""
+
+    def __init__(self, response: httpx.Response | Exception) -> None:
+        self._response = response
+
+    async def __aenter__(self) -> "_FakeHttpClient":
+        return self
+
+    async def __aexit__(self, *exc: object) -> None:
+        return None
+
+    async def post(self, *args: Any, **kwargs: Any) -> httpx.Response:
+        if isinstance(self._response, Exception):
+            raise self._response
+        return self._response
+
+
+def _with_http(response: httpx.Response | Exception):
+    if isinstance(response, httpx.Response):
+        # Без привязанного запроса httpx не даёт вызвать raise_for_status.
+        response.request = httpx.Request("POST", "https://api.telegram.org/editMessageText")
+    return patch(
+        "astra.telegram.progress.api.httpx.AsyncClient",
+        lambda **kwargs: _FakeHttpClient(response),
+    )
+
+
+@pytest.mark.asyncio
+async def test_edit_reports_success() -> None:
+    with _with_http(httpx.Response(200, json={"ok": True})):
+        assert await edit_html_message(1001, 10, "Считаю аспекты ✨") is True
+
+
+@pytest.mark.asyncio
+async def test_edit_treats_not_modified_as_success() -> None:
+    """Стадия повторилась с тем же текстом — сообщение и так верное."""
+    response = httpx.Response(
+        400,
+        json={"ok": False, "description": "Bad Request: message is not modified"},
+    )
+    with _with_http(response):
+        assert await edit_html_message(1001, 10, "Считаю аспекты ✨") is True
+
+
+@pytest.mark.asyncio
+async def test_edit_reports_failure_when_message_gone() -> None:
+    """Человек удалил сообщение — зовущий должен отправить новое."""
+    response = httpx.Response(
+        400,
+        json={"ok": False, "description": "Bad Request: message to edit not found"},
+    )
+    with _with_http(response):
+        assert await edit_html_message(1001, 10, "Считаю аспекты ✨") is False
+
+
+@pytest.mark.asyncio
+async def test_edit_survives_network_error() -> None:
+    with _with_http(httpx.ConnectError("no route")):
+        assert await edit_html_message(1001, 10, "Считаю аспекты ✨") is False

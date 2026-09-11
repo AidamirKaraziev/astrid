@@ -14,6 +14,7 @@ from aiogram.fsm.context import FSMContext
 from aiogram.types import Message, ReplyKeyboardRemove
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from astra.services.gift_delivery import redeem_pending_gift
 from astra.services.greeting_service import run_greeting_phase
 from astra.services.onboarding_service import parse_registration_fsm, run_registration_phase
 from astra.telegram.keyboards import gender_keyboard
@@ -62,3 +63,8 @@ async def complete_short_onboarding(
     await run_registration_phase(session, user, reg)
     await session.commit()
     await run_greeting_phase(message, state, user)
+    # Подарок вручаем последним, уже после приветствия с меню: на нём кнопка
+    # «Открыть подарок», и она должна остаться под рукой, а не уехать вверх.
+    # `fsm_data` прочитан выше — приветствие успело очистить состояние.
+    await redeem_pending_gift(message, session, user, fsm_data.get("gift_code"))
+    await session.commit()  # звёзды подарка на счету — это деньги, не украшение

@@ -9,15 +9,13 @@ from aiogram.types import ReplyKeyboardMarkup, ReplyKeyboardRemove
 
 from astra.telegram.button_texts import (
     BTN_ASK_ASTRID,
-    BTN_BACK_MENU,
     BTN_INVITE,
     BTN_PROFILE,
     BTN_WHEEL,
     BTN_TAROT,
     PAID_PRODUCT_BUTTONS,
-    TAROT_PRODUCT_BUTTONS,
 )
-from astra.telegram.keyboards import main_menu_keyboard, tarot_keyboard
+from astra.telegram.keyboards import main_menu_keyboard
 from astra.telegram.states import (
     AiChatStates,
     CompatibilityStates,
@@ -57,7 +55,8 @@ _KEYBOARD_SUPPRESSED_FSM_STATES: frozenset[str] = frozenset(
         NatalStates.new_birth_date.state,
         NatalStates.new_birth_time.state,
         NatalStates.new_birth_place_query.state,
-        # Ввод вопроса к раскладу: своя клавиатура (Назад/Пропустить)
+        # Ввод вопроса к раскладу: «Пропустить» и «К раскладам» живут на
+        # inline-экране, а главное меню под рукой звало бы бросить расклад.
         TarotStates.waiting_question.state,
         # Служба заботы: пишем обращение, держим свою «Назад»-клавиатуру.
         SupportStates.writing.state,
@@ -81,8 +80,13 @@ _PAID_STUB_BUTTONS: frozenset[str] = frozenset(PAID_PRODUCT_BUTTONS) - {BTN_TARO
 
 
 class KeyboardZone(StrEnum):
+    """Reply-клавиатура у бота одна — главное меню.
+
+    Своя клавиатура была у раздела таро; раздел переехал в inline-экран, и
+    зона исчезла вместе с ней. Если появится новая — добавлять сюда.
+    """
+
     MAIN = "main"
-    TAROT = "tarot"
 
 
 def is_fsm_keyboard_suppressed(fsm_state: str | None) -> bool:
@@ -99,15 +103,9 @@ def resolve_keyboard_zone(
     if skip_auto_keyboard or is_fsm_keyboard_suppressed(fsm_state):
         return None
 
-    if incoming_text == BTN_BACK_MENU:
-        return KeyboardZone.MAIN
-    if incoming_text == BTN_TAROT:
-        return KeyboardZone.TAROT
-    if incoming_text in TAROT_PRODUCT_BUTTONS:
-        return KeyboardZone.TAROT
-    if incoming_text in _PAID_STUB_BUTTONS:
-        return KeyboardZone.MAIN
-
+    # Раздел таро больше не ставит свою reply-клавиатуру: и вход в раздел, и
+    # нажатия закэшированных кнопок раскладов возвращают главное меню — так
+    # устаревшая клавиатура у человека сама лечится на первом же ответе бота.
     return KeyboardZone.MAIN
 
 
@@ -116,8 +114,6 @@ def reply_keyboard_for_zone(zone: KeyboardZone | None) -> ReplyKeyboardMarkup | 
         return None
     if zone is KeyboardZone.MAIN:
         return main_menu_keyboard()
-    if zone is KeyboardZone.TAROT:
-        return tarot_keyboard()
     return None
 
 

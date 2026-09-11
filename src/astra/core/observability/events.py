@@ -25,6 +25,13 @@ class Event(StrEnum):
     TELEGRAM_BOT_BLOCKED = "telegram.bot_blocked"
     TELEGRAM_BOT_UNBLOCKED = "telegram.bot_unblocked"
     TELEGRAM_PROGRESS_NOTIFY_FAILED = "telegram.progress.notify_failed"
+    # Живой экран раздела: редактирование не прошло и экран пересоздан. Норма
+    # после 48 часов и при ручном удалении, но всплеск означает, что реестр
+    # message_id разъехался с чатом.
+    TELEGRAM_SCREEN_RECREATED = "telegram.screen.recreated"
+    # Telegram не принял эффект сообщения: отправили то же самое без него.
+    # Официального списка id у эффектов нет, поэтому событие ждём и не паникуем.
+    TELEGRAM_EFFECT_REJECTED = "telegram.effect.rejected"
     # Сообщение не подошло ни одному сценарию: тупик, который человек молча
     # переживает, а мы — нет. По этому событию видно, где люди теряются.
     TELEGRAM_MESSAGE_UNHANDLED = "telegram.message.unhandled"
@@ -156,9 +163,26 @@ class Event(StrEnum):
     GEONAMES_IMPORT_DONE = "geonames.import_done"
     GEONAMES_IMPORT_FAILED = "geonames.import_failed"
 
+    # Подарки
+    GIFT_ISSUED = "gift.issued"
+    GIFT_REDEEMED = "gift.redeemed"
+    GIFT_REFUSED = "gift.refused"
+    # Даритель забрал невостребованную ссылку обратно.
+    GIFT_REVOKED = "gift.revoked"
+
+    # Внутренний кошелёк в звёздах
+    WALLET_CREDITED = "wallet.credited"
+    WALLET_HOLD_CREATED = "wallet.hold_created"
+    WALLET_HOLD_RELEASED = "wallet.hold_released"
+    # Бронь протухла до оплаты: человек вернулся к старому инвойсу через час.
+    WALLET_HOLD_EXPIRED = "wallet.hold_expired"
+    WALLET_SPENT = "wallet.spent"
+    WALLET_REFUNDED = "wallet.refunded"
+
     # Redis
     REDIS_PROGRESS_CLEARED = "redis.progress_cleared"
     REDIS_PREDICTION_PENDING_CLEARED = "redis.prediction_pending_cleared"
+    REDIS_SCREEN_CLEARED = "redis.screen_cleared"
 
     # Scheduler
     SCHEDULER_TICK = "scheduler.tick"

@@ -13,7 +13,7 @@ from astra.telegram.keyboard_policy import (
     reply_keyboard_to_api_payload,
     resolve_keyboard_zone,
 )
-from astra.telegram.keyboards import main_menu_keyboard, tarot_keyboard
+from astra.telegram.keyboards import main_menu_keyboard
 from astra.telegram.states import BirthDataStates, OnboardingStates, ProfileStates
 
 
@@ -25,10 +25,15 @@ def test_main_menu_buttons_resolve_to_main_zone() -> None:
     assert zone is KeyboardZone.MAIN
 
 
-def test_tarot_navigation_zones() -> None:
-    assert resolve_keyboard_zone(incoming_text=BTN_TAROT, fsm_state=None) is KeyboardZone.TAROT
+def test_tarot_navigation_returns_main_menu() -> None:
+    """Раздел таро живёт в inline-экране: своей reply-клавиатуры у него больше нет.
+
+    Нажатие закэшированной кнопки расклада тоже возвращает главное меню — так
+    устаревшая клавиатура лечится сама, без похода в «Назад».
+    """
+    assert resolve_keyboard_zone(incoming_text=BTN_TAROT, fsm_state=None) is KeyboardZone.MAIN
     assert resolve_keyboard_zone(incoming_text=BTN_BACK_MENU, fsm_state=None) is KeyboardZone.MAIN
-    assert resolve_keyboard_zone(incoming_text=BTN_TAROT_THREE, fsm_state=None) is KeyboardZone.TAROT
+    assert resolve_keyboard_zone(incoming_text=BTN_TAROT_THREE, fsm_state=None) is KeyboardZone.MAIN
 
 
 def test_paid_stub_keeps_main_zone() -> None:
@@ -91,7 +96,3 @@ def test_reply_keyboard_for_zone_main() -> None:
     assert keyboard is not None
     assert keyboard.keyboard[0][0].text == BTN_WHEEL
 
-
-def test_reply_keyboard_for_zone_tarot() -> None:
-    keyboard = reply_keyboard_for_zone(KeyboardZone.TAROT)
-    assert keyboard == tarot_keyboard()

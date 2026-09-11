@@ -35,7 +35,8 @@ from astra.telegram.handlers.catalog import back_to_main_menu, open_tarot_menu
 from astra.telegram.handlers.support import open_support_hub
 from astra.telegram.handlers.compatibility import start_compatibility
 from astra.telegram.handlers.day_card import LEGACY_BUTTONS, legacy_button
-from astra.telegram.handlers.menu import invite_friend, show_profile
+from astra.telegram.handlers.invites import open_invites
+from astra.telegram.handlers.menu import show_profile
 from astra.telegram.handlers.natal import start_natal
 from astra.telegram.handlers.tarot_spreads import SPREAD_BUTTONS, spread_button
 from astra.telegram.handlers.wheel import open_wheel
@@ -123,8 +124,7 @@ async def nav_profile(message: Message, state: FSMContext, session: AsyncSession
 
 @router.message(F.text == BTN_INVITE)
 async def nav_invite(message: Message, state: FSMContext, session: AsyncSession) -> None:
-    await state.clear()
-    await invite_friend(message, session)
+    await open_invites(message, state, session)
 
 
 @router.message(F.text.in_(LEGACY_BUTTONS))

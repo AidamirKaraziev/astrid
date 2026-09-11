@@ -35,11 +35,17 @@ def generate_synastry_pdf(
     report: SynastryReportData | None = None,
     *,
     bot_username: str | None = None,
+    referral_code: str | None = None,
 ) -> Path:
     """Собрать PDF и вернуть путь к файлу."""
     register_synastry_fonts()
     path = Path(output_path)
     path.parent.mkdir(parents=True, exist_ok=True)
     data = report or build_sample_report()
-    SynastryPdfBuilder(str(path), data, bot_username=bot_username).build()
+    SynastryPdfBuilder(
+        str(path),
+        data,
+        bot_username=bot_username,
+        referral_code=referral_code,
+    ).build()
     return path

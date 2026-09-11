@@ -1,4 +1,4 @@
-"""Прогресс генерации в Telegram: delete → новое сообщение."""
+"""Прогресс генерации в Telegram: одно сообщение, стадии переписывают его."""
 
 from astra.telegram.progress.messages import (
     compatibility_stage_text,
