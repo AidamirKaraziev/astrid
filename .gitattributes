@@ -1,0 +1,3 @@
+.claude/ledger.jsonl merge=union
+astra-vault/knowledge/проект.md merge=union
+.claude/inbox/*.md merge=union
