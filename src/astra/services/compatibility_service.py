@@ -350,13 +350,6 @@ async def generate_compatibility_llm(
                 reason=failure,
             )
             await compatibility_crud.mark_report_failed(session, report, failure or "llm_failed")
-            user = await users_crud.get_user_by_id(session, report.owner_user_id)
-            if user is not None:
-                from astra.services.compatibility_failure_notify import (
-                    send_compatibility_failure_notification,
-                )
-
-                await send_compatibility_failure_notification(user.telegram_id)
             return None
         await compatibility_crud.mark_report_text_ready(session, report, output.model_dump())
         return report

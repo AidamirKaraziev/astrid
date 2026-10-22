@@ -177,19 +177,6 @@ def _prompt_input_from_report(report: NatalReport):
     )
 
 
-async def _notify_natal_failure(session: AsyncSession, report: NatalReport) -> None:
-    """Сообщить владельцу о сбое разбора; вызывать после mark_natal_failed."""
-    try:
-        user = await users_crud.get_user_by_id(session, report.owner_user_id)
-        if user is None:
-            return
-        from astra.services.natal_failure_notify import send_natal_failure_notification
-
-        await send_natal_failure_notification(user.telegram_id)
-    except Exception:
-        log.exception(Event.NATAL_REPORT_NOTIFY_FAILED, report_id=report.id)
-
-
 async def generate_natal_llm(
     session: AsyncSession,
     report_id: uuid.UUID,
@@ -213,14 +200,12 @@ async def generate_natal_llm(
         if output is None:
             log.error(Event.NATAL_REPORT_LLM_FAILED, report_id=report_id, reason=failure)
             await natal_crud.mark_natal_failed(session, report, failure or "llm_failed")
-            await _notify_natal_failure(session, report)
             return None
         await natal_crud.mark_natal_text_ready(session, report, output.model_dump())
         return report
     except Exception as exc:
         log.exception(Event.NATAL_REPORT_LLM_FAILED, report_id=report_id)
         await natal_crud.mark_natal_failed(session, report, str(exc))
-        await _notify_natal_failure(session, report)
         return None
 
 
@@ -278,7 +263,6 @@ async def generate_natal_report_pdf(
     except Exception as exc:
         log.exception(Event.NATAL_REPORT_PDF_FAILED, report_id=report_id)
         await natal_crud.mark_natal_failed(session, report, str(exc))
-        await _notify_natal_failure(session, report)
         return None
 
 

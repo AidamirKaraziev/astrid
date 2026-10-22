@@ -18,6 +18,7 @@ from astra.messaging.publisher import (
     publish_tarot_reading_generate,
     publish_tarot_reading_send,
 )
+from astra.compatibility.enums import ReportStatus
 from astra.broadcasts import service as broadcast_service
 from astra.broadcasts.keyboards import broadcast_keyboard
 from astra.broadcasts.models import Broadcast
@@ -210,6 +211,39 @@ async def handle_prediction_send(session: AsyncSession, task: TaskMessage) -> No
     log.info(Event.PREDICTION_SENT, telegram_id=user.telegram_id, user_id=user.id)
 
 
+async def _notify_failure_if_failed(
+    session: AsyncSession,
+    report_id: object,
+    *,
+    owner_of: str,
+) -> None:
+    """Единая точка «разбор упал → человек узнал» для натала и совместимости.
+
+    Вызывается воркером, когда сервис вернул ``None`` (или доставка не удалась):
+    любой путь падения внутри сервиса покрыт автоматически. Если отчёта или
+    владельца нет, сообщать некому.
+    """
+    if owner_of == "natal":
+        from astra.natal_report import crud as natal_crud
+        from astra.services.natal_failure_notify import send_natal_failure_notification
+
+        report = await natal_crud.get_natal_report(session, report_id)
+        send = send_natal_failure_notification
+    else:
+        from astra.compatibility import crud as compatibility_crud
+        from astra.services.compatibility_failure_notify import (
+            send_compatibility_failure_notification,
+        )
+
+        report = await compatibility_crud.get_compatibility_report(session, report_id)
+        send = send_compatibility_failure_notification
+    if report is None:
+        return
+    user = await users_crud.get_user_by_id(session, report.owner_user_id)
+    if user is not None:
+        await send(user.telegram_id)
+
+
 async def handle_synastry_build(session: AsyncSession, task: TaskMessage) -> None:
     if task.report_id is None:
         return
@@ -248,6 +282,7 @@ async def handle_compatibility_generate(session: AsyncSession, task: TaskMessage
     report = await generate_compatibility_llm(session, task.report_id)
     if report is None:
         log.warning(Event.COMPATIBILITY_LLM_ABANDONED, report_id=task.report_id)
+        await _notify_failure_if_failed(session, task.report_id, owner_of="compatibility")
         return
 
     user = await users_crud.get_user_by_id(session, report.owner_user_id)
@@ -273,6 +308,7 @@ async def handle_pdf_generate(session: AsyncSession, task: TaskMessage) -> None:
     report = await generate_compatibility_pdf(session, task.report_id)
     if report is None:
         log.warning(Event.COMPATIBILITY_PDF_ABANDONED, report_id=task.report_id)
+        await _notify_failure_if_failed(session, task.report_id, owner_of="compatibility")
         return
 
     await session.commit()
@@ -299,6 +335,9 @@ async def handle_compatibility_send(session: AsyncSession, task: TaskMessage) ->
     sent = await deliver_compatibility_report(session, task.report_id)
     if sent:
         log.info(Event.COMPATIBILITY_SENT, report_id=task.report_id)
+    elif report.status == ReportStatus.FAILED:
+        # доставка пометила разбор failed (pdf_missing)
+        await _notify_failure_if_failed(session, task.report_id, owner_of="compatibility")
 
 
 async def handle_natal_generate(session: AsyncSession, task: TaskMessage) -> None:
@@ -317,6 +356,7 @@ async def handle_natal_generate(session: AsyncSession, task: TaskMessage) -> Non
     report = await generate_natal_llm(session, task.report_id)
     if report is None:
         log.warning(Event.NATAL_REPORT_LLM_FAILED, report_id=task.report_id, reason="abandoned")
+        await _notify_failure_if_failed(session, task.report_id, owner_of="natal")
         return
 
     user = await users_crud.get_user_by_id(session, report.owner_user_id)
@@ -337,6 +377,7 @@ async def handle_natal_pdf_generate(session: AsyncSession, task: TaskMessage) ->
     report = await generate_natal_report_pdf(session, task.report_id)
     if report is None:
         log.warning(Event.NATAL_REPORT_PDF_FAILED, report_id=task.report_id, reason="abandoned")
+        await _notify_failure_if_failed(session, task.report_id, owner_of="natal")
         return
 
     await session.commit()
