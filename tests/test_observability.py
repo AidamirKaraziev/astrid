@@ -156,3 +156,29 @@ async def test_worker_middleware_logs_lifecycle(observability_settings) -> None:
     events = [entry["event"] for entry in captured]
     assert Event.TASK_RECEIVED in events
     assert Event.TASK_COMPLETED in events
+
+
+def test_configure_otel_enabled_does_not_raise() -> None:
+    """Регрессия: импорт несуществующего setup_sentry_propagation валил старт."""
+    from opentelemetry.propagate import get_global_textmap
+    from sentry_sdk.integrations.opentelemetry import SentryPropagator
+
+    import astra.core.observability.tracing as tracing
+
+    settings = type(
+        "S",
+        (),
+        {
+            "otel_enabled": True,
+            "sentry_service": "test",
+            "app_version": "0.0.0",
+            "otel_traces_sample_rate": 0.0,
+        },
+    )()
+    tracing._OTEL_CONFIGURED = False
+    try:
+        tracing.configure_otel(settings)
+        assert tracing.is_otel_enabled()
+        assert isinstance(get_global_textmap(), SentryPropagator)
+    finally:
+        tracing._OTEL_CONFIGURED = False

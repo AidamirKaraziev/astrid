@@ -19,7 +19,9 @@
 from __future__ import annotations
 
 import sys
+from collections.abc import MutableMapping
 from datetime import datetime
+from typing import Any
 from zoneinfo import ZoneInfo
 
 # Время показываем в поясе, в котором живёт владелец — так проще сопоставлять
@@ -112,7 +114,7 @@ class HumanRenderer:
     def _paint(self, text: str, color: str) -> str:
         return f"{color}{text}{_RESET}" if self.colors else text
 
-    def __call__(self, logger, name, event_dict: dict) -> str:
+    def __call__(self, logger: Any, name: str, event_dict: MutableMapping[str, Any]) -> str:
         event = str(event_dict.pop("event", ""))
         level = str(event_dict.pop("level", "info")).lower()
         label, color = _LEVEL_STYLE.get(level, ("INFO ", ""))

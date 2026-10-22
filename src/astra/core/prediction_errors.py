@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import date
+from typing import Literal
 from uuid import UUID
 
 import sentry_sdk
@@ -64,6 +65,7 @@ def report_prediction_generation_failure(
 
     cfg = get_settings()
     label = _human_reason(reason)
+    level: Literal["error", "warning"]
     if final:
         message = f"Предсказание: {label} после {attempts} попыток"
         level = "error"

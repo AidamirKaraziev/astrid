@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from collections.abc import MutableMapping
 from datetime import date, datetime
 from enum import Enum
 from typing import Any
@@ -18,8 +19,8 @@ _MASK = "***"
 def add_service(
     _logger: Any,
     _method_name: str,
-    event_dict: dict[str, Any],
-) -> dict[str, Any]:
+    event_dict: MutableMapping[str, Any],
+) -> MutableMapping[str, Any]:
     from astra.core.observability.context import service_var
 
     service = service_var.get()
@@ -31,8 +32,8 @@ def add_service(
 def add_context_fields(
     _logger: Any,
     _method_name: str,
-    event_dict: dict[str, Any],
-) -> dict[str, Any]:
+    event_dict: MutableMapping[str, Any],
+) -> MutableMapping[str, Any]:
     from astra.core.observability.context import context_as_dict
 
     for key, value in context_as_dict().items():
@@ -57,8 +58,8 @@ def _sanitize_value(key: str, value: Any) -> Any:
 def add_trace_context(
     _logger: Any,
     _method_name: str,
-    event_dict: dict[str, Any],
-) -> dict[str, Any]:
+    event_dict: MutableMapping[str, Any],
+) -> MutableMapping[str, Any]:
     try:
         from opentelemetry import trace
 
@@ -75,8 +76,8 @@ def add_trace_context(
 def serialize_types(
     _logger: Any,
     _method_name: str,
-    event_dict: dict[str, Any],
-) -> dict[str, Any]:
+    event_dict: MutableMapping[str, Any],
+) -> MutableMapping[str, Any]:
     for key, value in list(event_dict.items()):
         if isinstance(value, UUID):
             event_dict[key] = str(value)
@@ -90,6 +91,6 @@ def serialize_types(
 def sanitize_pii(
     _logger: Any,
     _method_name: str,
-    event_dict: dict[str, Any],
-) -> dict[str, Any]:
+    event_dict: MutableMapping[str, Any],
+) -> MutableMapping[str, Any]:
     return {key: _sanitize_value(key, value) for key, value in event_dict.items()}

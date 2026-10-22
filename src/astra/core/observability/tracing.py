@@ -25,7 +25,7 @@ def configure_otel(settings: Any) -> None:
     from opentelemetry.sdk.resources import Resource
     from opentelemetry.sdk.trace import TracerProvider
     from opentelemetry.sdk.trace.sampling import ParentBased, TraceIdRatioBased
-    from sentry_sdk.integrations.opentelemetry import SentryPropagator, SentrySpanProcessor, setup_sentry_propagation
+    from sentry_sdk.integrations.opentelemetry import SentryPropagator, SentrySpanProcessor
 
     service = (settings.sentry_service or "api").strip().lower()
     resource = Resource.create(
@@ -39,7 +39,6 @@ def configure_otel(settings: Any) -> None:
     provider.add_span_processor(SentrySpanProcessor())
     trace.set_tracer_provider(provider)
 
-    setup_sentry_propagation()
     from opentelemetry.propagate import set_global_textmap
 
     set_global_textmap(SentryPropagator())

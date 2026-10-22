@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, Any
 import sentry_sdk
 from sentry_sdk.crons import capture_checkin
 from sentry_sdk.crons.consts import MonitorStatus
+from sentry_sdk.integrations import Integration
 from sentry_sdk.integrations.asyncio import AsyncioIntegration
 from sentry_sdk.integrations.fastapi import FastApiIntegration
 from sentry_sdk.integrations.httpx import HttpxIntegration
@@ -18,6 +19,8 @@ from sentry_sdk.integrations.starlette import StarletteIntegration
 from astra.core.observability import Event, get_logger
 
 if TYPE_CHECKING:
+    from sentry_sdk._types import MonitorConfig
+
     from astra.core.config import Settings
 
 log = get_logger(__name__)
@@ -38,8 +41,8 @@ def _make_traces_sampler(base_rate: float):
     return traces_sampler
 
 
-def _build_integrations(service: str) -> list[object]:
-    integrations: list[object] = [
+def _build_integrations(service: str) -> list[Integration]:
+    integrations: list[Integration] = [
         AsyncioIntegration(),
         HttpxIntegration(),
         LoggingIntegration(
@@ -119,7 +122,7 @@ async def run_heartbeat(settings: Settings) -> None:
 
     interval_min = max(1, settings.sentry_heartbeat_interval_minutes)
     # Монитор создаётся/обновляется в Sentry автоматически при первом check-in.
-    monitor_config = {
+    monitor_config: MonitorConfig = {
         "schedule": {"type": "interval", "value": interval_min, "unit": "minute"},
         "checkin_margin": max(2, interval_min),
         "max_runtime": interval_min,
