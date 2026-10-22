@@ -60,7 +60,7 @@ from astra.telegram.progress import (
 )
 from astra.users import crud as users_crud
 from astra.users.models import Profile
-from astra.workers.telegram_send import send_prediction_to_telegram
+from astra.workers.telegram_send import send_prediction_to_telegram, send_telegram_html
 
 log = get_logger(__name__)
 
