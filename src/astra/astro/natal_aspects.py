@@ -9,8 +9,13 @@
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from astra.astro.constants import ASPECT_EN_TO_RU, POINT_EN_TO_RU
 from astra.astro.schemas import NatalAspect
+
+if TYPE_CHECKING:
+    from kerykeion.schemas import ActiveAspect
 
 try:
     from kerykeion import NatalAspects as KrNatalAspects
@@ -37,7 +42,15 @@ _MAX_ORBS: dict[str, float] = {
     "sextile": 5.0,
 }
 
-_ACTIVE_ASPECTS = [{"name": name, "orb": orb} for name, orb in _MAX_ORBS.items()]
+# Орбы здесь те же, что в _MAX_ORBS: kerykeion ждёт целые градусы и имена
+# аспектов из своего Literal, поэтому список выписан явно.
+_ACTIVE_ASPECTS: list[ActiveAspect] = [
+    {"name": "conjunction", "orb": 8},
+    {"name": "opposition", "orb": 8},
+    {"name": "trine", "orb": 7},
+    {"name": "square", "orb": 7},
+    {"name": "sextile", "orb": 5},
+]
 
 _BASE_POINTS = [
     "Sun",

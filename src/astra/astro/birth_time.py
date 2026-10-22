@@ -77,6 +77,24 @@ def as_wall_clock(value: datetime | None) -> datetime | None:
     return value.replace(tzinfo=None) if value.tzinfo is not None else value
 
 
+class BirthDateMissingError(ValueError):
+    """Дата рождения нужна, а в профиле её нет (короткий онбординг её не берёт)."""
+
+    def __init__(self) -> None:
+        super().__init__("Дата рождения не указана")
+
+
+def require_birth_date(birth_date: date | None) -> date:
+    """Дата рождения или понятная ошибка вместо `None` в глубине расчёта.
+
+    Продукты закрыты `ensure_birth_data`, но расчёт не должен падать
+    `TypeError`/`AttributeError` из `datetime.combine`, если дверь забыли.
+    """
+    if birth_date is None:
+        raise BirthDateMissingError
+    return birth_date
+
+
 def wall_clock_at(birth_date: date, moment: time) -> datetime:
     """Собрать время рождения из даты и часов, которые назвал человек."""
     return datetime.combine(birth_date, moment)
@@ -86,7 +104,10 @@ def with_birth_date(birth_time: datetime | None, birth_date: date) -> datetime |
     """Переставить сохранённые часы на другую дату рождения."""
     if birth_time is None:
         return None
-    return as_wall_clock(birth_time).replace(
+    moment = as_wall_clock(birth_time)
+    if moment is None:
+        return None
+    return moment.replace(
         year=birth_date.year,
         month=birth_date.month,
         day=birth_date.day,

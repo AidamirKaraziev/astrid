@@ -2,6 +2,7 @@
 
 from datetime import date
 
+from astra.astro.birth_time import require_birth_date
 from astra.astro.schemas import NatalChartData
 from astra.users.getters import calculate_profile_accuracy
 from astra.users.models import Profile
@@ -40,7 +41,7 @@ def build_natal_chart(
     timezone: str,
 ) -> NatalChartData:
     accuracy, _ = calculate_profile_accuracy(profile)
-    sun = _sun_sign(profile.birth_date)
+    sun = _sun_sign(require_birth_date(profile.birth_date))
     return NatalChartData(
         accuracy_tier=accuracy,
         sun_sign=sun,

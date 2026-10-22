@@ -36,6 +36,7 @@ from uuid import UUID
 
 from sqlalchemy import ColumnElement, Float, case, cast, func, literal, or_, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import InstrumentedAttribute
 
 from astra.places.models import Place
 from astra.places.query import PlaceQuery, parse_place_query
@@ -100,7 +101,7 @@ async def count_places(session: AsyncSession) -> int:
 # --------------------------------------------------------------------------
 
 
-def _similarity(column: ColumnElement[str], value: str) -> ColumnElement[float]:
+def _similarity(column: ColumnElement[str] | InstrumentedAttribute[str], value: str) -> ColumnElement[float]:
     return cast(func.similarity(column, value), Float)
 
 

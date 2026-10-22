@@ -1,7 +1,7 @@
 from datetime import date, datetime, time
 from zoneinfo import ZoneInfo
 
-from astra.astro.birth_time import birth_local_datetime
+from astra.astro.birth_time import birth_local_datetime, require_birth_date
 from astra.astro.schemas import ChartPoint, FullNatalChart, HouseCusp, NatalChartData
 from astra.users.getters import calculate_profile_accuracy
 from astra.users.models import Profile
@@ -26,7 +26,11 @@ def _sign_ru(sign_en: str) -> str:
 
 
 def _birth_local_datetime(profile: Profile, timezone: str) -> datetime:
-    return birth_local_datetime(profile.birth_date, profile.birth_time, timezone)
+    return birth_local_datetime(
+        require_birth_date(profile.birth_date),
+        profile.birth_time,
+        timezone,
+    )
 
 
 def build_natal_chart(

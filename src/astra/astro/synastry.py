@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from datetime import date, datetime, time
 from uuid import UUID
 
-from astra.astro.birth_time import birth_local_datetime
+from astra.astro.birth_time import birth_local_datetime, require_birth_date
 from astra.astro.calculator import kerykeion_available
 from astra.astro.constants import ASPECT_EN_TO_RU, PLANET_EN_TO_RU
 from astra.astro.schemas import NatalChartData
@@ -175,7 +175,7 @@ def snapshot_from_profile(profile: Profile, chart: NatalChartData) -> dict:
     return {
         "name": profile.display_name,
         "gender": profile.gender,
-        "birth_date": profile.birth_date.isoformat(),
+        "birth_date": require_birth_date(profile.birth_date).isoformat(),
         "birth_time": birth_time,
         "birth_place": profile.birth_place or profile.city,
         "birth_place_id": str(profile.birth_place_id) if profile.birth_place_id else None,

@@ -247,7 +247,7 @@ class RawPlace:
     feature_code: str
     latitude: Decimal
     longitude: Decimal
-    timezone: str
+    timezone: str | None
     population: int
 
 

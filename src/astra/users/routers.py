@@ -37,6 +37,13 @@ async def patch_profile(
     update_data = payload.model_dump(exclude_unset=True)
     birth_date = update_data.get("birth_date", user.profile.birth_date)
     if "birth_time" in update_data and update_data["birth_time"] is not None:
+        if birth_date is None:
+            # 422: запрос синтаксически верен, но не сходится с состоянием
+            # профиля — время рождения без даты рождения не имеет смысла.
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="Укажите дату рождения вместе со временем рождения",
+            )
         update_data["birth_time"] = wall_clock_at(birth_date, update_data.pop("birth_time"))
     if "birth_date" in update_data and user.profile.birth_time is not None:
         update_data["birth_time"] = with_birth_date(
