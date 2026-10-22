@@ -87,11 +87,6 @@ follow_imports = "silent"
 check_untyped_defs = true
 disallow_untyped_defs = false
 
-[tool.ruff.lint.per-file-ignores]
-# Известные F821 в текущем коде; чинятся отдельной работой, не настройкой линтера
-"src/astra/referrals/models.py" = ["F821"]
-"src/astra/workers/handlers.py" = ["F821"]
-
 # Известные ошибки текущего кода заглушены настройкой (код не правим).
 # attr-defined по NatalReport и другим моделям остаётся включённым — ради него всё и затеяно.
 [[tool.mypy.overrides]]
@@ -101,8 +96,3 @@ ignore_errors = true
 [[tool.mypy.overrides]]
 module = ["astra.services.natal_report_service"]
 disable_error_code = ["arg-type"]
-
-# В базовом классе нет is_configured (есть у наследников): тип считаем Any.
-[[tool.mypy.overrides]]
-module = ["astra.llm.base"]
-follow_imports = "skip"
