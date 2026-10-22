@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import time
 from datetime import date
+from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -15,11 +16,7 @@ from astra.predictions import crud as predictions_crud
 from astra.predictions.models import Prediction
 from astra.predictions.status import PredictionStatus
 from astra.services.astro_service import generate_prediction_text_only
-from astra.services.prediction_delayed_notify import (
-    maybe_send_delayed_notification,
-    send_final_failure_notification,
-)
-from astra.services.prediction_pending import clear_prediction_pending
+from astra.services.prediction_delayed_notify import maybe_send_delayed_notification
 from astra.users.models import Profile, User
 
 log = get_logger(__name__)
@@ -34,11 +31,11 @@ def _backoff_seconds(attempt: int) -> float:
     return float(_BACKOFF_SEC[index])
 
 
-async def _mark_prediction_failed(
+async def mark_prediction_failed(
     session: AsyncSession,
-    user_id,
+    user_id: UUID,
     target: date,
-) -> None:  # noqa: ANN001
+) -> None:
     prediction = await predictions_crud.get_prediction_for_date(session, user_id, target)
     if prediction is not None:
         await predictions_crud.update_prediction(
@@ -55,7 +52,8 @@ async def generate_daily_prediction_resilient(
     target: date,
     settings: Settings | None = None,
 ) -> Prediction | None:
-    """Сгенерировать текст предсказания (LLM) с ретраями; None — исчерпаны попытки."""
+    """Сгенерировать текст предсказания (LLM) с ретраями; None — исчерпаны попытки
+    (человека о финальном сбое уведомляет вызывающий — воркер)."""
     cfg = settings or get_settings()
     started = time.monotonic()
     last_reason = "unknown"
@@ -101,9 +99,8 @@ async def generate_daily_prediction_resilient(
                     attempts=attempt,
                     reason=last_reason,
                 )
-                await send_final_failure_notification(user.telegram_id)
-                await _mark_prediction_failed(session, user.id, target)
-                await clear_prediction_pending(user.id, target)
+                # Сообщение человеку, failed-статус и pending снимает воркер
+                # (handlers._abandon_prediction): здесь только ретраи.
                 return None
 
             log.warning(

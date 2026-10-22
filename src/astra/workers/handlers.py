@@ -25,6 +25,7 @@ from astra.broadcasts.keyboards import broadcast_keyboard
 from astra.broadcasts.models import Broadcast
 from astra.messaging.schemas import TaskMessage, TaskType
 from astra.predictions import crud as predictions_crud
+from astra.predictions.status import PredictionStatus
 from astra.services.astro_service import (
     build_and_store_daily_context,
     compute_and_store_natal_chart,
@@ -41,7 +42,11 @@ from astra.services.compatibility_service import (
     generate_compatibility_pdf,
 )
 from astra.services.day_card_service import deliver_day_card
-from astra.services.prediction_generation import generate_daily_prediction_resilient
+from astra.services.prediction_delayed_notify import send_final_failure_notification
+from astra.services.prediction_generation import (
+    generate_daily_prediction_resilient,
+    mark_prediction_failed,
+)
 from astra.services.tarot_reading_service import (
     deliver_reading,
     generate_reading_interpretation,
@@ -160,11 +165,25 @@ async def handle_prediction_generate(session: AsyncSession, task: TaskMessage) -
             user_id=task.user_id,
             prediction_date=str(target),
         )
+        await _abandon_prediction(session, user.id, user.telegram_id, target)
         return
 
     await session.commit()
     await publish_prediction_send(user.id, target)
     log.info(Event.PREDICTION_GENERATED, user_id=task.user_id, prediction_date=str(target))
+
+
+async def _abandon_prediction(
+    session: AsyncSession,
+    user_id: UUID,
+    telegram_id: int,
+    target: date,
+) -> None:
+    """Предсказание не собралось: одно сообщение человеку, failed-статус, pending снят."""
+    await send_final_failure_notification(telegram_id)
+    await mark_prediction_failed(session, user_id, target)
+    await session.commit()
+    await clear_prediction_pending(user_id, target)
 
 
 async def handle_prediction_send(session: AsyncSession, task: TaskMessage) -> None:
@@ -530,6 +549,119 @@ async def handle_broadcast_send(session: AsyncSession, task: TaskMessage) -> Non
         blocked=progress.blocked,
         failed=progress.failed,
     )
+
+
+_NATAL_DEAD = frozenset({TaskType.NATAL_GENERATE, TaskType.NATAL_PDF_GENERATE, TaskType.NATAL_SEND})
+_COMPATIBILITY_DEAD = frozenset(
+    {
+        TaskType.SYNASTRY_BUILD,
+        TaskType.COMPATIBILITY_GENERATE,
+        TaskType.PDF_GENERATE,
+        TaskType.COMPATIBILITY_SEND,
+    },
+)
+_PREDICTION_DEAD = frozenset(
+    {TaskType.PREDICTION_GENERATE, TaskType.PREDICTION_SEND, TaskType.DAY_CARD_SEND},
+)
+
+
+async def _dead_tarot(session: AsyncSession, task: TaskMessage) -> None:
+    from astra.payments.service import refund_reading_payment
+    from astra.tarot import models as tarot_crud
+    from astra.tarot.enums import ReadingStatus
+
+    if task.reading_id is None:
+        return
+    reading = await tarot_crud.get_reading(session, task.reading_id)
+    if reading is None or reading.sent_at is not None:
+        return  # нет расклада или уже доставлен
+    if reading.status == ReadingStatus.PENDING_PAYMENT:
+        return  # не оплачен: возвращать нечего
+    user = await users_crud.get_user_by_id(session, reading.user_id)
+    refunded = False
+    if user is not None:
+        refunded = await refund_reading_payment(session, reading, user.telegram_id)
+    reading.status = ReadingStatus.FAILED
+    await session.commit()
+    await notify_reading_failed(session, reading, refunded=refunded)
+
+
+async def _dead_ask(session: AsyncSession, task: TaskMessage) -> None:
+    from astra.ask import models as ask_crud
+    from astra.ask.enums import AskStatus
+    from astra.services.ask_service import notify_ask_failed, refund_ask_payment
+
+    if task.reading_id is None:
+        return
+    reading = await ask_crud.get_reading(session, task.reading_id)
+    if reading is None or reading.status in (AskStatus.READY, AskStatus.PENDING_PAYMENT):
+        return  # доставлен или не оплачен
+    if reading.refunded:
+        return  # уже возвращено и сообщено: второй раз не трогаем
+    user = await users_crud.get_user_by_id(session, reading.user_id)
+    refunded = False
+    if user is not None:
+        refunded = await refund_ask_payment(session, reading, user.telegram_id)
+    if reading.status != AskStatus.FAILED:
+        await ask_crud.mark_failed(session, reading, "task_dead")
+    await session.commit()
+    await notify_ask_failed(session, reading, refunded=refunded)
+
+
+async def _dead_report(session: AsyncSession, task: TaskMessage, *, owner_of: str) -> None:
+    if task.report_id is None:
+        return
+    if owner_of == "natal":
+        from astra.natal_report import crud as natal_crud
+        from astra.natal_report.enums import NatalReportStatus
+
+        natal = await natal_crud.get_natal_report(session, task.report_id)
+        if natal is None or natal.sent_at is not None or natal.status == NatalReportStatus.FAILED:
+            return
+        await natal_crud.mark_natal_failed(session, natal, "task_dead")
+    else:
+        from astra.compatibility import crud as compatibility_crud
+
+        compat = await compatibility_crud.get_compatibility_report(session, task.report_id)
+        if compat is None or compat.sent_at is not None or compat.status == ReportStatus.FAILED:
+            return
+        await compatibility_crud.mark_report_failed(session, compat, "task_dead")
+    await session.commit()
+    await _notify_failure_if_failed(session, task.report_id, owner_of=owner_of)
+
+
+async def _dead_prediction(session: AsyncSession, task: TaskMessage) -> None:
+    if task.user_id is None:
+        return
+    user = await users_crud.get_user_by_id(session, task.user_id)
+    if user is None or user.profile is None:
+        return
+    target = _target_date(task, user.profile)
+    prediction = await predictions_crud.get_prediction_for_date(session, user.id, target)
+    if prediction is not None and (
+        prediction.sent_at is not None or prediction.status == PredictionStatus.FAILED
+    ):
+        return  # уже отправлено или уже обработано как сбой
+    await _abandon_prediction(session, user.id, user.telegram_id, target)
+
+
+async def handle_task_dead(session: AsyncSession, task: TaskMessage) -> None:
+    """Задача исчерпала попытки: вернуть деньги и сказать человеку. Никогда не бросает."""
+    try:
+        if task.type in (TaskType.TAROT_READING_GENERATE, TaskType.TAROT_READING_SEND):
+            await _dead_tarot(session, task)
+        elif task.type == TaskType.ASK_ANSWER_GENERATE:
+            await _dead_ask(session, task)
+        elif task.type in _NATAL_DEAD:
+            await _dead_report(session, task, owner_of="natal")
+        elif task.type in _COMPATIBILITY_DEAD:
+            await _dead_report(session, task, owner_of="compatibility")
+        elif task.type in _PREDICTION_DEAD:
+            await _dead_prediction(session, task)
+        # BROADCAST_SEND, NATAL_CHART_GENERATE, DAILY_CONTEXT_BUILD: человеку сказать нечего.
+        log.error(Event.TASK_FAILED, task_type=str(task.type), reason="attempts_exhausted")
+    except Exception:
+        log.exception(Event.TASK_FAILED, task_type=str(task.type), reason="task_dead_handler_failed")
 
 
 async def dispatch_task(session: AsyncSession, task: TaskMessage) -> None:

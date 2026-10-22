@@ -151,24 +151,12 @@ async def test_generate_daily_prediction_resilient_sends_delayed_notice() -> Non
                         "astra.services.prediction_generation.asyncio.sleep",
                         new_callable=AsyncMock,
                     ):
-                        with patch(
-                            "astra.services.prediction_generation.send_final_failure_notification",
-                            new_callable=AsyncMock,
-                        ):
-                                with patch(
-                                    "astra.services.prediction_generation.clear_prediction_pending",
-                                    new_callable=AsyncMock,
-                                ):
-                                    with patch(
-                                        "astra.services.prediction_generation._mark_prediction_failed",
-                                        new_callable=AsyncMock,
-                                    ):
-                                        result = await generate_daily_prediction_resilient(
-                                            session,
-                                            user,
-                                            profile,
-                                            date(2026, 6, 14),
-                                        )
+                        result = await generate_daily_prediction_resilient(
+                            session,
+                            user,
+                            profile,
+                            date(2026, 6, 14),
+                        )
 
     assert result is None
     delayed.assert_called_with(user.id, user.telegram_id, date(2026, 6, 14))
@@ -176,6 +164,7 @@ async def test_generate_daily_prediction_resilient_sends_delayed_notice() -> Non
 
 @pytest.mark.anyio
 async def test_generate_daily_prediction_resilient_final_failure() -> None:
+    """Сервис только ретраит: человеку пишет воркер, ровно одно сообщение."""
     user = AsyncMock()
     user.id = uuid4()
     user.telegram_id = 456
@@ -191,28 +180,60 @@ async def test_generate_daily_prediction_resilient_final_failure() -> None:
             new_callable=AsyncMock,
         ):
             with patch(
-                "astra.services.prediction_generation.send_final_failure_notification",
-                new_callable=AsyncMock,
-            ) as failure_notify:
+                "astra.services.prediction_generation.report_prediction_generation_failure",
+            ) as report:
                 with patch(
-                    "astra.services.prediction_generation.clear_prediction_pending",
+                    "astra.services.prediction_delayed_notify.send_telegram_html",
                     new_callable=AsyncMock,
-                ) as clear_pending:
-                    with patch(
-                        "astra.services.prediction_generation._mark_prediction_failed",
-                        new_callable=AsyncMock,
-                    ):
-                        with patch(
-                            "astra.services.prediction_generation.report_prediction_generation_failure",
-                        ) as report:
-                            result = await generate_daily_prediction_resilient(
-                                session,
-                                user,
-                                profile,
-                                date(2026, 6, 14),
-                            )
+                ) as sent:
+                    result = await generate_daily_prediction_resilient(
+                        session,
+                        user,
+                        profile,
+                        date(2026, 6, 14),
+                    )
 
     assert result is None
     assert report.call_count == PREDICTION_MAX_ATTEMPTS
-    failure_notify.assert_called_once_with(user.telegram_id)
-    clear_pending.assert_called_once_with(user.id, date(2026, 6, 14))
+    sent.assert_not_called()
+
+
+@pytest.mark.anyio
+async def test_prediction_final_failure_sends_exactly_one_message() -> None:
+    """Сервис + воркер вместе: на финальный сбой человек получает одно сообщение."""
+    from astra.messaging.schemas import TaskMessage, TaskType
+    from astra.services.prediction_delayed_notify import PREDICTION_FINAL_FAILURE_TEXT
+    from astra.workers import handlers
+
+    user = AsyncMock()
+    user.id = uuid4()
+    user.telegram_id = 456
+    user.profile = AsyncMock()
+    session = AsyncMock()
+    task = TaskMessage(
+        type=TaskType.PREDICTION_GENERATE,
+        user_id=user.id,
+        prediction_date=date(2026, 6, 14),
+    )
+
+    with (
+        patch(
+            "astra.services.prediction_generation.generate_prediction_text_only",
+            side_effect=LlmGenerationError("connection"),
+        ),
+        patch("astra.services.prediction_generation.asyncio.sleep", new_callable=AsyncMock),
+        patch("astra.services.prediction_generation.report_prediction_generation_failure"),
+        patch("astra.workers.handlers.users_crud.get_user_by_id", return_value=user),
+        patch("astra.workers.handlers.send_chat_action_typing", new_callable=AsyncMock),
+        patch("astra.workers.handlers.mark_prediction_failed", new_callable=AsyncMock) as mark,
+        patch("astra.workers.handlers.clear_prediction_pending", new_callable=AsyncMock) as clear,
+        patch(
+            "astra.services.prediction_delayed_notify.send_telegram_html",
+            new_callable=AsyncMock,
+        ) as sent,
+    ):
+        await handlers.handle_prediction_generate(session, task)
+
+    sent.assert_called_once_with(456, PREDICTION_FINAL_FAILURE_TEXT)
+    mark.assert_called_once()
+    clear.assert_called_once_with(user.id, date(2026, 6, 14))
