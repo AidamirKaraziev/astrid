@@ -301,3 +301,23 @@ async def purge_test_users(session_factory) -> AsyncIterator[None]:
         yield
     finally:
         await sweep()
+
+
+@pytest.fixture(autouse=True, scope="session")
+def _disjoint_fake_message_ids() -> None:
+    """Сдвигает id сообщений фейкового Telegram на слот прогона.
+
+    Тикеты поддержки уникальны по (admin_chat_id, admin_message_id), а фейк у
+    каждого теста начинает считать с 1000: два параллельных прогона получали
+    одинаковые пары и ловили UniqueViolation.
+    """
+    import fake_telegram
+
+    original = fake_telegram.FakeTelegramSession.__init__
+    offset = _SLOT * 1_000_000
+
+    def patched(self, *args, **kwargs) -> None:
+        original(self, *args, **kwargs)
+        self._message_id += offset
+
+    fake_telegram.FakeTelegramSession.__init__ = patched
