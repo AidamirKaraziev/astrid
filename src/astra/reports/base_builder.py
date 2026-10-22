@@ -9,8 +9,8 @@ from __future__ import annotations
 
 import math
 
-from reportlab.lib import colors  # type: ignore[import-untyped]  # шум: reportlab — нет stubs (types-reportlab не в зависимостях)
-from reportlab.pdfgen import canvas  # type: ignore[import-untyped]  # шум: reportlab — нет stubs (types-reportlab не в зависимостях)
+from reportlab.lib import colors
+from reportlab.pdfgen import canvas
 
 from astra.reports.bot_link import resolve_telegram_bot_url
 from astra.reports.theme import (

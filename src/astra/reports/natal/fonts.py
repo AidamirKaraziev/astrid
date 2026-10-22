@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from reportlab.pdfbase import pdfmetrics  # type: ignore[import-untyped]  # шум: reportlab — нет stubs (types-reportlab не в зависимостях)
-from reportlab.pdfbase.ttfonts import TTFont  # type: ignore[import-untyped]  # шум: reportlab — нет stubs (types-reportlab не в зависимостях)
+from reportlab.pdfbase import pdfmetrics
+from reportlab.pdfbase.ttfonts import TTFont
 
 from astra.reports.natal.glyphs import ALL_GLYPH_CHARS, FONT_GLYPHS
 from astra.reports.synastry.fonts import register_synastry_fonts

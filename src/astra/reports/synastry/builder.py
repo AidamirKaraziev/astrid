@@ -5,7 +5,7 @@
 
 from __future__ import annotations
 
-from reportlab.lib import colors  # type: ignore[import-untyped]  # шум: reportlab — нет stubs (types-reportlab не в зависимостях)
+from reportlab.lib import colors
 
 from astra.reports.base_builder import BasePdfBuilder
 from astra.reports.synastry.theme import (
