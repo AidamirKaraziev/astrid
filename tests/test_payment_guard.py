@@ -195,6 +195,7 @@ class TestBeforeRecord:
         from astra.telegram.payment_guard import REFUND_FAILED_TEXT
 
         assert message.answer.call_args.args[0] == REFUND_FAILED_TEXT
+        assert message.answer.call_args.kwargs["reply_markup"] is not None
         events = [c.args[0] for c in m[f"{_GUARD}.log"].exception.call_args_list]
         assert Event.PAYMENT_REFUND_FAILED in events
 
@@ -229,6 +230,24 @@ class TestAfterRecord:
         message.answer.assert_not_awaited()
         m[f"{_GUARD}.capture_exception"].assert_not_called()
         assert await _count(session_factory, WheelWin, WheelWin.user_id == user_id) == 1
+
+
+class TestEmptyPoolAfterPayment:
+    async def test_hold_released_at_once_and_stars_refunded(
+        self, session_factory, person
+    ) -> None:
+        user_id, telegram_id = person
+        payload = wheel_spin_invoice_payload(uuid4())
+        charge_id = f"guard-{uuid4().hex}"
+        await _hold_for_invoice(session_factory, user_id, payload)
+        message = _paid_message(telegram_id, payload, charge_id)
+        mocks = _patches(**{f"{_WHEEL}.perform_spin": AsyncMock(return_value=None)})
+        with _Patched(mocks):
+            await _through_middleware(session_factory, wheel.wheel_spin_paid, message)
+
+        assert await _balance(session_factory, user_id) == 5  # сразу, не через час
+        message.bot.refund_star_payment.assert_awaited_once()
+        assert message.answer.call_args.args[0] == wheel._REFUND_POOL_EMPTY_TEXT
 
 
 class TestWalletCoveredPrice:

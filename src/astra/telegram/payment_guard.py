@@ -52,19 +52,20 @@ from collections.abc import AsyncIterator, Iterator
 from contextlib import asynccontextmanager, contextmanager
 from uuid import UUID
 
-from aiogram.types import Message
+from aiogram.types import InlineKeyboardMarkup, Message
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from astra.core.observability import Event, get_logger
 from astra.core.sentry import capture_exception
 from astra.db.session import get_session_factory
 from astra.services.wallet_service import cancel_charge
+from astra.telegram.keyboards import support_contextual_keyboard
 
 log = get_logger(__name__)
 
 REFUND_FAILED_TEXT = (
-    "Платёж дошёл, но обработать его не вышло, а вернуть звёзды сразу не получилось. "
-    "Мы уже разбираемся ⭐"
+    "Оплата прошла, но я не смогла её обработать и вернуть звёзды сразу. "
+    "Напиши в поддержку — я всё улажу 💬"
 )
 
 
@@ -101,9 +102,9 @@ class PaymentGuard:
         yield
         self.recorded = True
 
-    async def _say(self, text: str) -> None:
+    async def _say(self, text: str, *, reply_markup: InlineKeyboardMarkup | None = None) -> None:
         try:
-            await self.message.answer(text, parse_mode="HTML")
+            await self.message.answer(text, parse_mode="HTML", reply_markup=reply_markup)
         except Exception as exc:
             log.exception(Event.TELEGRAM_API_FAILED, reason=f"{self.reason}_guard_notify")
             capture_exception(exc)
@@ -151,7 +152,10 @@ class PaymentGuard:
             log.exception(Event.PAYMENT_ORPHAN, reason=f"{self.reason}_cancel_hold_failed")
             capture_exception(cancel_exc)
 
-        await self._say(self.refunded_text if refunded else REFUND_FAILED_TEXT)
+        if refunded:
+            await self._say(self.refunded_text)
+        else:
+            await self._say(REFUND_FAILED_TEXT, reply_markup=support_contextual_keyboard())
 
     async def deliver_after_record(self, exc: Exception) -> None:
         """Платёж записан, сломалось оформление: деньги остаются, продукт — текстом."""

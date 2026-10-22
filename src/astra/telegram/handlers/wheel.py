@@ -26,6 +26,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from astra.core.observability import Event, get_logger
 from astra.core.sentry import capture_exception
+from astra.db.session import get_session_factory
 from astra.payments.service import (
     WHEEL_PAYLOAD_PREFIX,
     get_wheel_spin_price,
@@ -46,6 +47,7 @@ from astra.telegram.button_texts import (
 from astra.telegram.handlers.tarot_spreads import start_spread_with_prize
 from astra.telegram.payment_guard import payment_guard
 from astra.services.wallet_service import (
+    cancel_charge,
     plan_charge,
     refund_to_wallet,
     settle_charge,
@@ -83,7 +85,7 @@ _NO_PRIZES_TEXT = "Активных призов пока нет — крути 
 _PRIZE_GONE_TEXT = "Этот приз уже использован или сгорел 🕯"
 _SPIN_INVOICE_TITLE = "Вращение колеса фортуны"
 _SPIN_INVOICE_DESCRIPTION = "Ещё одно вращение колеса — приз гарантирован."
-_SPIN_FAILED_TEXT = "Колесо не провернулось — ничего не списано. Попробуй ещё раз 🎡"
+_SPIN_FAILED_TEXT = "Колесо не провернулось — я ничего не списала. Попробуй ещё раз 🎡"
 _PAYMENT_FAILED_TEXT = "Колесо не провернулось — звёзды уже вернулись ⭐"
 _REFUND_POOL_EMPTY_TEXT = (
     "Призы закончились, вращение не состоялось — звёзды уже вернулись на баланс ⭐"
@@ -464,6 +466,10 @@ async def _refund_empty_pool(
 ) -> None:
     """Пул опустел между pre_checkout и оплатой — деньги не за что брать."""
     await session.rollback()
+    # Откат отменил и settle_charge: бронь снова висит, снимаем её сразу (своя сессия).
+    async with get_session_factory()() as fresh:
+        await cancel_charge(fresh, user_id, payload)
+        await fresh.commit()
     await refund_to_wallet(session, user_id, payload)
     await session.commit()
     if message.bot is not None:
