@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from astra.core.observability import Event, get_logger
 from datetime import date, datetime
+from typing import TypedDict
 from uuid import UUID
 
 from pydantic import BaseModel, Field, ValidationError
@@ -99,12 +100,25 @@ async def sync_user_from_telegram(
     await session.flush()
 
 
+class _ProfileFields(TypedDict):
+    """Поля профиля из регистрации — те, что принимают `create_profile`/`update_profile`."""
+
+    display_name: str
+    gender: Gender | None
+    birth_date: date | None
+    birth_place_id: UUID | None
+    notification_place_id: UUID | None
+    birth_place: str
+    city: str
+    timezone: str
+
+
 def _profile_fields_from_registration(
     reg: OnboardingRegistrationData,
     *,
     timezone: str,
     city: str,
-) -> dict[str, object]:
+) -> _ProfileFields:
     return {
         "display_name": reg.display_name,
         "gender": reg.gender,

@@ -1,5 +1,6 @@
 import uuid
 from datetime import datetime
+from typing import TYPE_CHECKING
 
 from sqlalchemy import DateTime, ForeignKey, String, Text
 from sqlalchemy.dialects.postgresql import JSONB, UUID
@@ -7,6 +8,9 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from astra.db.base import Base, TimestampMixin
 from astra.natal_report.enums import NatalReportStatus
+
+if TYPE_CHECKING:
+    from astra.users.models import User
 
 
 class NatalReport(Base, TimestampMixin):
@@ -34,4 +38,4 @@ class NatalReport(Base, TimestampMixin):
     failure_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
     sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
-    owner: Mapped["User"] = relationship(back_populates="natal_reports")  # noqa: F821
+    owner: Mapped["User"] = relationship(back_populates="natal_reports")

@@ -10,7 +10,7 @@ from pathlib import Path
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from astra.astro.birth_time import as_wall_clock
+from astra.astro.birth_time import as_wall_clock, require_birth_date
 from astra.astro.calculator import build_full_natal_chart
 from astra.astro.chart_features import ChartFeatures, build_chart_features
 from astra.astro.schemas import FullNatalChart
@@ -97,7 +97,7 @@ def _subject_from_profile(profile: Profile) -> NatalSubject:
     return NatalSubject(
         name=profile.display_name,
         gender=profile.gender,
-        birth_date=profile.birth_date,
+        birth_date=require_birth_date(profile.birth_date),
         birth_time=profile.birth_time,
         birth_place=profile.birth_place,
         birth_place_id=profile.birth_place_id,

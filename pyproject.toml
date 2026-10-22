@@ -91,11 +91,3 @@ warn_unused_ignores = true
 # Проверяется весь src/astra, кроме telegram/ и admin/ (исключение задано флагом
 # --exclude в `make lint`, чтобы новый пакет попадал под проверку сам). Исключены они
 # потому, что дают 151 ошибку, в основном arg-type от aiogram, — это отдельная работа.
-# Overrides ниже — долг: заглушки известных ошибок, их снимает следующий круг.
-[[tool.mypy.overrides]]
-module = ["astra.natal_report.models", "astra.services.onboarding_service", "astra.services.ask_service"]
-ignore_errors = true
-
-[[tool.mypy.overrides]]
-module = ["astra.services.natal_report_service"]
-disable_error_code = ["arg-type"]

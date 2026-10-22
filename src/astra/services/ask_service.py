@@ -86,7 +86,8 @@ def result_from_reading(reading: AskReading) -> BaseModel | None:
     product = get_product(reading.question_key)
     if product is None or not reading.computed:
         return None
-    return product.result_model.model_validate(reading.computed)
+    result_model: type[BaseModel] = product.calc.RESULT_MODEL
+    return result_model.model_validate(reading.computed)
 
 
 async def generate_ask_answer(
