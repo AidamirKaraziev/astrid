@@ -22,6 +22,9 @@ class TracingLlmProvider(BaseLlmProvider):
     def name(self) -> str:
         return self._inner.name
 
+    def is_configured(self) -> bool:
+        return self._inner.is_configured()
+
     def __getattr__(self, name: str):
         return getattr(self._inner, name)
 

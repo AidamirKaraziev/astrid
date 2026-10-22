@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from collections.abc import Callable
 
 import httpx
 
@@ -14,10 +13,9 @@ log = get_logger(__name__)
 
 
 class BaseLlmProvider(ABC):
-    # Только аннотация, без реализации: TracingLlmProvider делегирует
-    # is_configured внутреннему провайдеру через __getattr__, а метод в базе
-    # (в том числе абстрактный) перекрыл бы это делегирование.
-    is_configured: Callable[[], bool]
+    @abstractmethod
+    def is_configured(self) -> bool:
+        """Есть ли у провайдера всё нужное (ключ и т. п.) для запросов."""
 
     @property
     @abstractmethod
