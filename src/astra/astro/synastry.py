@@ -129,7 +129,7 @@ def build_synastry_aspects(person_a: PersonSpec, person_b: PersonSpec) -> list[S
             SynastryAspectInput(
                 from_person=from_person,
                 from_point=PLANET_EN_TO_RU.get(from_point, from_point),
-                aspect=aspect_ru,  # type: ignore[arg-type]
+                aspect=aspect_ru,
                 to_person=to_person,
                 to_point=PLANET_EN_TO_RU.get(to_point, to_point),
                 orb_deg=orb,

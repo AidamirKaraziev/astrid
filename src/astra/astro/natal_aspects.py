@@ -34,16 +34,8 @@ _MINOR_POINTS = {
     "True_South_Lunar_Node",
 }
 
-_MAX_ORBS: dict[str, float] = {
-    "conjunction": 8.0,
-    "opposition": 8.0,
-    "trine": 7.0,
-    "square": 7.0,
-    "sextile": 5.0,
-}
-
-# Орбы здесь те же, что в _MAX_ORBS: kerykeion ждёт целые градусы и имена
-# аспектов из своего Literal, поэтому список выписан явно.
+# Единственная таблица орбов: kerykeion ждёт целые градусы и имена аспектов
+# из своего Literal, а наши лимиты (`_MAX_ORBS`) выводятся из неё же.
 _ACTIVE_ASPECTS: list[ActiveAspect] = [
     {"name": "conjunction", "orb": 8},
     {"name": "opposition", "orb": 8},
@@ -51,6 +43,8 @@ _ACTIVE_ASPECTS: list[ActiveAspect] = [
     {"name": "square", "orb": 7},
     {"name": "sextile", "orb": 5},
 ]
+
+_MAX_ORBS: dict[str, float] = {a["name"]: float(a["orb"]) for a in _ACTIVE_ASPECTS}
 
 _BASE_POINTS = [
     "Sun",
