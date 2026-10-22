@@ -48,11 +48,44 @@ async def api_client() -> AsyncClient:
 TEST_TELEGRAM_ID_MIN = 9_000_000_000
 TEST_TELEGRAM_ID_MAX = 9_999_999_999
 
+# Параллельные прогоны (дорожки-worktree) ходят в одну базу, поэтому диапазон
+# делится на поддиапазоны: каждый процесс pytest занимает свой и чистит только
+# его. Слот занимается файловой блокировкой на время жизни процесса: ОС снимает
+# её сама, даже если прогон убит, так что настройки и ручной уборки не нужно.
+_SLOT_COUNT = 100
+_SLOT_SIZE = (TEST_TELEGRAM_ID_MAX - TEST_TELEGRAM_ID_MIN + 1) // _SLOT_COUNT
+_slot_locks: list[object] = []  # держим открытыми до конца процесса
+
+
+def _claim_slot() -> int:
+    import fcntl
+    import tempfile
+    from pathlib import Path
+
+    lock_dir = Path(tempfile.gettempdir())
+    start = os.getpid() % _SLOT_COUNT
+    for shift in range(_SLOT_COUNT):
+        slot = (start + shift) % _SLOT_COUNT
+        handle = open(lock_dir / f"astra-test-ids-slot-{slot}.lock", "w")  # noqa: SIM115
+        try:
+            fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except OSError:
+            handle.close()
+            continue
+        _slot_locks.append(handle)
+        return slot
+    return start  # все заняты — самое редкое, делим слот по PID
+
+
+_SLOT = _claim_slot()
+TEST_ID_LO = TEST_TELEGRAM_ID_MIN + _SLOT * _SLOT_SIZE
+TEST_ID_HI = TEST_ID_LO + _SLOT_SIZE - 1
+
 _infra_status: dict[str, str | None] = {}
 
 
 def new_test_telegram_id() -> int:
-    return random.randrange(TEST_TELEGRAM_ID_MIN, TEST_TELEGRAM_ID_MAX)
+    return random.randrange(TEST_ID_LO, TEST_ID_HI + 1)
 
 
 async def _infra_problem() -> str | None:
@@ -248,7 +281,7 @@ async def full_catalog(session_factory, places_catalog) -> None:
 
 @pytest.fixture
 async def purge_test_users(session_factory) -> AsyncIterator[None]:
-    """Чистит тестовый диапазон telegram_id до и после теста.
+    """Чистит свой поддиапазон telegram_id до и после теста.
 
     До — чтобы упавший прогон не отравил следующий; после — чтобы dev-база не
     зарастала. Всё связанное с пользователем удаляется каскадом.
@@ -259,7 +292,7 @@ async def purge_test_users(session_factory) -> AsyncIterator[None]:
         async with session_factory() as session:
             await session.execute(
                 text("delete from users where telegram_id between :lo and :hi"),
-                {"lo": TEST_TELEGRAM_ID_MIN, "hi": TEST_TELEGRAM_ID_MAX},
+                {"lo": TEST_ID_LO, "hi": TEST_ID_HI},
             )
             await session.commit()
 
