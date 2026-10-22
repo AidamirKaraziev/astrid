@@ -2,4 +2,5 @@
 {"date": "2026-09-10", "epic": "E01", "stage": "S01 прогнать бота вживую по сценариям подарков", "area": "debug", "status": "закрыт", "session": "1c00ed2e", "commits": ["6285109"]}
 {"date": "2026-09-11", "epic": "E01", "stage": "S02 разобраться с discount_percent в боевом каталоге", "area": "back", "status": "закрыт", "session": "2cf102e6", "commits": []}
 {"date": "2026-09-11", "epic": "E01", "stage": "S03 смёржить feat/clean-chat-and-gifts в main", "area": "infra", "status": "закрыт", "session": "2cf102e6", "commits": []}
-{"date": "2026-09-11", "epic": "E01", "stage": "S04 накатить миграции 029, 030 и 031 на прод", "area": "infra", "status": "закрыт", "session": "2cf102e6", "commits": []}
+{"date": "2026-09-11", "epic": "E01", "stage": "S04 накатить миграции 029, 030 и 031 на прод", "area": "infra", "status": "закрыт", "session": "2cf102e6", "commits": ["a6f72f5"]}
+{"date": "2026-10-22", "epic": "—", "stage": "круг «натальная карта снова собирает PDF»", "area": "back", "status": "закрыт", "session": "fc9a808c", "commits": ["1de09da", "e808c74", "345055d"]}
