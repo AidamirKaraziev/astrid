@@ -25,6 +25,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from astra.core.observability import Event, get_logger
+from astra.core.sentry import capture_exception
 from astra.payments.service import (
     WHEEL_PAYLOAD_PREFIX,
     get_wheel_spin_price,
@@ -43,6 +44,7 @@ from astra.telegram.button_texts import (
     COMING_SOON_TEXT,
 )
 from astra.telegram.handlers.tarot_spreads import start_spread_with_prize
+from astra.telegram.payment_guard import payment_guard
 from astra.services.wallet_service import (
     plan_charge,
     refund_to_wallet,
@@ -54,7 +56,7 @@ from astra.users import crud as users_crud
 from astra.wheel import crud as wheel_crud
 from astra.wheel.display import prize_label
 from astra.wheel.enums import SpinType
-from astra.wheel.models import WheelWin
+from astra.wheel.models import WheelPrize, WheelWin
 from astra.payments.service import WHEEL_SPIN_PRODUCT_CODE
 from astra.usage import UsageKind, record_usage
 from astra.wheel.service import perform_spin, user_local_today, win_is_available
@@ -81,6 +83,8 @@ _NO_PRIZES_TEXT = "Активных призов пока нет — крути 
 _PRIZE_GONE_TEXT = "Этот приз уже использован или сгорел 🕯"
 _SPIN_INVOICE_TITLE = "Вращение колеса фортуны"
 _SPIN_INVOICE_DESCRIPTION = "Ещё одно вращение колеса — приз гарантирован."
+_SPIN_FAILED_TEXT = "Колесо не провернулось — ничего не списано. Попробуй ещё раз 🎡"
+_PAYMENT_FAILED_TEXT = "Колесо не провернулось — звёзды уже вернулись ⭐"
 _REFUND_POOL_EMPTY_TEXT = (
     "Призы закончились, вращение не состоялось — звёзды уже вернулись на баланс ⭐"
 )
@@ -201,15 +205,14 @@ async def cb_wheel_home(callback: CallbackQuery, state: FSMContext, session: Asy
     await _show_wheel(callback.message, session, user)
 
 
-async def _spin_and_reveal(
-    message: Message,
+async def _spin(
     session: AsyncSession,
     user,
     spin_type: SpinType,
     *,
     payment_id: UUID | None = None,
-) -> WheelWin | None:
-    """Крутим, показываем анимацию и карточку приза. None — пул призов пуст."""
+) -> tuple[WheelWin, list[WheelPrize]] | None:
+    """Крутим и коммитим выигрыш. None — пул призов пуст (ничего не записано)."""
     prizes = await wheel_crud.list_active_prizes(session)
     win = await perform_spin(session, user, spin_type, payment_id=payment_id)
     if win is None:
@@ -222,7 +225,11 @@ async def _spin_and_reveal(
         is_paid=spin_type != SpinType.FREE,
     )
     await session.commit()
+    return win, prizes
 
+
+async def _reveal(message: Message, win: WheelWin, prizes: list[WheelPrize]) -> None:
+    """Анимация и карточка приза."""
     labels = [prize_label(p.product_code, p.discount_percent) for p in prizes]
     winner_index = next((i for i, p in enumerate(prizes) if p.id == win.prize_id), 0)
     # Лента крутится в экране раздела и там же замирает карточкой приза:
@@ -237,6 +244,22 @@ async def _spin_and_reveal(
         # Приз заменяет последний кадр ленты: экран уже стоит там, где нужно.
         keep_position=True,
     )
+
+
+async def _spin_and_reveal(
+    message: Message,
+    session: AsyncSession,
+    user,
+    spin_type: SpinType,
+    *,
+    payment_id: UUID | None = None,
+) -> WheelWin | None:
+    """Крутим, показываем анимацию и карточку приза. None — пул призов пуст."""
+    spun = await _spin(session, user, spin_type, payment_id=payment_id)
+    if spun is None:
+        return None
+    win, prizes = spun
+    await _reveal(message, win, prizes)
     return win
 
 
@@ -298,14 +321,36 @@ async def cb_spin_paid(callback: CallbackQuery, session: AsyncSession) -> None:
     )
 
     if charge.covered_by_wallet:
-        # Вращение бесплатно по каталогу или закрыто внутренним счётом.
-        spent = await settle_charge(session, user.id, payload, description=_SPIN_INVOICE_TITLE)
-        await session.commit()
-        win = await _spin_and_reveal(callback.message, session, user, SpinType.PAID)
-        if win is None:
+        # Списание и вращение — одна транзакция (commit внутри _spin): упадёт
+        # вращение — откатится и списание, звёзды остаются на счёте.
+        user_id = user.id
+        try:
+            spent = await settle_charge(session, user_id, payload, description=_SPIN_INVOICE_TITLE)
+            spun = await _spin(session, user, SpinType.PAID)
+        except Exception as exc:
+            log.exception(
+                Event.TELEGRAM_UPDATE_FAILED,
+                reason="wheel_spin_failed_before_commit",
+                user_id=user_id,
+            )
+            capture_exception(exc)
+            await session.rollback()
+            await callback.message.answer(_SPIN_FAILED_TEXT)
+            return
+        if spun is None:
+            await session.rollback()  # пул опустел: списание не фиксируем
             await callback.message.answer(_POOL_EMPTY_TEXT)
-        elif spent:
-            log.info(Event.WALLET_SPENT, user_id=user.id, payload=payload, amount=spent)
+            return
+        win, prizes = spun
+        if spent:
+            log.info(Event.WALLET_SPENT, user_id=user_id, payload=payload, amount=spent)
+        try:
+            await _reveal(callback.message, win, prizes)
+        except Exception as exc:
+            # Приз и списание уже записаны: возвращать нечего, отдаём приз текстом.
+            log.exception(Event.WHEEL_ANIMATION_FAILED, user_id=user_id, win_id=win.id)
+            capture_exception(exc)
+            await callback.message.answer(_prize_card_text(win), parse_mode="HTML")
         return
 
     if charge.from_wallet:
@@ -363,40 +408,67 @@ async def wheel_spin_paid(message: Message, session: AsyncSession) -> None:
             )
         return
 
-    try:
-        payment = await register_wheel_spin_payment(
-            session,
-            user=user,
-            provider_charge_id=charge_id,
-            amount=payment_info.total_amount,
-            currency=payment_info.currency,
-        )
-    except IntegrityError:
-        await session.rollback()  # дубль successful_payment — платёж уже записан
-        return
-    if payment is None:
-        return  # повтор того же charge_id
-
-    # Внутренняя часть цены была забронирована при показе инвойса.
-    await settle_charge(session, user.id, payment_info.invoice_payload)
-
-    win = await _spin_and_reveal(
+    async with payment_guard(
         message,
         session,
-        user,
-        SpinType.PAID,
-        payment_id=payment.id,
-    )
-    if win is not None:
-        return
+        user_id=user.id,
+        telegram_id=message.from_user.id,
+        payload=payment_info.invoice_payload,
+        charge_id=charge_id,
+        reason="wheel_spin",
+        refunded_text=_PAYMENT_FAILED_TEXT,
+    ) as guard:
+        with guard.recording():
+            try:
+                payment = await register_wheel_spin_payment(
+                    session,
+                    user=user,
+                    provider_charge_id=charge_id,
+                    amount=payment_info.total_amount,
+                    currency=payment_info.currency,
+                )
+            except IntegrityError:
+                await session.rollback()  # дубль successful_payment — платёж уже записан
+                return
+            if payment is None:
+                return  # повтор того же charge_id
 
-    # Пул опустел между pre_checkout и оплатой — деньги не за что брать.
+            # Внутренняя часть цены была забронирована при показе инвойса.
+            await settle_charge(session, user.id, payment_info.invoice_payload)
+
+            spun = await _spin(session, user, SpinType.PAID, payment_id=payment.id)
+            if spun is None:
+                await _refund_empty_pool(
+                    message,
+                    session,
+                    user.id,
+                    payment_info.invoice_payload,
+                    telegram_id=message.from_user.id,
+                    charge_id=charge_id,
+                )
+                return
+            win, prizes = spun
+            # Сбой оформления ниже деньги не возвращает: приз уйдёт простым текстом.
+            guard.after_record_text = _prize_card_text(win)
+        await _reveal(message, win, prizes)
+
+
+async def _refund_empty_pool(
+    message: Message,
+    session: AsyncSession,
+    user_id: UUID,
+    payload: str,
+    *,
+    telegram_id: int,
+    charge_id: str,
+) -> None:
+    """Пул опустел между pre_checkout и оплатой — деньги не за что брать."""
     await session.rollback()
-    await refund_to_wallet(session, user.id, payment_info.invoice_payload)
+    await refund_to_wallet(session, user_id, payload)
     await session.commit()
     if message.bot is not None:
         await message.bot.refund_star_payment(
-            user_id=message.from_user.id,
+            user_id=telegram_id,
             telegram_payment_charge_id=charge_id,
         )
     log.error(Event.WHEEL_POOL_EMPTY, reason="refunded_after_payment", charge_id=charge_id)
