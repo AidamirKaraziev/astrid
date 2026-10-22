@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from reportlab.lib import colors
+from reportlab.lib import colors  # type: ignore[import-untyped]  # шум: reportlab — нет stubs (types-reportlab не в зависимостях)
 
 
 @dataclass(frozen=True, slots=True)

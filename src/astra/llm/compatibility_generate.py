@@ -96,15 +96,15 @@ def _build_step_request(
     )
 
 
-async def _complete_json_step(
+async def _complete_json_step[T](
     provider: BaseLlmProvider,
     settings: Settings,
     *,
     step_name: str,
     system_prompt: str,
     user_message: str,
-    parse_fn: Callable[[str], tuple[object | None, str | None]],
-) -> tuple[object | None, str]:
+    parse_fn: Callable[[str], tuple[T | None, str | None]],
+) -> tuple[T | None, str]:
     last_error = "unknown"
     for attempt in range(1, _JSON_RETRY_ATTEMPTS + 1):
         result = await provider.complete(

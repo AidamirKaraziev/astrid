@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from reportlab.lib import colors
+from reportlab.lib import colors  # type: ignore[import-untyped]  # шум: reportlab — нет stubs (types-reportlab не в зависимостях)
 
 # --- размеры страницы (mobile portrait) ---
 W, H = 390, 844

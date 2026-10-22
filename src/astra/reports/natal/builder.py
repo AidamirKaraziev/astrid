@@ -152,7 +152,7 @@ class NatalPdfBuilder(BasePdfBuilder):
         chip_y = bottom + 96
         chip_h = 40
         chip_w = (CONTENT_W - 40 - (len(chips) - 1) * 8) / max(len(chips), 1)
-        x = MARGIN + 20
+        x: float = MARGIN + 20
         for glyph, label, value in chips:
             self.c.setFillColor(BG_DARK)
             self.c.setStrokeColor(GOLD_DIM)
@@ -625,7 +625,7 @@ class NatalPdfBuilder(BasePdfBuilder):
         card_x = MARGIN
         self._draw_glowing_round_rect(card_x, card_bottom, CONTENT_W, card_h, radius=14)
 
-        qy = card_top - pad
+        qy: float = card_top - pad
         self.c.setFillColor(GOLD)
         self.c.setFont(FONT_BOLD, 22)
         self.c.drawString(card_x + pad, qy, "“")

@@ -38,8 +38,8 @@ def _build_gemini_payload(request: CompletionRequest) -> dict[str, object]:
 
 
 def _extract_gemini_text(data: dict[str, object]) -> str:
-    candidates = data.get("candidates") or []
-    if not candidates:
+    candidates = data.get("candidates")
+    if not isinstance(candidates, list) or not candidates:
         return ""
 
     content = candidates[0].get("content") if isinstance(candidates[0], dict) else None

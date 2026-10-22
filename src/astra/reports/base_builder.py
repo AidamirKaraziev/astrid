@@ -9,8 +9,8 @@ from __future__ import annotations
 
 import math
 
-from reportlab.lib import colors
-from reportlab.pdfgen import canvas
+from reportlab.lib import colors  # type: ignore[import-untyped]  # шум: reportlab — нет stubs (types-reportlab не в зависимостях)
+from reportlab.pdfgen import canvas  # type: ignore[import-untyped]  # шум: reportlab — нет stubs (types-reportlab не в зависимостях)
 
 from astra.reports.bot_link import resolve_telegram_bot_url
 from astra.reports.theme import (
@@ -483,7 +483,7 @@ class BasePdfBuilder:
 
     def _zone_block_height(self, items: list[str]) -> float:
         text_w = CONTENT_W - 36
-        total = 28
+        total: float = 28
         for item in items:
             total += self._text_height(item, text_w) + GAP["xs"]
         return total + 8

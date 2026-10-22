@@ -5,7 +5,7 @@
 
 from __future__ import annotations
 
-from reportlab.lib import colors
+from reportlab.lib import colors  # type: ignore[import-untyped]  # шум: reportlab — нет stubs (types-reportlab не в зависимостях)
 
 from astra.reports.base_builder import BasePdfBuilder
 from astra.reports.synastry.theme import (
@@ -503,7 +503,7 @@ class SynastryPdfBuilder(BasePdfBuilder):
         card_x = MARGIN
         self._draw_glowing_round_rect(card_x, card_bottom, CONTENT_W, card_h, radius=14)
 
-        qy = card_top - pad
+        qy: float = card_top - pad
         self.c.setFillColor(GOLD)
         self.c.setFont(FONT_BOLD, 22)
         self.c.drawString(card_x + pad, qy, "“")

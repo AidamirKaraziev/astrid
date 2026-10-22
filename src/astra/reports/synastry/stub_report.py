@@ -238,6 +238,18 @@ _AIDAMIR_ANGELA_STUB_LLM: dict[str, object] = {
 }
 
 
+def _rows(value: object) -> list[dict[str, object]]:
+    """Список словарей из значения эталонного JSON (тип значения — object)."""
+    if not isinstance(value, list):
+        raise TypeError(f"ожидался список, получен {type(value).__name__}")
+    rows: list[dict[str, object]] = []
+    for item in value:
+        if not isinstance(item, dict):
+            raise TypeError(f"ожидался словарь, получен {type(item).__name__}")
+        rows.append(item)
+    return rows
+
+
 def build_aidamir_angela_stub_report() -> SynastryReportData:
     """Собрать SynastryReportData из эталонного JSON (временная заглушка бота)."""
     raw = _AIDAMIR_ANGELA_STUB_LLM
@@ -245,10 +257,10 @@ def build_aidamir_angela_stub_report() -> SynastryReportData:
         tldr=raw["tldr"],
         pair_story=raw["pair_story"],
         natal_insight=raw["natal_insight"],
-        metrics=[LlmMetric.model_construct(**m) for m in raw["metrics"]],  # type: ignore[arg-type]
-        strong_aspects=[LlmAspectBlock.model_construct(**a) for a in raw["strong_aspects"]],  # type: ignore[arg-type]
-        working_aspects=[LlmAspectBlock.model_construct(**a) for a in raw["working_aspects"]],  # type: ignore[arg-type]
-        zone_blocks=[LlmZoneBlock.model_construct(**z) for z in raw["zone_blocks"]],  # type: ignore[arg-type]
+        metrics=[LlmMetric.model_construct(None, **m) for m in _rows(raw["metrics"])],
+        strong_aspects=[LlmAspectBlock.model_construct(None, **a) for a in _rows(raw["strong_aspects"])],
+        working_aspects=[LlmAspectBlock.model_construct(None, **a) for a in _rows(raw["working_aspects"])],
+        zone_blocks=[LlmZoneBlock.model_construct(None, **z) for z in _rows(raw["zone_blocks"])],
         conclusion_quote=raw["conclusion_quote"],
         conclusion_tip=raw["conclusion_tip"],
         working_aspects_intro=raw["working_aspects_intro"],
