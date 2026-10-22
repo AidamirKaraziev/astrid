@@ -1,10 +1,11 @@
-.PHONY: help up down test build logs ps check infra infra-down worker
+.PHONY: lint help up down test build logs ps check infra infra-down worker
 
 help:
 	@echo "Astra Docker"
 	@echo ""
 	@echo "  make up     — тесты → сборка → весь стек (одна команда)"
 	@echo "  make test   — только pytest в контейнере"
+	@echo "  make lint   — ruff + mypy (поля ORM-моделей, неопределённые имена)"
 	@echo "  make build  — собрать образы api/worker"
 	@echo "  make check  — healthcheck API и статус контейнеров"
 	@echo "  make logs   — логи api и worker"
@@ -20,6 +21,10 @@ test:
 	docker compose up -d postgres redis
 	@until docker compose exec -T postgres pg_isready -U astra -d astra >/dev/null 2>&1; do sleep 1; done
 	docker compose --profile test run --rm --build test
+
+lint:
+	uv run ruff check src tests
+	uv run mypy src/astra/services src/astra/natal_report
 
 build:
 	docker compose build api worker
