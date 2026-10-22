@@ -566,7 +566,9 @@ _PREDICTION_DEAD = frozenset(
 
 
 async def _dead_tarot(session: AsyncSession, task: TaskMessage) -> None:
-    from astra.payments.service import refund_reading_payment
+    from astra.payments import models as payments_crud
+    from astra.payments.service import refund_reading_payment, tarot_invoice_payload
+    from astra.services.wallet_service import has_unrefunded_purchase
     from astra.tarot import models as tarot_crud
     from astra.tarot.enums import ReadingStatus
 
@@ -577,10 +579,23 @@ async def _dead_tarot(session: AsyncSession, task: TaskMessage) -> None:
         return  # нет расклада или уже доставлен
     if reading.status == ReadingStatus.PENDING_PAYMENT:
         return  # не оплачен: возвращать нечего
+    payload = tarot_invoice_payload(reading.id)
+
+    async def unreturned() -> bool:
+        """Остался ли невозвращённый платёж Telegram или покупка со счёта."""
+        payment = await payments_crud.get_completed_payment_for_reading(session, reading.id)
+        return payment is not None or await has_unrefunded_purchase(
+            session, reading.user_id, payload
+        )
+
+    had_money = await unreturned()
+    if reading.status == ReadingStatus.FAILED and not had_money:
+        return  # обычный путь уже вернул всё и сообщил: второго сообщения не шлём
     user = await users_crud.get_user_by_id(session, reading.user_id)
-    refunded = False
-    if user is not None:
-        refunded = await refund_reading_payment(session, reading, user.telegram_id)
+    if user is not None and had_money:
+        await refund_reading_payment(session, reading, user.telegram_id)
+    # «Вернули всё» — по данным после попытки, а не по результату вызова.
+    refunded = had_money and not await unreturned()
     reading.status = ReadingStatus.FAILED
     await session.commit()
     await notify_reading_failed(session, reading, refunded=refunded)

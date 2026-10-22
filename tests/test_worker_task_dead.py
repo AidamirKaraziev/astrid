@@ -40,6 +40,14 @@ async def test_tarot_dead_refunds_and_notifies(ttype: TaskType) -> None:
         patch("astra.tarot.models.get_reading", AsyncMock(return_value=reading)),
         patch("astra.workers.handlers.users_crud.get_user_by_id", AsyncMock(return_value=user)),
         patch(
+            "astra.payments.models.get_completed_payment_for_reading",
+            AsyncMock(side_effect=[object(), None]),
+        ),
+        patch(
+            "astra.services.wallet_service.has_unrefunded_purchase",
+            AsyncMock(return_value=False),
+        ),
+        patch(
             "astra.payments.service.refund_reading_payment", AsyncMock(return_value=True)
         ) as refund,
         patch("astra.workers.handlers.notify_reading_failed", AsyncMock()) as notify,
@@ -50,6 +58,45 @@ async def test_tarot_dead_refunds_and_notifies(ttype: TaskType) -> None:
     notify.assert_called_once_with(session, reading, refunded=True)
     assert reading.status == ReadingStatus.FAILED
     session.commit.assert_awaited()
+
+
+def _tarot_failed_run(payments: list, wallet_pending: bool):
+    user = _user()
+    reading = SimpleNamespace(id=uuid4(), user_id=user.id, status=ReadingStatus.FAILED, sent_at=None)
+    task = TaskMessage(type=TaskType.TAROT_READING_GENERATE, reading_id=reading.id)
+    patches = (
+        patch("astra.tarot.models.get_reading", AsyncMock(return_value=reading)),
+        patch("astra.workers.handlers.users_crud.get_user_by_id", AsyncMock(return_value=user)),
+        patch(
+            "astra.payments.models.get_completed_payment_for_reading",
+            AsyncMock(side_effect=payments),
+        ),
+        patch(
+            "astra.services.wallet_service.has_unrefunded_purchase",
+            AsyncMock(return_value=wallet_pending),
+        ),
+        patch("astra.payments.service.refund_reading_payment", AsyncMock(return_value=False)),
+        patch("astra.workers.handlers.notify_reading_failed", AsyncMock()),
+    )
+    return task, reading, patches
+
+
+async def test_tarot_dead_repeat_after_full_refund_sends_nothing() -> None:
+    task, _reading, (p1, p2, p3, p4, p5, p6) = _tarot_failed_run([None], False)
+    with p1, p2, p3, p4, p5 as refund, p6 as notify:
+        await handlers.handle_task_dead(AsyncMock(), task)
+    refund.assert_not_called()
+    notify.assert_not_called()
+
+
+async def test_tarot_dead_repeat_after_partial_refund_sends_truthful_text() -> None:
+    # Telegram упал: платёж остаётся completed и до, и после попытки возврата.
+    task, reading, (p1, p2, p3, p4, p5, p6) = _tarot_failed_run([object(), object()], False)
+    session = AsyncMock()
+    with p1, p2, p3, p4, p5 as refund, p6 as notify:
+        await handlers.handle_task_dead(session, task)
+    refund.assert_called_once()
+    notify.assert_called_once_with(session, reading, refunded=False)
 
 
 async def test_tarot_dead_delivered_does_nothing() -> None:
