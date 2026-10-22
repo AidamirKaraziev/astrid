@@ -263,7 +263,7 @@ async def generate_natal_report_pdf(
         generate_natal_pdf(
             str(out_path),
             report_data,
-            referral_code=await _owner_referral_code(session, report.user_id),
+            referral_code=await _owner_referral_code(session, report.owner_user_id),
         )
         await natal_crud.mark_natal_ready(session, report, pdf_path=str(out_path))
         return report

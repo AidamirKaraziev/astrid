@@ -197,27 +197,31 @@ async def test_generate_pdf_from_jsonb_snapshots(tmp_path) -> None:
     )
     output = assemble_llm_output(_content_raw(prompt_input, with_asc=True), prompt_input)
 
-    report = MagicMock()
-    report.id = uuid4()
-    report.status = NatalReportStatus.TEXT_READY.value
-    report.pdf_path = None
-    report.chart_data = chart.model_dump(mode="json")  # как из JSONB
-    report.llm_output = output.model_dump(mode="json")
-    report.subject_snapshot = {
-        "name": "Айдамир",
-        "birth_date": "1990-06-15",
-        "birth_time": "1990-06-15T14:30:00",
-        "birth_place": "Москва",
-    }
+    from astra.natal_report.models import NatalReport
+
+    # Настоящий ORM-экземпляр (в БД не пишется): мок скрыл бы обращение к
+    # несуществующему полю, как было с report.user_id.
+    report = NatalReport(
+        id=uuid4(),
+        owner_user_id=uuid4(),
+        status=NatalReportStatus.TEXT_READY.value,
+        pdf_path=None,
+        title="Натальная карта · Айдамир",
+        chart_data=chart.model_dump(mode="json"),  # как из JSONB
+        llm_output=output.model_dump(mode="json"),
+        subject_snapshot={
+            "name": "Айдамир",
+            "birth_date": "1990-06-15",
+            "birth_time": "1990-06-15T14:30:00",
+            "birth_place": "Москва",
+        },
+    )
     session = AsyncMock()
-
-    marked = {}
-
-    async def _mark_ready(sess, rep, *, pdf_path):
-        marked["pdf_path"] = pdf_path
 
     settings = MagicMock()
     settings.natal_pdf_dir = str(tmp_path)
+    referral = MagicMock()
+    referral.code = "REF123"
     with (
         patch(
             "astra.services.natal_report_service.get_settings",
@@ -228,16 +232,18 @@ async def test_generate_pdf_from_jsonb_snapshots(tmp_path) -> None:
             new=AsyncMock(return_value=report),
         ),
         patch(
-            "astra.services.natal_report_service.natal_crud.mark_natal_ready",
-            new=_mark_ready,
-        ),
+            "astra.referrals.crud.get_or_create_referral_code",
+            new=AsyncMock(return_value=referral),
+        ) as referral_mock,
     ):
         result = await svc.generate_natal_report_pdf(session, report.id)
 
-    assert result is not None
+    assert result is report
+    referral_mock.assert_awaited_once_with(session, report.owner_user_id)
+    assert report.status == NatalReportStatus.READY
     from pathlib import Path
 
-    pdf = Path(marked["pdf_path"])
+    pdf = Path(report.pdf_path)
     assert pdf.is_file() and pdf.stat().st_size > 10_000
 
 
