@@ -34,6 +34,8 @@ from functools import lru_cache
 from types import ModuleType
 from typing import Any
 
+from pydantic import BaseModel
+
 from astra.core.observability import get_logger
 
 log = get_logger(__name__)
@@ -86,7 +88,7 @@ class AskProduct:
         return self.calc.METHODOLOGY_VERSION
 
     @property
-    def result_model(self) -> type:
+    def result_model(self) -> type[BaseModel]:
         return self.calc.RESULT_MODEL
 
     @property
