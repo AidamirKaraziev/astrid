@@ -10,10 +10,8 @@ from httpx import ASGITransport, AsyncClient
 os.environ.setdefault("TELEGRAM_BOT_TOKEN", "0000000000:TEST_TOKEN_FOR_TESTS")
 os.environ.setdefault("TELEGRAM_BOT_USERNAME", "TestAstraBot")
 os.environ.setdefault("TELEGRAM_MODE", "polling")
-os.environ.setdefault(
-    "DATABASE_URL",
-    "postgresql+asyncpg://astra:astra@localhost:5432/astra",
-)
+# DATABASE_URL намеренно не задаём: DSN берётся из окружения или .env, иначе
+# зашитый порт перебьёт настоящую конфигурацию и интеграционные тесты скипнутся.
 os.environ.setdefault("REDIS_URL", "redis://localhost:6379/0")
 
 # Регистрируем все ORM-модели, как это делает init_engine на старте приложения:
