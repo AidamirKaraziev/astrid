@@ -16,6 +16,10 @@ from __future__ import annotations
 import random
 from io import BytesIO
 from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from PIL import Image
 
 
 WIDTH = 1080
@@ -38,7 +42,7 @@ def _plural(count: int) -> str:
     return "судьбоносных\nпартнёров"
 
 
-def _background(image_module, draw_module) -> "object":
+def _background(image_module, draw_module) -> Image.Image:
     image = image_module.new("RGB", (WIDTH, HEIGHT), _BG_TOP)
     draw = draw_module.Draw(image)
     for y in range(HEIGHT):

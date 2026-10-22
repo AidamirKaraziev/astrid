@@ -15,8 +15,10 @@ import asyncio
 import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from typing import Any, cast
 
 from sqlalchemy import func, select, update
+from sqlalchemy.engine import CursorResult
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from astra.broadcasts.audience import Criteria, resolve
@@ -124,7 +126,7 @@ async def pending_deliveries(
             BroadcastDelivery.status.in_([DeliveryStatus.PENDING, DeliveryStatus.FAILED]),
         ),
     )
-    return list(rows.all())
+    return [(delivery, user) for delivery, user in rows.all()]
 
 
 async def send_all(
@@ -208,7 +210,8 @@ async def reset_failed(session: AsyncSession, broadcast_id: uuid.UUID) -> int:
         )
         .values(status=DeliveryStatus.PENDING, error=None),
     )
-    return result.rowcount or 0
+    cursor = cast("CursorResult[Any]", result)
+    return cursor.rowcount or 0
 
 
 async def history(session: AsyncSession, limit: int = 20) -> list[Broadcast]:

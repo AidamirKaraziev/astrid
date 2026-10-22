@@ -1,7 +1,9 @@
 from datetime import date
+from typing import Any, cast
 from uuid import UUID
 
 from sqlalchemy import delete, select
+from sqlalchemy.engine import CursorResult
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from astra.predictions.models import Prediction
@@ -54,7 +56,8 @@ async def delete_predictions_for_date(
             Prediction.prediction_date == prediction_date,
         ),
     )
-    return result.rowcount or 0
+    cursor = cast("CursorResult[Any]", result)
+    return cursor.rowcount or 0
 
 
 async def update_prediction(

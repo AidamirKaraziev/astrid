@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime, timezone
+from typing import Any, cast
 
 from sqlalchemy import delete, select
+from sqlalchemy.engine import CursorResult
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from astra.compatibility.enums import ReportStatus
@@ -89,7 +91,8 @@ async def delete_natal_profile(
         ),
     )
     await session.flush()
-    return (result.rowcount or 0) > 0
+    cursor = cast("CursorResult[Any]", result)
+    return (cursor.rowcount or 0) > 0
 
 
 async def upsert_natal_profile(
@@ -255,4 +258,5 @@ async def delete_compatibility_report(session: AsyncSession, report_id: uuid.UUI
         delete(CompatibilityReport).where(CompatibilityReport.id == report_id),
     )
     await session.flush()
-    return (result.rowcount or 0) > 0
+    cursor = cast("CursorResult[Any]", result)
+    return (cursor.rowcount or 0) > 0

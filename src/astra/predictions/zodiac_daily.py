@@ -107,7 +107,7 @@ def build_zodiac_user_message(sign: str, target: date_type) -> tuple[str, str | 
     positions, moon_phase, moon_sign = _transit_positions(target, lat=lat, lon=lon, timezone=tz)
 
     ref_lon = _SIGN_MID_LON[sign]
-    aspects = []
+    aspects: list[tuple[float, dict[str, object]]] = []
     for planet_key, planet_lon in positions.items():
         limit = TRANSIT_ORB_LIMITS.get(planet_key)
         if limit is None:
@@ -119,13 +119,16 @@ def build_zodiac_user_message(sign: str, target: date_type) -> tuple[str, str | 
         from astra.astro.constants import ASPECT_EN_TO_RU
 
         aspects.append(
-            {
-                "транзит": POINT_EN_TO_RU.get(planet_key, planet_key),
-                "аспект": ASPECT_EN_TO_RU[aspect_en],
-                "орб": round(orb, 2),
-            },
+            (
+                round(orb, 2),
+                {
+                    "транзит": POINT_EN_TO_RU.get(planet_key, planet_key),
+                    "аспект": ASPECT_EN_TO_RU[aspect_en],
+                    "орб": round(orb, 2),
+                },
+            ),
         )
-    aspects.sort(key=lambda a: a["орб"])
+    aspects.sort(key=lambda pair: pair[0])
 
     moon_note = None
     if moon_sign:
@@ -136,7 +139,7 @@ def build_zodiac_user_message(sign: str, target: date_type) -> tuple[str, str | 
     payload = {
         "знак": sign,
         "дата": target.isoformat(),
-        "аспекты_дня_к_знаку": aspects[:3],
+        "аспекты_дня_к_знаку": [aspect for _, aspect in aspects[:3]],
         "луна": {"знак": moon_sign, "фаза": moon_phase},
     }
     message = (

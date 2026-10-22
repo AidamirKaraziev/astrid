@@ -1,5 +1,6 @@
 import asyncio
 from datetime import date, datetime
+from uuid import UUID
 from zoneinfo import ZoneInfo
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -213,7 +214,7 @@ async def handle_prediction_send(session: AsyncSession, task: TaskMessage) -> No
 
 async def _notify_failure_if_failed(
     session: AsyncSession,
-    report_id: object,
+    report_id: UUID,
     *,
     owner_of: str,
 ) -> None:
@@ -227,7 +228,8 @@ async def _notify_failure_if_failed(
         from astra.natal_report import crud as natal_crud
         from astra.services.natal_failure_notify import send_natal_failure_notification
 
-        report = await natal_crud.get_natal_report(session, report_id)
+        natal_report = await natal_crud.get_natal_report(session, report_id)
+        owner_id = natal_report.owner_user_id if natal_report is not None else None
         send = send_natal_failure_notification
     else:
         from astra.compatibility import crud as compatibility_crud
@@ -235,11 +237,12 @@ async def _notify_failure_if_failed(
             send_compatibility_failure_notification,
         )
 
-        report = await compatibility_crud.get_compatibility_report(session, report_id)
+        compat_report = await compatibility_crud.get_compatibility_report(session, report_id)
+        owner_id = compat_report.owner_user_id if compat_report is not None else None
         send = send_compatibility_failure_notification
-    if report is None:
+    if owner_id is None:
         return
-    user = await users_crud.get_user_by_id(session, report.owner_user_id)
+    user = await users_crud.get_user_by_id(session, owner_id)
     if user is not None:
         await send(user.telegram_id)
 

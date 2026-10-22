@@ -4,6 +4,8 @@ from uuid import UUID
 
 import aio_pika
 import aiormq
+from aio_pika.abc import AbstractChannel, AbstractExchange, AbstractRobustConnection
+from aiormq.abc import FieldValue
 
 from astra.core.config import Settings, get_settings
 from astra.core.observability import Event, ensure_correlation_id, get_correlation_id, get_logger
@@ -38,9 +40,9 @@ log = get_logger(__name__)
 
 _CORRELATION_HEADER = "x-correlation-id"
 
-_connection: aio_pika.RobustConnection | None = None
-_channel: aio_pika.Channel | None = None
-_exchange: aio_pika.Exchange | None = None
+_connection: AbstractRobustConnection | None = None
+_channel: AbstractChannel | None = None
+_exchange: AbstractExchange | None = None
 
 
 def _task_message(**kwargs) -> TaskMessage:
@@ -52,7 +54,7 @@ def _task_message(**kwargs) -> TaskMessage:
     return TaskMessage(correlation_id=correlation_id, **kwargs)
 
 
-async def _ensure_topology(channel: aio_pika.Channel) -> aio_pika.Exchange:
+async def _ensure_topology(channel: AbstractChannel) -> AbstractExchange:
     exchange = await channel.declare_exchange(
         EXCHANGE_NAME,
         aio_pika.ExchangeType.DIRECT,
@@ -82,16 +84,17 @@ async def _ensure_topology(channel: aio_pika.Channel) -> aio_pika.Exchange:
     return exchange
 
 
-async def _get_channel(settings: Settings | None = None) -> tuple[aio_pika.Channel, aio_pika.Exchange]:
+async def _get_channel(settings: Settings | None = None) -> tuple[AbstractChannel, AbstractExchange]:
     global _connection, _channel, _exchange
     cfg = settings or get_settings()
     if _channel is None or _channel.is_closed:
         if _connection is not None and not _connection.is_closed:
             await _connection.close()
-        _connection = await aio_pika.connect_robust(cfg.rabbitmq_url)
-        _channel = await _connection.channel()
+        connection = await aio_pika.connect_robust(cfg.rabbitmq_url)
+        _connection = connection
+        _channel = await connection.channel()
         _exchange = None
-    if _exchange is None or _exchange.channel.is_closed:
+    if _exchange is None or _channel.is_closed:
         _exchange = await _ensure_topology(_channel)
     return _channel, _exchange
 
@@ -127,7 +130,7 @@ async def _publish(
             update={"correlation_id": get_correlation_id() or ensure_correlation_id("task")},
         )
     body = message.model_dump_json().encode("utf-8")
-    headers: dict[str, str] = {_CORRELATION_HEADER: message.correlation_id or ""}
+    headers: dict[str, FieldValue] = {_CORRELATION_HEADER: message.correlation_id or ""}
     inject_trace_context(headers)
     payload = aio_pika.Message(
         body=body,

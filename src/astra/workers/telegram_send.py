@@ -100,6 +100,7 @@ async def send_telegram_html(
     if not cfg.telegram_bot_token:
         raise RuntimeError("TELEGRAM_BOT_TOKEN is not set")
 
+    markup_payload: dict[str, Any] | None
     if isinstance(reply_markup, InlineKeyboardMarkup):
         markup_payload = _inline_keyboard_to_api_payload(reply_markup)
     else:
