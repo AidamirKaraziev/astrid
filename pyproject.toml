@@ -86,9 +86,12 @@ ignore_missing_imports = true
 follow_imports = "silent"
 check_untyped_defs = true
 disallow_untyped_defs = false
+warn_unused_ignores = true
 
-# Известные ошибки текущего кода заглушены настройкой (код не правим).
-# attr-defined по NatalReport и другим моделям остаётся включённым — ради него всё и затеяно.
+# Проверяется весь src/astra, кроме telegram/ и admin/ (исключение задано флагом
+# --exclude в `make lint`, чтобы новый пакет попадал под проверку сам). Исключены они
+# потому, что дают 151 ошибку, в основном arg-type от aiogram, — это отдельная работа.
+# Overrides ниже — долг: заглушки известных ошибок, их снимает следующий круг.
 [[tool.mypy.overrides]]
 module = ["astra.natal_report.models", "astra.services.onboarding_service", "astra.services.ask_service"]
 ignore_errors = true

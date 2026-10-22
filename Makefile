@@ -5,7 +5,7 @@ help:
 	@echo ""
 	@echo "  make up     — тесты → сборка → весь стек (одна команда)"
 	@echo "  make test   — только pytest в контейнере"
-	@echo "  make lint   — ruff + mypy (поля ORM-моделей, неопределённые имена)"
+	@echo "  make lint   — ruff + mypy по всему src/astra, кроме telegram/ и admin/"
 	@echo "  make build  — собрать образы api/worker"
 	@echo "  make check  — healthcheck API и статус контейнеров"
 	@echo "  make logs   — логи api и worker"
@@ -24,7 +24,7 @@ test:
 
 lint:
 	uv run ruff check src tests
-	uv run mypy src/astra/services src/astra/natal_report
+	uv run mypy src/astra --exclude 'src/astra/(telegram|admin)/'
 
 build:
 	docker compose build api worker

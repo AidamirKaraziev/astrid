@@ -118,7 +118,7 @@ async def upsert_natal_profile(
         row = NatalProfile(
             owner_user_id=owner_user_id,
             label=label.strip(),
-            gender=gender,  # type: ignore[arg-type]
+            gender=gender,
             birth_date=birth_date,
             birth_time=birth_time,
             birth_place=birth_place,
