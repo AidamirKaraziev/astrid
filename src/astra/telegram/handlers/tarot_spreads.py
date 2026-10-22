@@ -43,6 +43,7 @@ from astra.payments.service import (
     tarot_product_code,
 )
 from astra.services.tarot_reading_service import (
+    READING_FAILED_REFUNDED_TEXT,
     create_reading_draft,
     format_reading_caption,
     local_today,
@@ -75,6 +76,7 @@ from astra.telegram.keyboards import (
 )
 from astra.services.wallet_service import cancel_charge, plan_charge, settle_charge
 from astra.telegram.effects import EFFECT_CELEBRATION
+from astra.telegram.payment_guard import payment_guard
 from astra.telegram.screen import alert, close_screen, react, show_screen, toast
 from astra.telegram.states import TarotStates
 from astra.telegram.tarot_media import send_card_photo, send_cards_album
@@ -483,6 +485,8 @@ async def _accept_question(
                 wheel_win_id=win.id if win else None,
                 paid_from_wallet=spent,
             )
+            # Публикация раньше оформления: сбой экрана расклад не отменяет.
+            await publish_tarot_reading_generate(reading.id)
             granted = _WALLET_PAID_TEXT.format(amount=spent) if spent else _FREE_TODAY_TEXT
             await show_screen(
                 message,
@@ -491,7 +495,6 @@ async def _accept_question(
                 parse_mode="HTML",
             )
             await _reveal_reading(message, reading)
-            await publish_tarot_reading_generate(reading.id)
             return
 
         if win is not None:
@@ -589,38 +592,51 @@ async def spread_paid(message: Message, session: AsyncSession) -> None:
             )
         return
 
-    try:
-        payment = await register_tarot_payment(
-            session,
-            user=user,
-            reading=reading,
-            provider_charge_id=charge_id,
-            amount=payment_info.total_amount,
-            currency=payment_info.currency,
-        )
-        if payment is None:
-            return  # дубль successful_payment — уже обработан
-        # Внутренняя часть цены была забронирована при показе инвойса —
-        # теперь списываем её насовсем.
-        spent = await settle_charge(session, user.id, payload)
-        if reading.status == ReadingStatus.PENDING_PAYMENT:
-            await mark_reading_paid(session, reading, payment_info.total_amount + spent)
-        await record_usage(
-            session,
-            user,
-            action=tarot_product_code(str(reading.spread_type)),
-            kind=UsageKind.TAROT,
-            is_paid=True,
-        )
-        # Скидочный приз колеса тратится в момент оплаты расклада.
-        win = await wheel_crud.get_pending_win_for_reading(session, reading.id)
-        if win is not None:
-            await mark_win_activated(session, win)
-        await session.commit()  # сначала commit, потом publish — worker должен видеть строку
-    except IntegrityError:
-        await session.rollback()  # гонка двух повторных апдейтов — платёж уже записан
-        return
+    async with payment_guard(
+        message,
+        session,
+        user_id=user.id,
+        telegram_id=message.from_user.id,
+        payload=payload,
+        charge_id=charge_id,
+        reason="tarot_spread",
+        refunded_text=READING_FAILED_REFUNDED_TEXT,
+    ) as guard:
+        with guard.recording():
+            try:
+                payment = await register_tarot_payment(
+                    session,
+                    user=user,
+                    reading=reading,
+                    provider_charge_id=charge_id,
+                    amount=payment_info.total_amount,
+                    currency=payment_info.currency,
+                )
+                if payment is None:
+                    return  # дубль successful_payment — уже обработан
+                # Внутренняя часть цены была забронирована при показе инвойса —
+                # теперь списываем её насовсем.
+                spent = await settle_charge(session, user.id, payload)
+                if reading.status == ReadingStatus.PENDING_PAYMENT:
+                    await mark_reading_paid(session, reading, payment_info.total_amount + spent)
+                await record_usage(
+                    session,
+                    user,
+                    action=tarot_product_code(str(reading.spread_type)),
+                    kind=UsageKind.TAROT,
+                    is_paid=True,
+                )
+                # Скидочный приз колеса тратится в момент оплаты расклада.
+                win = await wheel_crud.get_pending_win_for_reading(session, reading.id)
+                if win is not None:
+                    await mark_win_activated(session, win)
+                await session.commit()  # сначала commit, потом publish — worker видит строку
+            except IntegrityError:
+                await session.rollback()  # гонка двух повторных апдейтов — платёж уже записан
+                return
 
-    await show_screen(message, _PAID_THANKS_TEXT, scope=TAROT_SCREEN)
-    await _reveal_reading(message, reading)
-    await publish_tarot_reading_generate(reading.id)
+        # Публикация раньше оформления: сбой экрана или карт расклад не отменяет.
+        guard.after_record_text = _PAID_THANKS_TEXT
+        await publish_tarot_reading_generate(reading.id)
+        await show_screen(message, _PAID_THANKS_TEXT, scope=TAROT_SCREEN)
+        await _reveal_reading(message, reading)

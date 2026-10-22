@@ -20,6 +20,7 @@ from aiogram.types import (
     Message,
     PreCheckoutQuery,
 )
+from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from astra.ask import models as ask_crud
@@ -70,6 +71,7 @@ from astra.telegram.keyboards import (
     ask_questions_keyboard,
 )
 from astra.services.wallet_service import cancel_charge, plan_charge, settle_charge
+from astra.telegram.payment_guard import payment_guard
 from astra.telegram.screen import toast
 from astra.telegram.states import ProfileStates
 from astra.telegram.birth_data_gate import ensure_birth_data
@@ -427,28 +429,41 @@ async def ask_paid(message: Message, session: AsyncSession) -> None:
             )
         return
 
-    payment = await register_ask_payment(
-        session,
-        user=user,
-        question_key=reading.question_key,
-        provider_charge_id=charge_id,
-        amount=payment_info.total_amount,
-        currency=payment_info.currency,
-    )
-    if payment is None:
-        return  # дубль successful_payment
-
-    # Внутренняя часть цены была забронирована при показе инвойса.
-    spent = await settle_charge(session, user.id, payload)
-
-    await _fulfill_reading(
+    async with payment_guard(
         message,
         session,
-        reading,
-        user,
-        amount=payment_info.total_amount + spent,
+        user_id=user.id,
+        telegram_id=message.from_user.id,
+        payload=payload,
         charge_id=charge_id,
-    )
+        reason="ask_answer",
+        refunded_text=ASK_FAILED_REFUNDED_TEXT,
+    ) as guard:
+        with guard.recording():
+            payment = await register_ask_payment(
+                session,
+                user=user,
+                question_key=reading.question_key,
+                provider_charge_id=charge_id,
+                amount=payment_info.total_amount,
+                currency=payment_info.currency,
+            )
+            if payment is None:
+                return  # дубль successful_payment
+            # Внутренняя часть цены была забронирована при показе инвойса.
+            spent = await settle_charge(session, user.id, payload)
+            result = await _prepare_reading(
+                message,
+                session,
+                reading,
+                user,
+                amount=payment_info.total_amount + spent,
+                charge_id=charge_id,
+            )
+        if result is None:
+            return
+        guard.after_record_text = A.ASK_ANSWER_COMING_TEXT
+        await _deliver_reading(message, session, reading, result)
 
 
 async def _fulfill_reading(
@@ -460,14 +475,32 @@ async def _fulfill_reading(
     amount: int,
     charge_id: str | None,
 ) -> None:
-    """Выдача ответа после оплаты (или сразу, если товар бесплатный).
+    """Выдача ответа сразу (товар бесплатный или закрыт внутренним счётом)."""
+    result = await _prepare_reading(
+        message, session, reading, user, amount=amount, charge_id=charge_id
+    )
+    if result is not None:
+        await _deliver_reading(message, session, reading, result)
+
+
+async def _prepare_reading(
+    message: Message,
+    session: AsyncSession,
+    reading,
+    user: User,
+    *,
+    amount: int,
+    charge_id: str | None,
+) -> BaseModel | None:
+    """Расчёт и запись оплаченного ответа (до commit включительно).
 
     Расчёт идёт синхронно — он быстрый; карточка уходит до разбора и закрывает
-    паузу ожидания LLM. Если посчитать не удалось, звёзды возвращаются.
+    паузу ожидания LLM. Если посчитать не удалось, звёзды возвращаются и
+    возвращается None.
     """
     product = get_product(reading.question_key)
     if product is None:
-        return
+        return None
     name = addressable_name(user.profile.display_name if user.profile else None)
     await message.answer(product.teaser_for(name))
     await message.chat.do("typing")
@@ -488,7 +521,7 @@ async def _fulfill_reading(
             )
             refunded = True
         await message.answer(ASK_FAILED_REFUNDED_TEXT if refunded else ASK_FAILED_TEXT)
-        return
+        return None
 
     await ask_crud.mark_paid(
         session,
@@ -506,10 +539,19 @@ async def _fulfill_reading(
         is_paid=amount > 0,
     )
     await session.commit()  # сначала commit, потом publish — worker должен видеть строку
+    return result
 
+
+async def _deliver_reading(
+    message: Message, session: AsyncSession, reading, result: BaseModel
+) -> None:
+    """Оформление записанного ответа. Публикация в воркер — раньше всего остального."""
+    await publish_ask_answer_generate(reading.id)
+    product = get_product(reading.question_key)
+    if product is None:
+        return
     await _send_card(message, session, reading, result, product)
     await message.answer(A.ASK_ANSWER_COMING_TEXT)
-    await publish_ask_answer_generate(reading.id)
 
 
 async def _send_card(

@@ -159,6 +159,13 @@ async def _publish(
             raise
 
 
+async def republish_task(routing_key: str, task: TaskMessage, settings: Settings | None = None) -> TaskMessage:
+    """Копия упавшей задачи с retry + 1 в ту же очередь (по routing key исходного сообщения)."""
+    retried = task.model_copy(update={"retry": task.retry + 1})
+    await _publish(routing_key, retried, settings)
+    return retried
+
+
 async def publish_natal_chart(
     user_id: UUID,
     prediction_date: date,

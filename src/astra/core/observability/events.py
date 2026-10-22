@@ -44,6 +44,8 @@ class Event(StrEnum):
     TASK_FAILED = "task.failed"
     TASK_SKIPPED = "task.skipped"
     TASK_PUBLISHED = "task.published"
+    # Попытки кончились: ack без повтора, человеку говорит handle_task_dead.
+    TASK_DEAD = "task.dead"
 
     # Prediction pipeline
     PREDICTION_NATAL_STORED = "prediction.natal_stored"
