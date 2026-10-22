@@ -198,21 +198,33 @@ async def refund_ask_payment(
     telegram_id: int,
     settings: Settings | None = None,
 ) -> bool:
-    """Вернуть звёзды за несобравшийся разбор. Идемпотентно."""
-    from astra.payments.service import refund_star_payment_api
+    """Вернуть всё, что заплачено за несобравшийся разбор: счёт и платёж Telegram.
 
-    if not reading.charge_id or reading.refunded:
+    True — вернулось всё, что было заплачено; частичный возврат и «нечего
+    возвращать» — False. Идемпотентно.
+    """
+    from astra.payments.service import ask_invoice_payload, refund_star_payment_api
+    from astra.services.wallet_service import has_unrefunded_purchase, refund_to_wallet
+
+    if reading.refunded:
         return False
-    try:
-        await refund_star_payment_api(telegram_id, reading.charge_id, settings)
-    except Exception as exc:
-        log.error(
-            Event.PAYMENT_REFUND_FAILED,
-            reading_id=reading.id,
-            charge_id=reading.charge_id,
-            error_type=type(exc).__name__,
-        )
+    payload = ask_invoice_payload(reading.id)
+    wallet_pending = await has_unrefunded_purchase(session, reading.user_id, payload)
+    if not wallet_pending and not reading.charge_id:
         return False
+    if wallet_pending:
+        await refund_to_wallet(session, reading.user_id, payload)
+    if reading.charge_id:
+        try:
+            await refund_star_payment_api(telegram_id, reading.charge_id, settings)
+        except Exception as exc:
+            log.error(
+                Event.PAYMENT_REFUND_FAILED,
+                reading_id=reading.id,
+                charge_id=reading.charge_id,
+                error_type=type(exc).__name__,
+            )
+            return False
     await ask_crud.mark_refunded(session, reading)
     return True
 

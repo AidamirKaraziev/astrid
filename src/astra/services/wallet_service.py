@@ -141,6 +141,7 @@ async def refund_to_wallet(
 
     Нужен, когда продукт не состоялся уже после оплаты: звёзды Telegram
     возвращает своим refund, а внутреннюю часть возвращаем мы.
+    Идемпотентно: если по этому payload возврат уже записан, ничего не начисляем.
     """
     entry = await wallet_crud.find_by_payload(
         session,
@@ -149,6 +150,9 @@ async def refund_to_wallet(
         WalletReason.PURCHASE,
     )
     if entry is None:
+        return 0
+    already = await wallet_crud.find_by_payload(session, user_id, payload, WalletReason.REFUND)
+    if already is not None:
         return 0
     amount = -entry.delta
     await wallet_crud.add_entry(
@@ -161,3 +165,12 @@ async def refund_to_wallet(
     )
     log.info(Event.WALLET_REFUNDED, user_id=user_id, payload=payload, amount=amount)
     return amount
+
+
+async def has_unrefunded_purchase(session: AsyncSession, user_id: UUID, payload: str) -> bool:
+    """Есть списание со счёта по этому payload, которое ещё не вернули."""
+    purchase = await wallet_crud.find_by_payload(session, user_id, payload, WalletReason.PURCHASE)
+    if purchase is None:
+        return False
+    refund = await wallet_crud.find_by_payload(session, user_id, payload, WalletReason.REFUND)
+    return refund is None

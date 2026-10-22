@@ -362,13 +362,23 @@ async def refund_reading_payment(
     telegram_id: int,
     settings: Settings | None = None,
 ) -> bool:
-    """Вернуть звёзды за расклад; True — refund прошёл (или платежа не было — False).
+    """Вернуть всё, что заплачено за расклад: часть со счёта и платёж Telegram.
 
-    Идемпотентно: уже возвращённый платёж повторно не трогаем.
+    True — вернулось всё, что было заплачено. False — возвращать было нечего
+    (бесплатно или уже вернули) либо вернулось не всё: тогда человеку честно
+    говорим «вернём, напиши нам». Идемпотентно: возвращённое повторно не трогаем.
     """
+    from astra.services.wallet_service import has_unrefunded_purchase, refund_to_wallet
+
+    payload = tarot_invoice_payload(reading.id)
+    wallet_pending = await has_unrefunded_purchase(session, reading.user_id, payload)
     payment = await payments_crud.get_completed_payment_for_reading(session, reading.id)
-    if payment is None:
+    if not wallet_pending and payment is None:
         return False
+    if wallet_pending:
+        await refund_to_wallet(session, reading.user_id, payload)
+    if payment is None:
+        return True
     try:
         await refund_star_payment_api(
             telegram_id,
