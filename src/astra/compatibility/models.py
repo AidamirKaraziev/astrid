@@ -1,5 +1,6 @@
 import uuid
 from datetime import date, datetime
+from typing import TYPE_CHECKING
 
 from sqlalchemy import Date, DateTime, ForeignKey, String, Text
 from sqlalchemy.dialects.postgresql import JSONB, UUID
@@ -9,6 +10,9 @@ from astra.astro.birth_time import WallClock
 from astra.compatibility.enums import PairMode, RelationshipContext, ReportStatus
 from astra.db.base import Base, TimestampMixin
 from astra.users.gender import Gender
+
+if TYPE_CHECKING:
+    from astra.users.models import User
 
 
 class NatalProfile(Base, TimestampMixin):
@@ -40,7 +44,7 @@ class NatalProfile(Base, TimestampMixin):
     timezone: Mapped[str] = mapped_column(String(64), default="Europe/Moscow")
     chart_data: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
 
-    owner: Mapped["User"] = relationship(back_populates="natal_profiles")  # noqa: F821
+    owner: Mapped["User"] = relationship(back_populates="natal_profiles")
 
 
 class CompatibilityReport(Base, TimestampMixin):
@@ -76,6 +80,8 @@ class CompatibilityReport(Base, TimestampMixin):
     title: Mapped[str] = mapped_column(String(512))
     status: Mapped[str] = mapped_column(String(32), default=ReportStatus.PENDING)
     failure_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
-    sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    sent_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
 
-    owner: Mapped["User"] = relationship(back_populates="compatibility_reports")  # noqa: F821
+    owner: Mapped["User"] = relationship(back_populates="compatibility_reports")

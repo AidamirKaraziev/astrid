@@ -1,13 +1,30 @@
 import uuid
 from datetime import date, datetime
+from typing import TYPE_CHECKING
 
-from sqlalchemy import BigInteger, Boolean, Date, DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy import (
+    BigInteger,
+    Boolean,
+    Date,
+    DateTime,
+    ForeignKey,
+    Integer,
+    String,
+    Text,
+)
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from astra.astro.birth_time import WallClock
 from astra.db.base import Base, TimestampMixin
 from astra.users.gender import Gender
+
+if TYPE_CHECKING:
+    from astra.astro.models import NatalChart
+    from astra.compatibility.models import CompatibilityReport, NatalProfile
+    from astra.natal_report.models import NatalReport
+    from astra.places.models import Place
+    from astra.referrals.models import ReferralCode
 
 
 class User(Base, TimestampMixin):
@@ -24,7 +41,9 @@ class User(Base, TimestampMixin):
     onboarding_completed: Mapped[bool] = mapped_column(Boolean, default=False)
     # 403 от Bot API: пользователь заблокировал бота. NULL = доступен.
     # Ставится worker'ом при отправке, снимается на /start.
-    bot_blocked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    bot_blocked_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     points: Mapped[int] = mapped_column(Integer, default=0)
     streak_current: Mapped[int] = mapped_column(Integer, default=0)
     streak_best: Mapped[int] = mapped_column(Integer, default=0)
@@ -35,29 +54,29 @@ class User(Base, TimestampMixin):
         uselist=False,
         cascade="all, delete-orphan",
     )
-    natal_chart: Mapped["NatalChart | None"] = relationship(  # noqa: F821
+    natal_chart: Mapped["NatalChart | None"] = relationship(
         "NatalChart",
         back_populates="user",
         uselist=False,
         cascade="all, delete-orphan",
     )
-    referral_code: Mapped["ReferralCode | None"] = relationship(  # noqa: F821
+    referral_code: Mapped["ReferralCode | None"] = relationship(
         "ReferralCode",
         back_populates="user",
         uselist=False,
         cascade="all, delete-orphan",
     )
-    natal_profiles: Mapped[list["NatalProfile"]] = relationship(  # noqa: F821
+    natal_profiles: Mapped[list["NatalProfile"]] = relationship(
         "NatalProfile",
         back_populates="owner",
         cascade="all, delete-orphan",
     )
-    compatibility_reports: Mapped[list["CompatibilityReport"]] = relationship(  # noqa: F821
+    compatibility_reports: Mapped[list["CompatibilityReport"]] = relationship(
         "CompatibilityReport",
         back_populates="owner",
         cascade="all, delete-orphan",
     )
-    natal_reports: Mapped[list["NatalReport"]] = relationship(  # noqa: F821
+    natal_reports: Mapped[list["NatalReport"]] = relationship(
         "NatalReport",
         back_populates="owner",
         cascade="all, delete-orphan",
@@ -99,11 +118,11 @@ class Profile(Base, TimestampMixin):
     timezone: Mapped[str] = mapped_column(String(64), default="Europe/Moscow")
 
     user: Mapped["User"] = relationship(back_populates="profile")
-    birth_place_ref: Mapped["Place | None"] = relationship(  # noqa: F821
+    birth_place_ref: Mapped["Place | None"] = relationship(
         "Place",
         foreign_keys=[birth_place_id],
     )
-    notification_place_ref: Mapped["Place | None"] = relationship(  # noqa: F821
+    notification_place_ref: Mapped["Place | None"] = relationship(
         "Place",
         foreign_keys=[notification_place_id],
     )

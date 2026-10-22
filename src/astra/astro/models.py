@@ -1,11 +1,15 @@
 import uuid
 from datetime import datetime
+from typing import TYPE_CHECKING
 
 from sqlalchemy import DateTime, ForeignKey, Integer
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from astra.db.base import Base, TimestampMixin
+
+if TYPE_CHECKING:
+    from astra.users.models import User
 
 
 class NatalChart(Base, TimestampMixin):
@@ -26,4 +30,4 @@ class NatalChart(Base, TimestampMixin):
     accuracy_tier: Mapped[int] = mapped_column(Integer)
     computed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
 
-    user: Mapped["User"] = relationship(back_populates="natal_chart")  # noqa: F821
+    user: Mapped["User"] = relationship(back_populates="natal_chart")

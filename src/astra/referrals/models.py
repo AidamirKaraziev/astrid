@@ -1,6 +1,7 @@
 import enum
 import uuid
 from datetime import datetime
+from typing import TYPE_CHECKING
 
 from sqlalchemy import DateTime, Enum, ForeignKey, String, UniqueConstraint
 from sqlalchemy.dialects.postgresql import UUID
@@ -8,6 +9,9 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from astra.db.base import Base, TimestampMixin
 from astra.db.enums import enum_values
+
+if TYPE_CHECKING:
+    from astra.users.models import User
 
 
 class ReferralStatus(str, enum.Enum):
